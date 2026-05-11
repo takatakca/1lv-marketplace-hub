@@ -5,39 +5,41 @@ import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
 import { PriceDisplay } from "@/components/PriceDisplay";
 import { RatingStars } from "@/components/RatingStars";
-import { getProduct, getVendor, products, productsByCategory } from "@/lib/data";
+import { getProduct, getVendor, products, productsByCategory, type Product } from "@/lib/data";
 import { useCart } from "@/hooks/use-cart";
 import { useWishlist } from "@/hooks/use-wishlist";
 import { toast } from "sonner";
 
+type LoaderData = { product: Product };
+
 export const Route = createFileRoute("/product/$slug")({
   component: ProductPage,
-  loader: ({ params }) => {
+  loader: ({ params }): LoaderData => {
     const product = getProduct(params.slug);
     if (!product) throw notFound();
     return { product };
   },
-  head: ({ loaderData }) => ({
-    meta: [
-      { title: `${loaderData?.product.title ?? "Product"} — 1LV.CA` },
-      { name: "description", content: loaderData?.product.description.slice(0, 150) ?? "" },
-      { property: "og:image", content: loaderData?.product.images[0] ?? "" },
-    ],
-  }),
+  head: ({ loaderData }) => {
+    const data = loaderData as LoaderData | undefined;
+    return {
+      meta: [
+        { title: `${data?.product.title ?? "Product"} — 1LV.CA` },
+        { name: "description", content: data?.product.description.slice(0, 150) ?? "" },
+        { property: "og:image", content: data?.product.images[0] ?? "" },
+      ],
+    };
+  },
 });
 
 function ProductPage() {
-  const { product } = Route.useLoaderData();
+  const { product } = Route.useLoaderData() as LoaderData;
   const vendor = getVendor(product.vendorSlug);
   const related = productsByCategory(product.category).filter((p) => p.id !== product.id).slice(0, 5);
   const [activeImg, setActiveImg] = useState(0);
   const [qty, setQty] = useState(1);
-  const [variant, setVariant] = useState<Record<string, string>>(
-    product.variants?.reduce<Record<string, string>>(
-      (acc, v) => ({ ...acc, [v.name]: v.options[0] }),
-      {}
-    ) ?? {}
-  );
+  const initialVariant: Record<string, string> = {};
+  product.variants?.forEach((v) => { initialVariant[v.name] = v.options[0]; });
+  const [variant, setVariant] = useState<Record<string, string>>(initialVariant);
   const { add } = useCart();
   const { has, toggle } = useWishlist();
 

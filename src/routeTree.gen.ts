@@ -10,12 +10,16 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WishlistRouteImport } from './routes/wishlist'
+import { Route as VendorPricingRouteImport } from './routes/vendor-pricing'
+import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as OrderConfirmationRouteImport } from './routes/order-confirmation'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as CategoriesRouteImport } from './routes/categories'
 import { Route as CartRouteImport } from './routes/cart'
+import { Route as BecomeAVendorRouteImport } from './routes/become-a-vendor'
 import { Route as AccountRouteImport } from './routes/account'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProductSlugRouteImport } from './routes/product.$slug'
@@ -25,6 +29,16 @@ import { Route as CategorySlugRouteImport } from './routes/category.$slug'
 const WishlistRoute = WishlistRouteImport.update({
   id: '/wishlist',
   path: '/wishlist',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VendorPricingRoute = VendorPricingRouteImport.update({
+  id: '/vendor-pricing',
+  path: '/vendor-pricing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SearchRoute = SearchRouteImport.update({
@@ -42,6 +56,11 @@ const OrderConfirmationRoute = OrderConfirmationRouteImport.update({
   path: '/order-confirmation',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CheckoutRoute = CheckoutRouteImport.update({
   id: '/checkout',
   path: '/checkout',
@@ -55,6 +74,11 @@ const CategoriesRoute = CategoriesRouteImport.update({
 const CartRoute = CartRouteImport.update({
   id: '/cart',
   path: '/cart',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BecomeAVendorRoute = BecomeAVendorRouteImport.update({
+  id: '/become-a-vendor',
+  path: '/become-a-vendor',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AccountRoute = AccountRouteImport.update({
@@ -86,12 +110,16 @@ const CategorySlugRoute = CategorySlugRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
+  '/become-a-vendor': typeof BecomeAVendorRoute
   '/cart': typeof CartRoute
   '/categories': typeof CategoriesRoute
   '/checkout': typeof CheckoutRoute
+  '/login': typeof LoginRoute
   '/order-confirmation': typeof OrderConfirmationRoute
   '/orders': typeof OrdersRouteWithChildren
   '/search': typeof SearchRoute
+  '/signup': typeof SignupRoute
+  '/vendor-pricing': typeof VendorPricingRoute
   '/wishlist': typeof WishlistRoute
   '/category/$slug': typeof CategorySlugRoute
   '/orders/$id': typeof OrdersIdRoute
@@ -100,12 +128,16 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
+  '/become-a-vendor': typeof BecomeAVendorRoute
   '/cart': typeof CartRoute
   '/categories': typeof CategoriesRoute
   '/checkout': typeof CheckoutRoute
+  '/login': typeof LoginRoute
   '/order-confirmation': typeof OrderConfirmationRoute
   '/orders': typeof OrdersRouteWithChildren
   '/search': typeof SearchRoute
+  '/signup': typeof SignupRoute
+  '/vendor-pricing': typeof VendorPricingRoute
   '/wishlist': typeof WishlistRoute
   '/category/$slug': typeof CategorySlugRoute
   '/orders/$id': typeof OrdersIdRoute
@@ -115,12 +147,16 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
+  '/become-a-vendor': typeof BecomeAVendorRoute
   '/cart': typeof CartRoute
   '/categories': typeof CategoriesRoute
   '/checkout': typeof CheckoutRoute
+  '/login': typeof LoginRoute
   '/order-confirmation': typeof OrderConfirmationRoute
   '/orders': typeof OrdersRouteWithChildren
   '/search': typeof SearchRoute
+  '/signup': typeof SignupRoute
+  '/vendor-pricing': typeof VendorPricingRoute
   '/wishlist': typeof WishlistRoute
   '/category/$slug': typeof CategorySlugRoute
   '/orders/$id': typeof OrdersIdRoute
@@ -131,12 +167,16 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/account'
+    | '/become-a-vendor'
     | '/cart'
     | '/categories'
     | '/checkout'
+    | '/login'
     | '/order-confirmation'
     | '/orders'
     | '/search'
+    | '/signup'
+    | '/vendor-pricing'
     | '/wishlist'
     | '/category/$slug'
     | '/orders/$id'
@@ -145,12 +185,16 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/account'
+    | '/become-a-vendor'
     | '/cart'
     | '/categories'
     | '/checkout'
+    | '/login'
     | '/order-confirmation'
     | '/orders'
     | '/search'
+    | '/signup'
+    | '/vendor-pricing'
     | '/wishlist'
     | '/category/$slug'
     | '/orders/$id'
@@ -159,12 +203,16 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/account'
+    | '/become-a-vendor'
     | '/cart'
     | '/categories'
     | '/checkout'
+    | '/login'
     | '/order-confirmation'
     | '/orders'
     | '/search'
+    | '/signup'
+    | '/vendor-pricing'
     | '/wishlist'
     | '/category/$slug'
     | '/orders/$id'
@@ -174,12 +222,16 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountRoute: typeof AccountRoute
+  BecomeAVendorRoute: typeof BecomeAVendorRoute
   CartRoute: typeof CartRoute
   CategoriesRoute: typeof CategoriesRoute
   CheckoutRoute: typeof CheckoutRoute
+  LoginRoute: typeof LoginRoute
   OrderConfirmationRoute: typeof OrderConfirmationRoute
   OrdersRoute: typeof OrdersRouteWithChildren
   SearchRoute: typeof SearchRoute
+  SignupRoute: typeof SignupRoute
+  VendorPricingRoute: typeof VendorPricingRoute
   WishlistRoute: typeof WishlistRoute
   CategorySlugRoute: typeof CategorySlugRoute
   ProductSlugRoute: typeof ProductSlugRoute
@@ -192,6 +244,20 @@ declare module '@tanstack/react-router' {
       path: '/wishlist'
       fullPath: '/wishlist'
       preLoaderRoute: typeof WishlistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/vendor-pricing': {
+      id: '/vendor-pricing'
+      path: '/vendor-pricing'
+      fullPath: '/vendor-pricing'
+      preLoaderRoute: typeof VendorPricingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/search': {
@@ -215,6 +281,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrderConfirmationRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/checkout': {
       id: '/checkout'
       path: '/checkout'
@@ -234,6 +307,13 @@ declare module '@tanstack/react-router' {
       path: '/cart'
       fullPath: '/cart'
       preLoaderRoute: typeof CartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/become-a-vendor': {
+      id: '/become-a-vendor'
+      path: '/become-a-vendor'
+      fullPath: '/become-a-vendor'
+      preLoaderRoute: typeof BecomeAVendorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/account': {
@@ -288,12 +368,16 @@ const OrdersRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
+  BecomeAVendorRoute: BecomeAVendorRoute,
   CartRoute: CartRoute,
   CategoriesRoute: CategoriesRoute,
   CheckoutRoute: CheckoutRoute,
+  LoginRoute: LoginRoute,
   OrderConfirmationRoute: OrderConfirmationRoute,
   OrdersRoute: OrdersRouteWithChildren,
   SearchRoute: SearchRoute,
+  SignupRoute: SignupRoute,
+  VendorPricingRoute: VendorPricingRoute,
   WishlistRoute: WishlistRoute,
   CategorySlugRoute: CategorySlugRoute,
   ProductSlugRoute: ProductSlugRoute,
@@ -301,3 +385,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
