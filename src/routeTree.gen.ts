@@ -9,38 +9,420 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WishlistRouteImport } from './routes/wishlist'
+import { Route as VendorPricingRouteImport } from './routes/vendor-pricing'
+import { Route as TermsRouteImport } from './routes/terms'
+import { Route as SignupRouteImport } from './routes/signup'
+import { Route as ShippingRouteImport } from './routes/shipping'
+import { Route as SearchRouteImport } from './routes/search'
+import { Route as ReturnsRouteImport } from './routes/returns'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as OrdersRouteImport } from './routes/orders'
+import { Route as OrderConfirmationRouteImport } from './routes/order-confirmation'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as HelpRouteImport } from './routes/help'
+import { Route as CheckoutRouteImport } from './routes/checkout'
+import { Route as CategoriesRouteImport } from './routes/categories'
+import { Route as CartRouteImport } from './routes/cart'
+import { Route as BecomeAVendorRouteImport } from './routes/become-a-vendor'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ProductSlugRouteImport } from './routes/product.$slug'
+import { Route as OrdersIdRouteImport } from './routes/orders.$id'
+import { Route as CategorySlugRouteImport } from './routes/category.$slug'
 
+const WishlistRoute = WishlistRouteImport.update({
+  id: '/wishlist',
+  path: '/wishlist',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VendorPricingRoute = VendorPricingRouteImport.update({
+  id: '/vendor-pricing',
+  path: '/vendor-pricing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShippingRoute = ShippingRouteImport.update({
+  id: '/shipping',
+  path: '/shipping',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReturnsRoute = ReturnsRouteImport.update({
+  id: '/returns',
+  path: '/returns',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrdersRoute = OrdersRouteImport.update({
+  id: '/orders',
+  path: '/orders',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrderConfirmationRoute = OrderConfirmationRouteImport.update({
+  id: '/order-confirmation',
+  path: '/order-confirmation',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HelpRoute = HelpRouteImport.update({
+  id: '/help',
+  path: '/help',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CheckoutRoute = CheckoutRouteImport.update({
+  id: '/checkout',
+  path: '/checkout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CategoriesRoute = CategoriesRouteImport.update({
+  id: '/categories',
+  path: '/categories',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CartRoute = CartRouteImport.update({
+  id: '/cart',
+  path: '/cart',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BecomeAVendorRoute = BecomeAVendorRouteImport.update({
+  id: '/become-a-vendor',
+  path: '/become-a-vendor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProductSlugRoute = ProductSlugRouteImport.update({
+  id: '/product/$slug',
+  path: '/product/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrdersIdRoute = OrdersIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => OrdersRoute,
+} as any)
+const CategorySlugRoute = CategorySlugRouteImport.update({
+  id: '/category/$slug',
+  path: '/category/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
+  '/become-a-vendor': typeof BecomeAVendorRoute
+  '/cart': typeof CartRoute
+  '/categories': typeof CategoriesRoute
+  '/checkout': typeof CheckoutRoute
+  '/help': typeof HelpRoute
+  '/login': typeof LoginRoute
+  '/order-confirmation': typeof OrderConfirmationRoute
+  '/orders': typeof OrdersRouteWithChildren
+  '/privacy': typeof PrivacyRoute
+  '/returns': typeof ReturnsRoute
+  '/search': typeof SearchRoute
+  '/shipping': typeof ShippingRoute
+  '/signup': typeof SignupRoute
+  '/terms': typeof TermsRoute
+  '/vendor-pricing': typeof VendorPricingRoute
+  '/wishlist': typeof WishlistRoute
+  '/category/$slug': typeof CategorySlugRoute
+  '/orders/$id': typeof OrdersIdRoute
+  '/product/$slug': typeof ProductSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
+  '/become-a-vendor': typeof BecomeAVendorRoute
+  '/cart': typeof CartRoute
+  '/categories': typeof CategoriesRoute
+  '/checkout': typeof CheckoutRoute
+  '/help': typeof HelpRoute
+  '/login': typeof LoginRoute
+  '/order-confirmation': typeof OrderConfirmationRoute
+  '/orders': typeof OrdersRouteWithChildren
+  '/privacy': typeof PrivacyRoute
+  '/returns': typeof ReturnsRoute
+  '/search': typeof SearchRoute
+  '/shipping': typeof ShippingRoute
+  '/signup': typeof SignupRoute
+  '/terms': typeof TermsRoute
+  '/vendor-pricing': typeof VendorPricingRoute
+  '/wishlist': typeof WishlistRoute
+  '/category/$slug': typeof CategorySlugRoute
+  '/orders/$id': typeof OrdersIdRoute
+  '/product/$slug': typeof ProductSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
+  '/become-a-vendor': typeof BecomeAVendorRoute
+  '/cart': typeof CartRoute
+  '/categories': typeof CategoriesRoute
+  '/checkout': typeof CheckoutRoute
+  '/help': typeof HelpRoute
+  '/login': typeof LoginRoute
+  '/order-confirmation': typeof OrderConfirmationRoute
+  '/orders': typeof OrdersRouteWithChildren
+  '/privacy': typeof PrivacyRoute
+  '/returns': typeof ReturnsRoute
+  '/search': typeof SearchRoute
+  '/shipping': typeof ShippingRoute
+  '/signup': typeof SignupRoute
+  '/terms': typeof TermsRoute
+  '/vendor-pricing': typeof VendorPricingRoute
+  '/wishlist': typeof WishlistRoute
+  '/category/$slug': typeof CategorySlugRoute
+  '/orders/$id': typeof OrdersIdRoute
+  '/product/$slug': typeof ProductSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/account'
+    | '/become-a-vendor'
+    | '/cart'
+    | '/categories'
+    | '/checkout'
+    | '/help'
+    | '/login'
+    | '/order-confirmation'
+    | '/orders'
+    | '/privacy'
+    | '/returns'
+    | '/search'
+    | '/shipping'
+    | '/signup'
+    | '/terms'
+    | '/vendor-pricing'
+    | '/wishlist'
+    | '/category/$slug'
+    | '/orders/$id'
+    | '/product/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/account'
+    | '/become-a-vendor'
+    | '/cart'
+    | '/categories'
+    | '/checkout'
+    | '/help'
+    | '/login'
+    | '/order-confirmation'
+    | '/orders'
+    | '/privacy'
+    | '/returns'
+    | '/search'
+    | '/shipping'
+    | '/signup'
+    | '/terms'
+    | '/vendor-pricing'
+    | '/wishlist'
+    | '/category/$slug'
+    | '/orders/$id'
+    | '/product/$slug'
+  id:
+    | '__root__'
+    | '/'
+    | '/account'
+    | '/become-a-vendor'
+    | '/cart'
+    | '/categories'
+    | '/checkout'
+    | '/help'
+    | '/login'
+    | '/order-confirmation'
+    | '/orders'
+    | '/privacy'
+    | '/returns'
+    | '/search'
+    | '/shipping'
+    | '/signup'
+    | '/terms'
+    | '/vendor-pricing'
+    | '/wishlist'
+    | '/category/$slug'
+    | '/orders/$id'
+    | '/product/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountRoute: typeof AccountRoute
+  BecomeAVendorRoute: typeof BecomeAVendorRoute
+  CartRoute: typeof CartRoute
+  CategoriesRoute: typeof CategoriesRoute
+  CheckoutRoute: typeof CheckoutRoute
+  HelpRoute: typeof HelpRoute
+  LoginRoute: typeof LoginRoute
+  OrderConfirmationRoute: typeof OrderConfirmationRoute
+  OrdersRoute: typeof OrdersRouteWithChildren
+  PrivacyRoute: typeof PrivacyRoute
+  ReturnsRoute: typeof ReturnsRoute
+  SearchRoute: typeof SearchRoute
+  ShippingRoute: typeof ShippingRoute
+  SignupRoute: typeof SignupRoute
+  TermsRoute: typeof TermsRoute
+  VendorPricingRoute: typeof VendorPricingRoute
+  WishlistRoute: typeof WishlistRoute
+  CategorySlugRoute: typeof CategorySlugRoute
+  ProductSlugRoute: typeof ProductSlugRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/wishlist': {
+      id: '/wishlist'
+      path: '/wishlist'
+      fullPath: '/wishlist'
+      preLoaderRoute: typeof WishlistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/vendor-pricing': {
+      id: '/vendor-pricing'
+      path: '/vendor-pricing'
+      fullPath: '/vendor-pricing'
+      preLoaderRoute: typeof VendorPricingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/shipping': {
+      id: '/shipping'
+      path: '/shipping'
+      fullPath: '/shipping'
+      preLoaderRoute: typeof ShippingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/returns': {
+      id: '/returns'
+      path: '/returns'
+      fullPath: '/returns'
+      preLoaderRoute: typeof ReturnsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/orders': {
+      id: '/orders'
+      path: '/orders'
+      fullPath: '/orders'
+      preLoaderRoute: typeof OrdersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/order-confirmation': {
+      id: '/order-confirmation'
+      path: '/order-confirmation'
+      fullPath: '/order-confirmation'
+      preLoaderRoute: typeof OrderConfirmationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/help': {
+      id: '/help'
+      path: '/help'
+      fullPath: '/help'
+      preLoaderRoute: typeof HelpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/checkout': {
+      id: '/checkout'
+      path: '/checkout'
+      fullPath: '/checkout'
+      preLoaderRoute: typeof CheckoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/categories': {
+      id: '/categories'
+      path: '/categories'
+      fullPath: '/categories'
+      preLoaderRoute: typeof CategoriesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cart': {
+      id: '/cart'
+      path: '/cart'
+      fullPath: '/cart'
+      preLoaderRoute: typeof CartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/become-a-vendor': {
+      id: '/become-a-vendor'
+      path: '/become-a-vendor'
+      fullPath: '/become-a-vendor'
+      preLoaderRoute: typeof BecomeAVendorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,22 +430,63 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/product/$slug': {
+      id: '/product/$slug'
+      path: '/product/$slug'
+      fullPath: '/product/$slug'
+      preLoaderRoute: typeof ProductSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/orders/$id': {
+      id: '/orders/$id'
+      path: '/$id'
+      fullPath: '/orders/$id'
+      preLoaderRoute: typeof OrdersIdRouteImport
+      parentRoute: typeof OrdersRoute
+    }
+    '/category/$slug': {
+      id: '/category/$slug'
+      path: '/category/$slug'
+      fullPath: '/category/$slug'
+      preLoaderRoute: typeof CategorySlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
+interface OrdersRouteChildren {
+  OrdersIdRoute: typeof OrdersIdRoute
+}
+
+const OrdersRouteChildren: OrdersRouteChildren = {
+  OrdersIdRoute: OrdersIdRoute,
+}
+
+const OrdersRouteWithChildren =
+  OrdersRoute._addFileChildren(OrdersRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountRoute: AccountRoute,
+  BecomeAVendorRoute: BecomeAVendorRoute,
+  CartRoute: CartRoute,
+  CategoriesRoute: CategoriesRoute,
+  CheckoutRoute: CheckoutRoute,
+  HelpRoute: HelpRoute,
+  LoginRoute: LoginRoute,
+  OrderConfirmationRoute: OrderConfirmationRoute,
+  OrdersRoute: OrdersRouteWithChildren,
+  PrivacyRoute: PrivacyRoute,
+  ReturnsRoute: ReturnsRoute,
+  SearchRoute: SearchRoute,
+  ShippingRoute: ShippingRoute,
+  SignupRoute: SignupRoute,
+  TermsRoute: TermsRoute,
+  VendorPricingRoute: VendorPricingRoute,
+  WishlistRoute: WishlistRoute,
+  CategorySlugRoute: CategorySlugRoute,
+  ProductSlugRoute: ProductSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
