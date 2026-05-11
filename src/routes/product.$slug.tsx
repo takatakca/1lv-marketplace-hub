@@ -33,7 +33,10 @@ function ProductPage() {
   const [activeImg, setActiveImg] = useState(0);
   const [qty, setQty] = useState(1);
   const [variant, setVariant] = useState<Record<string, string>>(
-    product.variants?.reduce((acc, v) => ({ ...acc, [v.name]: v.options[0] }), {}) ?? {}
+    product.variants?.reduce<Record<string, string>>(
+      (acc, v) => ({ ...acc, [v.name]: v.options[0] }),
+      {}
+    ) ?? {}
   );
   const { add } = useCart();
   const { has, toggle } = useWishlist();

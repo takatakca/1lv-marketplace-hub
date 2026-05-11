@@ -31,7 +31,7 @@ function CategoryPage() {
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">{items.length} products from trusted vendors</p>
           <div className="mt-4 flex flex-wrap gap-2">
-            {cat.subcategories.map((s) => (
+            {cat.subcategories.map((s: string) => (
               <span key={s} className="rounded-full border border-border bg-white px-3 py-1 text-xs font-medium text-navy">
                 {s}
               </span>
