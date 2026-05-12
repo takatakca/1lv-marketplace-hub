@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WishlistRouteImport } from './routes/wishlist'
 import { Route as VendorPricingRouteImport } from './routes/vendor-pricing'
+import { Route as VendorRouteImport } from './routes/vendor'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ShippingRouteImport } from './routes/shipping'
@@ -39,6 +40,11 @@ const WishlistRoute = WishlistRouteImport.update({
 const VendorPricingRoute = VendorPricingRouteImport.update({
   id: '/vendor-pricing',
   path: '/vendor-pricing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VendorRoute = VendorRouteImport.update({
+  id: '/vendor',
+  path: '/vendor',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TermsRoute = TermsRouteImport.update({
@@ -154,6 +160,7 @@ export interface FileRoutesByFullPath {
   '/shipping': typeof ShippingRoute
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
+  '/vendor': typeof VendorRoute
   '/vendor-pricing': typeof VendorPricingRoute
   '/wishlist': typeof WishlistRoute
   '/category/$slug': typeof CategorySlugRoute
@@ -177,6 +184,7 @@ export interface FileRoutesByTo {
   '/shipping': typeof ShippingRoute
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
+  '/vendor': typeof VendorRoute
   '/vendor-pricing': typeof VendorPricingRoute
   '/wishlist': typeof WishlistRoute
   '/category/$slug': typeof CategorySlugRoute
@@ -201,6 +209,7 @@ export interface FileRoutesById {
   '/shipping': typeof ShippingRoute
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
+  '/vendor': typeof VendorRoute
   '/vendor-pricing': typeof VendorPricingRoute
   '/wishlist': typeof WishlistRoute
   '/category/$slug': typeof CategorySlugRoute
@@ -226,6 +235,7 @@ export interface FileRouteTypes {
     | '/shipping'
     | '/signup'
     | '/terms'
+    | '/vendor'
     | '/vendor-pricing'
     | '/wishlist'
     | '/category/$slug'
@@ -249,6 +259,7 @@ export interface FileRouteTypes {
     | '/shipping'
     | '/signup'
     | '/terms'
+    | '/vendor'
     | '/vendor-pricing'
     | '/wishlist'
     | '/category/$slug'
@@ -272,6 +283,7 @@ export interface FileRouteTypes {
     | '/shipping'
     | '/signup'
     | '/terms'
+    | '/vendor'
     | '/vendor-pricing'
     | '/wishlist'
     | '/category/$slug'
@@ -296,6 +308,7 @@ export interface RootRouteChildren {
   ShippingRoute: typeof ShippingRoute
   SignupRoute: typeof SignupRoute
   TermsRoute: typeof TermsRoute
+  VendorRoute: typeof VendorRoute
   VendorPricingRoute: typeof VendorPricingRoute
   WishlistRoute: typeof WishlistRoute
   CategorySlugRoute: typeof CategorySlugRoute
@@ -316,6 +329,13 @@ declare module '@tanstack/react-router' {
       path: '/vendor-pricing'
       fullPath: '/vendor-pricing'
       preLoaderRoute: typeof VendorPricingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/vendor': {
+      id: '/vendor'
+      path: '/vendor'
+      fullPath: '/vendor'
+      preLoaderRoute: typeof VendorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/terms': {
@@ -482,6 +502,7 @@ const rootRouteChildren: RootRouteChildren = {
   ShippingRoute: ShippingRoute,
   SignupRoute: SignupRoute,
   TermsRoute: TermsRoute,
+  VendorRoute: VendorRoute,
   VendorPricingRoute: VendorPricingRoute,
   WishlistRoute: WishlistRoute,
   CategorySlugRoute: CategorySlugRoute,
@@ -490,3 +511,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
