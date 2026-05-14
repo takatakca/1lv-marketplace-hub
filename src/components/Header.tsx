@@ -6,6 +6,7 @@ import { LanguageToggle } from "./LanguageToggle";
 import { CategoryMegaMenu } from "./CategoryMegaMenu";
 import { useCart } from "@/hooks/use-cart";
 import { useAuth } from "@/hooks/use-auth";
+import { canAccessAdmin, canAccessVendor } from "@/lib/roles";
 import { categories } from "@/lib/data";
 
 export function Header() {
@@ -14,7 +15,9 @@ export function Header() {
   const [q, setQ] = useState("");
   const navigate = useNavigate();
   const { count } = useCart();
-  const { user, signOut } = useAuth();
+  const { user, roles, signOut } = useAuth();
+  const showVendor = canAccessVendor(roles);
+  const showAdmin = canAccessAdmin(roles);
 
   const onSearch = (e: FormEvent) => {
     e.preventDefault();
@@ -74,6 +77,12 @@ export function Header() {
                 <Link to="/account" className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium text-navy hover:bg-muted">
                   <User size={16} /> Account
                 </Link>
+                {showVendor && (
+                  <Link to="/vendor" className="rounded-md px-2 py-1.5 text-sm font-medium text-electric hover:bg-muted">Vendor</Link>
+                )}
+                {showAdmin && (
+                  <Link to="/admin" className="rounded-md px-2 py-1.5 text-sm font-medium text-deal hover:bg-muted">Admin</Link>
+                )}
                 <button onClick={signOut} className="rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted">
                   Sign out
                 </button>
