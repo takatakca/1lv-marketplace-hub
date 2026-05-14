@@ -44,9 +44,10 @@ export async function getOrderForVendor(orderId: string) {
   return data;
 }
 
+export type FulfillmentStatus = "pending" | "processing" | "shipped" | "delivered" | "cancelled";
 export async function updateOrderItem(
   itemId: string,
-  patch: Partial<Pick<OrderItemRecord, "status" | "tracking_number" | "carrier">>,
+  patch: { status?: FulfillmentStatus; tracking_number?: string | null; carrier?: string | null },
 ) {
   const { error } = await supabase.from("order_items").update(patch).eq("id", itemId);
   if (error) throw error;

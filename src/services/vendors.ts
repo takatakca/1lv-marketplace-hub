@@ -66,13 +66,13 @@ export async function upsertMyVendor(userId: string, input: VendorUpsert) {
   const { data, error } = await supabase
     .from("vendors")
     .insert({
+      ...input,
       user_id: userId,
       store_name: input.store_name,
       slug: slugify(input.store_name) + "-" + userId.slice(0, 6),
       country: "CA",
-      status: "pending",
+      status: "pending" as const,
       subscription_status: "none",
-      ...input,
     })
     .select()
     .single();
@@ -89,7 +89,8 @@ export async function listAllVendors(): Promise<VendorRecord[]> {
   return (data ?? []) as VendorRecord[];
 }
 
-export async function setVendorStatus(id: string, status: "pending" | "approved" | "suspended" | "rejected") {
+export type VendorStatus = "pending" | "active" | "suspended";
+export async function setVendorStatus(id: string, status: VendorStatus) {
   const { error } = await supabase.from("vendors").update({ status }).eq("id", id);
   if (error) throw error;
 }
