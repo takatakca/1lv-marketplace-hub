@@ -14,6 +14,237 @@ export type Database = {
   }
   public: {
     Tables: {
+      categories: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          name_en: string
+          name_fr: string | null
+          parent_slug: string | null
+          position: number
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name_en: string
+          name_fr?: string | null
+          parent_slug?: string | null
+          position?: number
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name_en?: string
+          name_fr?: string | null
+          parent_slug?: string | null
+          position?: number
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      order_items: {
+        Row: {
+          carrier: string | null
+          created_at: string
+          id: string
+          order_id: string
+          product_id: string | null
+          quantity: number
+          status: Database["public"]["Enums"]["fulfillment_status"]
+          title: string
+          tracking_number: string | null
+          unit_price: number
+          updated_at: string
+          vendor_id: string
+        }
+        Insert: {
+          carrier?: string | null
+          created_at?: string
+          id?: string
+          order_id: string
+          product_id?: string | null
+          quantity?: number
+          status?: Database["public"]["Enums"]["fulfillment_status"]
+          title: string
+          tracking_number?: string | null
+          unit_price?: number
+          updated_at?: string
+          vendor_id: string
+        }
+        Update: {
+          carrier?: string | null
+          created_at?: string
+          id?: string
+          order_id?: string
+          product_id?: string | null
+          quantity?: number
+          status?: Database["public"]["Enums"]["fulfillment_status"]
+          title?: string
+          tracking_number?: string | null
+          unit_price?: number
+          updated_at?: string
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          billing_address: Json | null
+          created_at: string
+          currency: string
+          customer_id: string
+          id: string
+          order_number: string
+          payment_status: Database["public"]["Enums"]["payment_status"]
+          shipping_address: Json | null
+          shipping_total: number
+          status: Database["public"]["Enums"]["order_status"]
+          subtotal: number
+          tax_total: number
+          total: number
+          updated_at: string
+        }
+        Insert: {
+          billing_address?: Json | null
+          created_at?: string
+          currency?: string
+          customer_id: string
+          id?: string
+          order_number?: string
+          payment_status?: Database["public"]["Enums"]["payment_status"]
+          shipping_address?: Json | null
+          shipping_total?: number
+          status?: Database["public"]["Enums"]["order_status"]
+          subtotal?: number
+          tax_total?: number
+          total?: number
+          updated_at?: string
+        }
+        Update: {
+          billing_address?: Json | null
+          created_at?: string
+          currency?: string
+          customer_id?: string
+          id?: string
+          order_number?: string
+          payment_status?: Database["public"]["Enums"]["payment_status"]
+          shipping_address?: Json | null
+          shipping_total?: number
+          status?: Database["public"]["Enums"]["order_status"]
+          subtotal?: number
+          tax_total?: number
+          total?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      products: {
+        Row: {
+          category_slug: string | null
+          compare_at_price: number | null
+          cost: number | null
+          created_at: string
+          description: string | null
+          id: string
+          images: Json
+          inventory_quantity: number
+          price: number
+          short_description: string | null
+          sku: string | null
+          slug: string
+          status: Database["public"]["Enums"]["product_status"]
+          supplier_product_id: string | null
+          supplier_source: string | null
+          supplier_url: string | null
+          title: string
+          track_inventory: boolean
+          updated_at: string
+          vendor_id: string
+        }
+        Insert: {
+          category_slug?: string | null
+          compare_at_price?: number | null
+          cost?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          images?: Json
+          inventory_quantity?: number
+          price?: number
+          short_description?: string | null
+          sku?: string | null
+          slug: string
+          status?: Database["public"]["Enums"]["product_status"]
+          supplier_product_id?: string | null
+          supplier_source?: string | null
+          supplier_url?: string | null
+          title: string
+          track_inventory?: boolean
+          updated_at?: string
+          vendor_id: string
+        }
+        Update: {
+          category_slug?: string | null
+          compare_at_price?: number | null
+          cost?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          images?: Json
+          inventory_quantity?: number
+          price?: number
+          short_description?: string | null
+          sku?: string | null
+          slug?: string
+          status?: Database["public"]["Enums"]["product_status"]
+          supplier_product_id?: string | null
+          supplier_source?: string | null
+          supplier_url?: string | null
+          title?: string
+          track_inventory?: boolean
+          updated_at?: string
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -67,38 +298,71 @@ export type Database = {
       }
       vendors: {
         Row: {
+          address: string | null
+          banner_url: string | null
+          business_name: string | null
+          city: string | null
+          contact_email: string | null
           country: string
           created_at: string
           description: string | null
           id: string
           logo_url: string | null
+          phone: string | null
+          postal_code: string | null
+          province: string | null
+          return_policy: string | null
+          shipping_policy: string | null
           slug: string
           status: Database["public"]["Enums"]["vendor_status"]
           store_name: string
+          subscription_status: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          address?: string | null
+          banner_url?: string | null
+          business_name?: string | null
+          city?: string | null
+          contact_email?: string | null
           country?: string
           created_at?: string
           description?: string | null
           id?: string
           logo_url?: string | null
+          phone?: string | null
+          postal_code?: string | null
+          province?: string | null
+          return_policy?: string | null
+          shipping_policy?: string | null
           slug: string
           status?: Database["public"]["Enums"]["vendor_status"]
           store_name: string
+          subscription_status?: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          address?: string | null
+          banner_url?: string | null
+          business_name?: string | null
+          city?: string | null
+          contact_email?: string | null
           country?: string
           created_at?: string
           description?: string | null
           id?: string
           logo_url?: string | null
+          phone?: string | null
+          postal_code?: string | null
+          province?: string | null
+          return_policy?: string | null
+          shipping_policy?: string | null
           slug?: string
           status?: Database["public"]["Enums"]["vendor_status"]
           store_name?: string
+          subscription_status?: string
           updated_at?: string
           user_id?: string
         }
@@ -119,6 +383,26 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "vendor" | "customer"
+      fulfillment_status:
+        | "pending"
+        | "processing"
+        | "shipped"
+        | "delivered"
+        | "cancelled"
+      order_status:
+        | "pending"
+        | "processing"
+        | "shipped"
+        | "delivered"
+        | "cancelled"
+        | "refunded"
+      payment_status: "unpaid" | "paid" | "refunded" | "failed"
+      product_status:
+        | "draft"
+        | "pending_review"
+        | "active"
+        | "rejected"
+        | "archived"
       vendor_status: "pending" | "active" | "suspended"
     }
     CompositeTypes: {
@@ -248,6 +532,29 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "vendor", "customer"],
+      fulfillment_status: [
+        "pending",
+        "processing",
+        "shipped",
+        "delivered",
+        "cancelled",
+      ],
+      order_status: [
+        "pending",
+        "processing",
+        "shipped",
+        "delivered",
+        "cancelled",
+        "refunded",
+      ],
+      payment_status: ["unpaid", "paid", "refunded", "failed"],
+      product_status: [
+        "draft",
+        "pending_review",
+        "active",
+        "rejected",
+        "archived",
+      ],
       vendor_status: ["pending", "active", "suspended"],
     },
   },
