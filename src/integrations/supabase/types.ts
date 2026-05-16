@@ -403,7 +403,7 @@ export type Database = {
         | "active"
         | "rejected"
         | "archived"
-      vendor_status: "pending" | "active" | "suspended"
+      vendor_status: "pending" | "active" | "suspended" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -555,7 +555,7 @@ export const Constants = {
         "rejected",
         "archived",
       ],
-      vendor_status: ["pending", "active", "suspended"],
+      vendor_status: ["pending", "active", "suspended", "rejected"],
     },
   },
 } as const

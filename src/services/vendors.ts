@@ -89,8 +89,8 @@ export async function listAllVendors(): Promise<VendorRecord[]> {
   return (data ?? []) as VendorRecord[];
 }
 
-export type VendorStatus = "pending" | "active" | "suspended";
+export type VendorStatus = "pending" | "active" | "suspended" | "rejected";
 export async function setVendorStatus(id: string, status: VendorStatus) {
-  const { error } = await supabase.from("vendors").update({ status }).eq("id", id);
+  const { error } = await supabase.from("vendors").update({ status: status as never }).eq("id", id);
   if (error) throw error;
 }
