@@ -5,17 +5,21 @@ import { AppLayout } from "@/components/AppLayout";
 import { useCart } from "@/hooks/use-cart";
 import { formatCAD } from "@/lib/data";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/use-auth";
+import { createOrder, type Address } from "@/services/checkout";
+import { createPaymentIntent, isStripeConfigured } from "@/services/payments";
 
 export const Route = createFileRoute("/checkout")({
   component: Checkout,
   head: () => ({ meta: [{ title: "Checkout — 1LV.CA" }] }),
 });
 
-function Field({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+function Field({ label, name, ...props }: { label: string; name: string } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <label className="block">
       <span className="mb-1 block text-xs font-semibold text-navy">{label}</span>
       <input
+        name={name}
         {...props}
         className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm outline-none focus:border-electric"
       />
@@ -25,20 +29,66 @@ function Field({ label, ...props }: { label: string } & React.InputHTMLAttribute
 
 function Checkout() {
   const { items, subtotal, clear } = useCart();
+  const { user } = useAuth();
   const nav = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const shipping = subtotal === 0 || subtotal >= 49 ? 0 : 7.99;
-  const taxes = subtotal * 0.14975;
-  const total = subtotal + shipping + taxes;
+  const taxes = +(subtotal * 0.14975).toFixed(2);
+  const total = +(subtotal + shipping + taxes).toFixed(2);
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (items.length === 0) return;
     setSubmitting(true);
-    setTimeout(() => {
+    const f = new FormData(e.currentTarget);
+    const get = (k: string) => String(f.get(k) ?? "");
+
+    const shipping_address: Address = {
+      first_name: get("first_name"),
+      last_name: get("last_name"),
+      address: get("address"),
+      city: get("city"),
+      province: get("province"),
+      postal_code: get("postal_code"),
+      country: "Canada",
+    };
+
+    try {
+      const result = await createOrder({
+        items,
+        email: get("email"),
+        phone: get("phone"),
+        shipping_address,
+        customer_id: user?.id ?? null,
+        subtotal,
+        shipping_total: shipping,
+        tax_total: taxes,
+        total,
+      });
+
+      // Prepare payment intent (Stripe placeholder)
+      const intent = await createPaymentIntent(result.order_id, total);
+      if (!isStripeConfigured() || intent.pending) {
+        toast.success(
+          result.demo
+            ? "Demo order placed — Stripe setup required for live payment."
+            : "Order created — pending payment (Stripe setup required).",
+        );
+      } else {
+        toast.success("Order placed!");
+      }
+
       clear();
-      toast.success("Order placed!");
-      nav({ to: "/order-confirmation" });
-    }, 700);
+      nav({
+        to: "/order-confirmation",
+        search: { order: result.order_number, demo: result.demo ? 1 : 0 } as never,
+      });
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Could not place order");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -50,33 +100,38 @@ function Checkout() {
             <section className="rounded-xl border border-border bg-card p-5">
               <h2 className="mb-4 font-bold text-navy">Contact</h2>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Email" type="email" required placeholder="you@example.com" />
-                <Field label="Phone" required placeholder="+1 514 555 0123" />
+                <Field label="Email" name="email" type="email" required defaultValue={user?.email ?? ""} placeholder="you@example.com" />
+                <Field label="Phone" name="phone" required placeholder="+1 514 555 0123" />
               </div>
+              {!user && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Checking out as guest. <a className="text-electric hover:underline" href="/login">Sign in</a> to save your orders.
+                </p>
+              )}
             </section>
 
             <section className="rounded-xl border border-border bg-card p-5">
               <h2 className="mb-4 font-bold text-navy">Shipping address</h2>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="First name" required />
-                <Field label="Last name" required />
-                <Field label="Address" required className="sm:col-span-2" />
-                <Field label="City" required />
-                <Field label="Province" required defaultValue="QC" />
-                <Field label="Postal code" required placeholder="H2X 1Y4" />
-                <Field label="Country" defaultValue="Canada" readOnly />
+                <Field label="First name" name="first_name" required />
+                <Field label="Last name" name="last_name" required />
+                <Field label="Address" name="address" required className="sm:col-span-2" />
+                <Field label="City" name="city" required />
+                <Field label="Province" name="province" required defaultValue="QC" />
+                <Field label="Postal code" name="postal_code" required placeholder="H2X 1Y4" />
+                <Field label="Country" name="country" defaultValue="Canada" readOnly />
               </div>
             </section>
 
             <section className="rounded-xl border border-border bg-card p-5">
               <h2 className="mb-4 font-bold text-navy">Payment</h2>
               <p className="mb-3 inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
-                <Lock size={12} /> Stripe-ready · Test mode
+                <Lock size={12} /> {isStripeConfigured() ? "Stripe-ready · Test mode" : "Stripe setup required — orders will be created in pending-payment mode"}
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Card number" placeholder="4242 4242 4242 4242" className="sm:col-span-2" />
-                <Field label="Expiry" placeholder="12/28" />
-                <Field label="CVC" placeholder="123" />
+                <Field label="Card number" name="card" placeholder="4242 4242 4242 4242" className="sm:col-span-2" />
+                <Field label="Expiry" name="exp" placeholder="12/28" />
+                <Field label="CVC" name="cvc" placeholder="123" />
               </div>
             </section>
           </div>
