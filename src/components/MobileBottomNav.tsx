@@ -48,7 +48,7 @@ export function MobileBottomNav() {
           return (
             <li key={to}>
               <Link
-                to={to}
+                to={to as never}
                 className={`flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium ${
                   active ? "text-electric" : "text-muted-foreground"
                 }`}
