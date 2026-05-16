@@ -106,8 +106,8 @@ export async function createOrder(input: CheckoutInput): Promise<CheckoutResult>
       total,
       status: "pending",
       payment_status: "unpaid",
-      shipping_address: input.shipping_address as unknown as Record<string, unknown>,
-      billing_address: (input.billing_address ?? input.shipping_address) as unknown as Record<string, unknown>,
+      shipping_address: input.shipping_address as never,
+      billing_address: (input.billing_address ?? input.shipping_address) as never,
     })
     .select("id, order_number")
     .single();
