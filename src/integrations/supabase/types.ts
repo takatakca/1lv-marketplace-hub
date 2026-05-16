@@ -122,7 +122,10 @@ export type Database = {
           billing_address: Json | null
           created_at: string
           currency: string
-          customer_id: string
+          customer_email: string | null
+          customer_id: string | null
+          customer_phone: string | null
+          discount_total: number
           id: string
           order_number: string
           payment_status: Database["public"]["Enums"]["payment_status"]
@@ -138,7 +141,10 @@ export type Database = {
           billing_address?: Json | null
           created_at?: string
           currency?: string
-          customer_id: string
+          customer_email?: string | null
+          customer_id?: string | null
+          customer_phone?: string | null
+          discount_total?: number
           id?: string
           order_number?: string
           payment_status?: Database["public"]["Enums"]["payment_status"]
@@ -154,7 +160,10 @@ export type Database = {
           billing_address?: Json | null
           created_at?: string
           currency?: string
-          customer_id?: string
+          customer_email?: string | null
+          customer_id?: string | null
+          customer_phone?: string | null
+          discount_total?: number
           id?: string
           order_number?: string
           payment_status?: Database["public"]["Enums"]["payment_status"]
