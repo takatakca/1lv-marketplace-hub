@@ -54,7 +54,8 @@ function Page() {
             { key: "actions", label: "", render: (r) => (
               <div className="flex gap-2 text-xs">
                 <button onClick={() => act(r.id as string, "active")} className="text-success">Approve</button>
-                <button onClick={() => act(r.id as string, "suspended")} className="text-destructive">Suspend</button>
+                <button onClick={() => act(r.id as string, "rejected")} className="text-destructive">Reject</button>
+                <button onClick={() => act(r.id as string, "suspended")} className="text-destructive/80">Suspend</button>
                 <button onClick={() => act(r.id as string, "pending")} className="text-muted-foreground">Reset</button>
               </div>
             ) },
