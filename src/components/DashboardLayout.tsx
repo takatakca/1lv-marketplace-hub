@@ -55,6 +55,11 @@ export function DashboardLayout({ kind }: { kind: "vendor" | "admin" }) {
           <p className="mt-2 text-[11px] font-semibold uppercase tracking-wider text-electric">
             {kind === "vendor" ? "Vendor portal" : "Admin console"}
           </p>
+          {!user && (
+            <p className="mt-2 inline-block rounded-full bg-electric/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-electric">
+              Preview / Demo mode
+            </p>
+          )}
         </div>
         <nav className="flex-1 space-y-0.5 p-3">
           {items.map(({ to, icon: Icon, label }) => {
