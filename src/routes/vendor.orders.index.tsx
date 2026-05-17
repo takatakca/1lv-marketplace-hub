@@ -11,7 +11,7 @@ import { DemoBanner, PreviewModeNotice } from "@/components/DemoBanner";
 function Page() {
   const { user } = useAuth();
   const demo = isDemoMode(user);
-  const [items, setItems] = useState<unknown[] | null>(null);
+  const [items, setItems] = useState<Awaited<ReturnType<typeof listVendorOrders>> | null>(null);
   const [loading, setLoading] = useState(!demo);
 
   useEffect(() => {
@@ -31,22 +31,18 @@ function Page() {
         id: "demo-" + i, order: "1LV-" + (10240 + i),
         customer: ["Jane D.", "Marc P.", "Sarah K.", "Liam B.", "Noor A."][i % 5],
         date: new Date(2026, 4, 11 - i).toLocaleDateString("en-CA"),
-        total: formatCAD(p.price), fulfillment: ["pending", "processing", "shipped", "delivered", "pending"][i % 5],
+        total: formatCAD(p.price), fulfillment: ["pending", "accepted", "processing", "shipped", "delivered"][i % 5],
         payment: "paid", tracking: i > 1 ? "1Z999AA" + i : "—",
       }))
-    : (items as Array<{
-        id: string; title: string; status: string; tracking_number: string | null;
-        unit_price: number; quantity: number;
-        orders: { id: string; order_number: string; payment_status: string; created_at: string };
-      }>).map((it) => ({
-        id: it.orders.id,
-        order: it.orders.order_number,
-        customer: "—",
-        date: new Date(it.orders.created_at).toLocaleDateString("en-CA"),
-        total: formatCAD(Number(it.unit_price) * it.quantity),
-        fulfillment: it.status,
-        payment: it.orders.payment_status,
-        tracking: it.tracking_number ?? "—",
+    : (items ?? []).map((vo) => ({
+        id: vo.id,
+        order: vo.orders.order_number,
+        customer: vo.orders.customer_email ?? "—",
+        date: new Date(vo.orders.created_at).toLocaleDateString("en-CA"),
+        total: formatCAD(Number(vo.subtotal)),
+        fulfillment: vo.status,
+        payment: vo.orders.payment_status,
+        tracking: vo.tracking_number ?? "—",
       }));
 
   return (
@@ -62,7 +58,7 @@ function Page() {
             { key: "order", label: "Order" },
             { key: "customer", label: "Customer" },
             { key: "date", label: "Date" },
-            { key: "total", label: "Total" },
+            { key: "total", label: "Subtotal" },
             { key: "fulfillment", label: "Fulfillment" },
             { key: "payment", label: "Payment" },
             { key: "tracking", label: "Tracking" },
