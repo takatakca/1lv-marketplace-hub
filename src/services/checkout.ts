@@ -125,6 +125,38 @@ export async function createOrder(input: CheckoutInput): Promise<CheckoutResult>
   const { error: itemsErr } = await supabase.from("order_items").insert(itemRows);
   if (itemsErr) throw itemsErr;
 
+  // Build per-vendor split rows
+  const vendorIds = Array.from(new Set(validated.map((v) => v.vendor_id)));
+  const { data: vendorRows } = await supabase
+    .from("vendors")
+    .select("id, commission_rate")
+    .in("id", vendorIds);
+  const rateById = new Map<string, number>(
+    (vendorRows ?? []).map((r) => [r.id, Number((r as { commission_rate?: number }).commission_rate ?? 0.1)]),
+  );
+
+  const splits = vendorIds.map((vid) => {
+    const vSub = validated
+      .filter((v) => v.vendor_id === vid)
+      .reduce((s, v) => s + v.unit_price * v.quantity, 0);
+    const rate = rateById.get(vid) ?? 0.1;
+    const commission = +(vSub * rate).toFixed(2);
+    const payout = +(vSub - commission).toFixed(2);
+    return {
+      order_id: order.id,
+      vendor_id: vid,
+      subtotal: vSub,
+      commission_amount: commission,
+      vendor_payout_amount: payout,
+      status: "pending" as const,
+    };
+  });
+
+  if (splits.length > 0) {
+    const { error: voErr } = await supabase.from("vendor_orders" as never).insert(splits as never);
+    if (voErr) console.warn("vendor_orders insert failed:", voErr.message);
+  }
+
   return { order_id: order.id, order_number: order.order_number, demo: false };
 }
 

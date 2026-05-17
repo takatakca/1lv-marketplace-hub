@@ -305,12 +305,70 @@ export type Database = {
         }
         Relationships: []
       }
+      vendor_orders: {
+        Row: {
+          carrier: string | null
+          commission_amount: number
+          created_at: string
+          id: string
+          order_id: string
+          status: Database["public"]["Enums"]["vendor_order_status"]
+          subtotal: number
+          tracking_number: string | null
+          updated_at: string
+          vendor_id: string
+          vendor_payout_amount: number
+        }
+        Insert: {
+          carrier?: string | null
+          commission_amount?: number
+          created_at?: string
+          id?: string
+          order_id: string
+          status?: Database["public"]["Enums"]["vendor_order_status"]
+          subtotal?: number
+          tracking_number?: string | null
+          updated_at?: string
+          vendor_id: string
+          vendor_payout_amount?: number
+        }
+        Update: {
+          carrier?: string | null
+          commission_amount?: number
+          created_at?: string
+          id?: string
+          order_id?: string
+          status?: Database["public"]["Enums"]["vendor_order_status"]
+          subtotal?: number
+          tracking_number?: string | null
+          updated_at?: string
+          vendor_id?: string
+          vendor_payout_amount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_orders_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_orders_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vendors: {
         Row: {
           address: string | null
           banner_url: string | null
           business_name: string | null
           city: string | null
+          commission_rate: number
           contact_email: string | null
           country: string
           created_at: string
@@ -334,6 +392,7 @@ export type Database = {
           banner_url?: string | null
           business_name?: string | null
           city?: string | null
+          commission_rate?: number
           contact_email?: string | null
           country?: string
           created_at?: string
@@ -357,6 +416,7 @@ export type Database = {
           banner_url?: string | null
           business_name?: string | null
           city?: string | null
+          commission_rate?: number
           contact_email?: string | null
           country?: string
           created_at?: string
@@ -412,6 +472,13 @@ export type Database = {
         | "active"
         | "rejected"
         | "archived"
+      vendor_order_status:
+        | "pending"
+        | "accepted"
+        | "processing"
+        | "shipped"
+        | "delivered"
+        | "cancelled"
       vendor_status: "pending" | "active" | "suspended" | "rejected"
     }
     CompositeTypes: {
@@ -563,6 +630,14 @@ export const Constants = {
         "active",
         "rejected",
         "archived",
+      ],
+      vendor_order_status: [
+        "pending",
+        "accepted",
+        "processing",
+        "shipped",
+        "delivered",
+        "cancelled",
       ],
       vendor_status: ["pending", "active", "suspended", "rejected"],
     },
