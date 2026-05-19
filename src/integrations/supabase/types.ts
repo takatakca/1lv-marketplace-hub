@@ -132,6 +132,8 @@ export type Database = {
           shipping_address: Json | null
           shipping_total: number
           status: Database["public"]["Enums"]["order_status"]
+          stripe_charge_id: string | null
+          stripe_payment_intent_id: string | null
           subtotal: number
           tax_total: number
           total: number
@@ -151,6 +153,8 @@ export type Database = {
           shipping_address?: Json | null
           shipping_total?: number
           status?: Database["public"]["Enums"]["order_status"]
+          stripe_charge_id?: string | null
+          stripe_payment_intent_id?: string | null
           subtotal?: number
           tax_total?: number
           total?: number
@@ -170,6 +174,8 @@ export type Database = {
           shipping_address?: Json | null
           shipping_total?: number
           status?: Database["public"]["Enums"]["order_status"]
+          stripe_charge_id?: string | null
+          stripe_payment_intent_id?: string | null
           subtotal?: number
           tax_total?: number
           total?: number
@@ -284,6 +290,27 @@ export type Database = {
         }
         Relationships: []
       }
+      stripe_event_log: {
+        Row: {
+          id: string
+          payload: Json | null
+          processed_at: string
+          type: string
+        }
+        Insert: {
+          id: string
+          payload?: Json | null
+          processed_at?: string
+          type: string
+        }
+        Update: {
+          id?: string
+          payload?: Json | null
+          processed_at?: string
+          type?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -367,6 +394,7 @@ export type Database = {
           address: string | null
           banner_url: string | null
           business_name: string | null
+          charges_enabled: boolean
           city: string | null
           commission_rate: number
           contact_email: string | null
@@ -375,6 +403,7 @@ export type Database = {
           description: string | null
           id: string
           logo_url: string | null
+          payouts_enabled: boolean
           phone: string | null
           postal_code: string | null
           province: string | null
@@ -383,6 +412,10 @@ export type Database = {
           slug: string
           status: Database["public"]["Enums"]["vendor_status"]
           store_name: string
+          stripe_connect_account_id: string | null
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          subscription_plan: string | null
           subscription_status: string
           updated_at: string
           user_id: string
@@ -391,6 +424,7 @@ export type Database = {
           address?: string | null
           banner_url?: string | null
           business_name?: string | null
+          charges_enabled?: boolean
           city?: string | null
           commission_rate?: number
           contact_email?: string | null
@@ -399,6 +433,7 @@ export type Database = {
           description?: string | null
           id?: string
           logo_url?: string | null
+          payouts_enabled?: boolean
           phone?: string | null
           postal_code?: string | null
           province?: string | null
@@ -407,6 +442,10 @@ export type Database = {
           slug: string
           status?: Database["public"]["Enums"]["vendor_status"]
           store_name: string
+          stripe_connect_account_id?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_plan?: string | null
           subscription_status?: string
           updated_at?: string
           user_id: string
@@ -415,6 +454,7 @@ export type Database = {
           address?: string | null
           banner_url?: string | null
           business_name?: string | null
+          charges_enabled?: boolean
           city?: string | null
           commission_rate?: number
           contact_email?: string | null
@@ -423,6 +463,7 @@ export type Database = {
           description?: string | null
           id?: string
           logo_url?: string | null
+          payouts_enabled?: boolean
           phone?: string | null
           postal_code?: string | null
           province?: string | null
@@ -431,6 +472,10 @@ export type Database = {
           slug?: string
           status?: Database["public"]["Enums"]["vendor_status"]
           store_name?: string
+          stripe_connect_account_id?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_plan?: string | null
           subscription_status?: string
           updated_at?: string
           user_id?: string
@@ -465,7 +510,13 @@ export type Database = {
         | "delivered"
         | "cancelled"
         | "refunded"
-      payment_status: "unpaid" | "paid" | "refunded" | "failed"
+      payment_status:
+        | "unpaid"
+        | "paid"
+        | "refunded"
+        | "failed"
+        | "processing"
+        | "partially_refunded"
       product_status:
         | "draft"
         | "pending_review"
@@ -623,7 +674,14 @@ export const Constants = {
         "cancelled",
         "refunded",
       ],
-      payment_status: ["unpaid", "paid", "refunded", "failed"],
+      payment_status: [
+        "unpaid",
+        "paid",
+        "refunded",
+        "failed",
+        "processing",
+        "partially_refunded",
+      ],
       product_status: [
         "draft",
         "pending_review",
