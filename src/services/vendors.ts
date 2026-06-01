@@ -20,6 +20,13 @@ export type VendorRecord = {
   banner_url: string | null;
   status: string;
   subscription_status: string;
+  subscription_plan: string | null;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  stripe_connect_account_id: string | null;
+  payouts_enabled: boolean;
+  charges_enabled: boolean;
+  commission_rate: number;
   created_at: string;
   updated_at: string;
 };
