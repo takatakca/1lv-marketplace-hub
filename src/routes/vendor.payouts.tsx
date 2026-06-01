@@ -80,7 +80,7 @@ function Page() {
       </div>
 
       <div className="mt-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
-        Commission rate: <span className="font-semibold text-navy">{vendor ? `${Math.round((vendor as VendorRecord & { commission_rate?: number }).commission_rate ? Number((vendor as VendorRecord & { commission_rate?: number }).commission_rate) * 100 : 10)}%` : "10%"}</span> of GMV ({formatCAD(s.gmv)} lifetime).
+        Commission rate: <span className="font-semibold text-navy">{vendor ? `${Math.round(Number(vendor.commission_rate) * 100)}%` : "10%"}</span> of GMV ({formatCAD(s.gmv)} lifetime).
       </div>
     </div>
   );
