@@ -37,8 +37,8 @@ function Page() {
         products: { total: 24, draft: 3, pending: 2, active: 18, rejected: 1, archived: 0 } } as VendorStats
     : stats!;
 
-  const top = (useDemo || !prods || prods.length === 0
-    ? demoProducts.slice(0, 6).map((p) => ({ title: p.title, sold: p.sold, revenue: formatCAD(p.price * 12) }))
+  const top: Array<{ title: string; sold: string; revenue: string }> = (useDemo || !prods || prods.length === 0
+    ? demoProducts.slice(0, 6).map((p) => ({ title: p.title, sold: String(p.sold), revenue: formatCAD(p.price * 12) }))
     : prods.slice(0, 6).map((p) => ({ title: p.title, sold: "—", revenue: formatCAD(Number(p.price)) })));
 
   return (
