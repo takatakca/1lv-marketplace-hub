@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
-import { getMyVendor } from "@/services/vendors";
+import { getMyVendor, type VendorRecord } from "@/services/vendors";
 import { createProduct } from "@/services/products";
 import { isDemoMode } from "@/lib/demo-mode";
 import { DemoBanner, PreviewModeNotice } from "@/components/DemoBanner";
@@ -11,7 +11,7 @@ function Page() {
   const nav = useNavigate();
   const { user } = useAuth();
   const demo = isDemoMode(user);
-  const [vendorId, setVendorId] = useState<string | null>(null);
+  const [vendor, setVendor] = useState<VendorRecord | null>(null);
   const [saving, setSaving] = useState(false);
   const [f, setF] = useState({
     title: "",
