@@ -76,21 +76,6 @@ function Page() {
         supplier_url: f.supplier_url || null,
         status,
       });
-        title: f.title,
-        description: f.description,
-        short_description: f.short_description,
-        category_slug: f.category_slug,
-        price: f.price,
-        compare_at_price: f.compare_at_price || null,
-        cost: f.cost || null,
-        sku: f.sku || null,
-        inventory_quantity: f.inventory_quantity,
-        track_inventory: f.track_inventory,
-        supplier_source: f.supplier_source || null,
-        supplier_product_id: f.supplier_product_id || null,
-        supplier_url: f.supplier_url || null,
-        status,
-      });
       toast.success(status === "draft" ? "Draft saved" : "Submitted for review");
       nav({ to: "/vendor/products" });
     } catch (err) {
