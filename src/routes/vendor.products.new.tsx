@@ -31,7 +31,7 @@ function Page() {
 
   useEffect(() => {
     if (!user) return;
-    getMyVendor(user.id).then((v) => setVendorId(v?.id ?? null)).catch(() => {});
+    getMyVendor(user.id).then((v) => setVendor(v)).catch(() => {});
   }, [user]);
 
   const upd = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -40,20 +40,42 @@ function Page() {
     setF({ ...f, [k]: v });
   };
 
+  const subActive = vendor?.subscription_status === "active" || vendor?.subscription_status === "trialing";
+  const canPublish = vendor?.status === "active" && subActive;
+
   const submit = async (status: "draft" | "pending_review") => {
     if (demo) {
       toast.success(`Draft saved (demo)`);
       nav({ to: "/vendor/products" });
       return;
     }
-    if (!vendorId) {
+    if (!vendor) {
       toast.error("Complete vendor onboarding first.");
       nav({ to: "/vendor/onboarding" });
       return;
     }
+    if (status === "pending_review" && !canPublish) {
+      toast.error("Vendor must be approved and have an active subscription to submit for review. Draft saved instead.");
+      status = "draft";
+    }
     setSaving(true);
     try {
-      await createProduct(vendorId, {
+      await createProduct(vendor.id, {
+        title: f.title,
+        description: f.description,
+        short_description: f.short_description,
+        category_slug: f.category_slug,
+        price: f.price,
+        compare_at_price: f.compare_at_price || null,
+        cost: f.cost || null,
+        sku: f.sku || null,
+        inventory_quantity: f.inventory_quantity,
+        track_inventory: f.track_inventory,
+        supplier_source: f.supplier_source || null,
+        supplier_product_id: f.supplier_product_id || null,
+        supplier_url: f.supplier_url || null,
+        status,
+      });
         title: f.title,
         description: f.description,
         short_description: f.short_description,
