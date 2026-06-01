@@ -92,6 +92,11 @@ function Page() {
         <h1 className="text-2xl font-bold text-navy md:text-3xl">New product</h1>
       </div>
       {demo && <PreviewModeNotice />}
+      {!demo && vendor && !canPublish && (
+        <div className="mb-4 rounded-md border border-deal/40 bg-deal/5 p-3 text-xs text-deal-foreground">
+          Submit-for-review is locked until your vendor account is approved and subscription is active. You can still save drafts.
+        </div>
+      )}
       <form onSubmit={(e) => { e.preventDefault(); submit("draft"); }} className="space-y-5 rounded-xl border border-border bg-card p-6">
         <Field label="Title"><input value={f.title} onChange={upd("title")} required className={inputCls} /></Field>
         <Field label="Short description"><input value={f.short_description} onChange={upd("short_description")} className={inputCls} /></Field>
