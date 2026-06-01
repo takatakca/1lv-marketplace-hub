@@ -1,43 +1,83 @@
 import { createFileRoute } from "@tanstack/react-router";
-
-function PageHead() {
-  return (
-    <div className="mb-6">
-      <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-electric/30 bg-electric/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-electric">Demo data</div>
-      <h1 className="text-2xl font-bold text-navy md:text-3xl">Analytics</h1>
-      <p className="mt-1 text-sm text-muted-foreground">Performance trends for your store</p>
-    </div>
-  );
-}
-
+import { useEffect, useState } from "react";
 import { StatCard } from "@/components/StatCard";
 import { DataTable } from "@/components/DataTable";
-import { TrendingUp, ShoppingBag, DollarSign } from "lucide-react";
-import { products, formatCAD } from "@/lib/data";
-const top = products.slice(0, 6).map((p) => ({ title: p.title, sold: p.sold, revenue: formatCAD(p.price * 12) }));
-const byDay = Array.from({ length: 7 }).map((_, i) => ({ day: ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][i], orders: 4 + i * 2, revenue: formatCAD(220 + i * 95) }));
+import { TrendingUp, ShoppingBag, DollarSign, Wallet } from "lucide-react";
+import { products as demoProducts, formatCAD } from "@/lib/data";
+import { useAuth } from "@/hooks/use-auth";
+import { isDemoMode } from "@/lib/demo-mode";
+import { getMyVendor } from "@/services/vendors";
+import { getVendorStats, type VendorStats } from "@/services/vendor-stats";
+import { listVendorProducts, type ProductRecord } from "@/services/products";
+import { DemoBanner, PreviewModeNotice } from "@/components/DemoBanner";
+
 function Page() {
+  const { user } = useAuth();
+  const demo = isDemoMode(user);
+  const [stats, setStats] = useState<VendorStats | null>(null);
+  const [prods, setProds] = useState<ProductRecord[] | null>(null);
+  const [loading, setLoading] = useState(!demo);
+
+  useEffect(() => {
+    if (demo) return;
+    (async () => {
+      try {
+        const v = await getMyVendor(user!.id);
+        if (!v) return;
+        const [s, p] = await Promise.all([getVendorStats(v.id), listVendorProducts(v.id)]);
+        setStats(s); setProds(p);
+      } finally { setLoading(false); }
+    })();
+  }, [demo, user]);
+
+  const useDemo = demo || !stats || (stats && stats.orders.total === 0);
+  const s = useDemo
+    ? { gmv: 12480, commission: 1248, payoutAvailable: 845.2, payoutPending: 312.4, payoutLifetime: 18420,
+        orders: { total: 132, pending: 7, accepted: 4, processing: 9, shipped: 21, delivered: 86, cancelled: 5 },
+        products: { total: 24, draft: 3, pending: 2, active: 18, rejected: 1, archived: 0 } } as VendorStats
+    : stats!;
+
+  const top: Array<{ title: string; sold: string; revenue: string }> = (useDemo || !prods || prods.length === 0
+    ? demoProducts.slice(0, 6).map((p) => ({ title: p.title, sold: String(p.sold), revenue: formatCAD(p.price * 12) }))
+    : prods.slice(0, 6).map((p) => ({ title: p.title, sold: "—", revenue: formatCAD(Number(p.price)) })));
+
   return (
     <div>
-      <PageHead />
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Conversion rate" value="2.6%" icon={TrendingUp} accent="success" />
-        <StatCard label="Avg order value" value={formatCAD(64.20)} icon={DollarSign} />
-        <StatCard label="Orders (30d)" value={132} icon={ShoppingBag} accent="deal" />
+      <div className="mb-6">
+        {useDemo ? <DemoBanner label={demo ? "Preview mode" : "No data yet"} /> : null}
+        <h1 className="text-2xl font-bold text-navy md:text-3xl">Analytics</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Performance trends for your store</p>
       </div>
+      {demo && <PreviewModeNotice />}
+      {loading && <div className="text-sm text-muted-foreground">Loading…</div>}
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="GMV" value={formatCAD(s.gmv)} icon={DollarSign} accent="success" />
+        <StatCard label="Commission paid" value={formatCAD(s.commission)} icon={TrendingUp} accent="deal" />
+        <StatCard label="Net payout estimate" value={formatCAD(s.payoutAvailable + s.payoutPending)} icon={Wallet} />
+        <StatCard label="Orders" value={s.orders.total} icon={ShoppingBag} />
+      </div>
+
+      <div className="mt-8 rounded-xl border border-border bg-card p-6">
+        <h3 className="text-sm font-semibold text-navy">Orders by status</h3>
+        <div className="mt-4 grid grid-cols-3 gap-3 text-sm sm:grid-cols-6">
+          {(["pending","accepted","processing","shipped","delivered","cancelled"] as const).map((k) => (
+            <div key={k} className="rounded-md border border-border p-3 text-center">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">{k}</div>
+              <div className="mt-1 text-lg font-bold text-navy">{s.orders[k]}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="mt-8 rounded-xl border border-border bg-card p-6">
         <h3 className="text-sm font-semibold text-navy">Sales (last 30 days)</h3>
-        <div className="mt-4 grid h-44 place-items-center rounded-md bg-muted/40 text-sm text-muted-foreground">Chart placeholder</div>
+        <div className="mt-4 grid h-44 place-items-center rounded-md bg-muted/40 text-sm text-muted-foreground">Chart coming soon</div>
       </div>
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <div>
-          <h3 className="mb-3 text-lg font-bold text-navy">Top products</h3>
-          <DataTable columns={[{key:"title",label:"Product"},{key:"sold",label:"Sold"},{key:"revenue",label:"Revenue"}]} rows={top} />
-        </div>
-        <div>
-          <h3 className="mb-3 text-lg font-bold text-navy">Revenue by day</h3>
-          <DataTable columns={[{key:"day",label:"Day"},{key:"orders",label:"Orders"},{key:"revenue",label:"Revenue"}]} rows={byDay} />
-        </div>
+
+      <div className="mt-8">
+        <h3 className="mb-3 text-lg font-bold text-navy">Top products</h3>
+        <DataTable columns={[{key:"title",label:"Product"},{key:"sold",label:"Sold"},{key:"revenue",label:"Revenue"}]} rows={top} />
       </div>
     </div>
   );

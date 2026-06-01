@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
-import { getMyVendor } from "@/services/vendors";
+import { getMyVendor, type VendorRecord } from "@/services/vendors";
 import { createProduct } from "@/services/products";
 import { isDemoMode } from "@/lib/demo-mode";
 import { DemoBanner, PreviewModeNotice } from "@/components/DemoBanner";
@@ -11,7 +11,7 @@ function Page() {
   const nav = useNavigate();
   const { user } = useAuth();
   const demo = isDemoMode(user);
-  const [vendorId, setVendorId] = useState<string | null>(null);
+  const [vendor, setVendor] = useState<VendorRecord | null>(null);
   const [saving, setSaving] = useState(false);
   const [f, setF] = useState({
     title: "",
@@ -31,7 +31,7 @@ function Page() {
 
   useEffect(() => {
     if (!user) return;
-    getMyVendor(user.id).then((v) => setVendorId(v?.id ?? null)).catch(() => {});
+    getMyVendor(user.id).then((v) => setVendor(v)).catch(() => {});
   }, [user]);
 
   const upd = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -40,20 +40,27 @@ function Page() {
     setF({ ...f, [k]: v });
   };
 
+  const subActive = vendor?.subscription_status === "active" || vendor?.subscription_status === "trialing";
+  const canPublish = vendor?.status === "active" && subActive;
+
   const submit = async (status: "draft" | "pending_review") => {
     if (demo) {
       toast.success(`Draft saved (demo)`);
       nav({ to: "/vendor/products" });
       return;
     }
-    if (!vendorId) {
+    if (!vendor) {
       toast.error("Complete vendor onboarding first.");
       nav({ to: "/vendor/onboarding" });
       return;
     }
+    if (status === "pending_review" && !canPublish) {
+      toast.error("Vendor must be approved and have an active subscription to submit for review. Draft saved instead.");
+      status = "draft";
+    }
     setSaving(true);
     try {
-      await createProduct(vendorId, {
+      await createProduct(vendor.id, {
         title: f.title,
         description: f.description,
         short_description: f.short_description,
@@ -85,6 +92,11 @@ function Page() {
         <h1 className="text-2xl font-bold text-navy md:text-3xl">New product</h1>
       </div>
       {demo && <PreviewModeNotice />}
+      {!demo && vendor && !canPublish && (
+        <div className="mb-4 rounded-md border border-deal/40 bg-deal/5 p-3 text-xs text-deal-foreground">
+          Submit-for-review is locked until your vendor account is approved and subscription is active. You can still save drafts.
+        </div>
+      )}
       <form onSubmit={(e) => { e.preventDefault(); submit("draft"); }} className="space-y-5 rounded-xl border border-border bg-card p-6">
         <Field label="Title"><input value={f.title} onChange={upd("title")} required className={inputCls} /></Field>
         <Field label="Short description"><input value={f.short_description} onChange={upd("short_description")} className={inputCls} /></Field>
