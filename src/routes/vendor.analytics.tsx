@@ -16,6 +16,7 @@ function Page() {
   const demo = isDemoMode(user);
   const [stats, setStats] = useState<VendorStats | null>(null);
   const [prods, setProds] = useState<ProductRecord[] | null>(null);
+  const [days, setDays] = useState<DayBucket[] | null>(null);
   const [loading, setLoading] = useState(!demo);
 
   useEffect(() => {
@@ -24,8 +25,8 @@ function Page() {
       try {
         const v = await getMyVendor(user!.id);
         if (!v) return;
-        const [s, p] = await Promise.all([getVendorStats(v.id), listVendorProducts(v.id)]);
-        setStats(s); setProds(p);
+        const [s, p, d] = await Promise.all([getVendorStats(v.id), listVendorProducts(v.id), getVendorSalesByDay(v.id, 7)]);
+        setStats(s); setProds(p); setDays(d);
       } finally { setLoading(false); }
     })();
   }, [demo, user]);
