@@ -3,8 +3,10 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { getMyVendor, upsertMyVendor } from "@/services/vendors";
+import { supabase } from "@/integrations/supabase/client";
 import { isDemoMode } from "@/lib/demo-mode";
 import { DemoBanner, PreviewModeNotice } from "@/components/DemoBanner";
+import { ImageUploader } from "@/components/ImageUploader";
 
 type FormState = {
   store_name: string; business_name: string; contact_email: string; phone: string;
