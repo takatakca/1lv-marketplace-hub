@@ -128,5 +128,4 @@ export const Route = createFileRoute("/store/$slug")({
   }),
 });
 
-// silence unused import in some toolchains
-void notFound;
+
