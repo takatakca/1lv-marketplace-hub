@@ -65,11 +65,35 @@ function Page() {
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <div className="rounded-xl border border-border bg-card p-5">
           <h2 className="mb-3 text-lg font-bold text-navy">Payout history</h2>
-          {loading ? <div className="text-sm text-muted-foreground">Loading…</div> : (
-            <div className="rounded-md border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
-              Payout history appears once Stripe Connect is connected.
-            </div>
-          )}
+          <p className="mb-3 text-[11px] text-muted-foreground">Weekly buckets from delivered vendor orders. Stripe transfers not connected yet — these are estimated payouts.</p>
+          {loading ? <div className="text-sm text-muted-foreground">Loading…</div> : (() => {
+            const rows: PayoutPeriod[] = (useDemo || history.length === 0)
+              ? [
+                  { period: "2026-05-25 → 2026-05-31", start: "2026-05-25", end: "2026-05-31", orders: 12, gross: 980, commission: 98, net: 882, status: "pending" },
+                  { period: "2026-05-18 → 2026-05-24", start: "2026-05-18", end: "2026-05-24", orders: 9, gross: 720, commission: 72, net: 648, status: "pending" },
+                  { period: "2026-05-11 → 2026-05-17", start: "2026-05-11", end: "2026-05-17", orders: 14, gross: 1140, commission: 114, net: 1026, status: "pending" },
+                ]
+              : history;
+            return (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="text-muted-foreground"><tr className="border-b border-border"><th className="px-2 py-1 text-left">Period</th><th className="px-2 py-1 text-right">Orders</th><th className="px-2 py-1 text-right">Gross</th><th className="px-2 py-1 text-right">Commission</th><th className="px-2 py-1 text-right">Net</th><th className="px-2 py-1 text-right">Status</th></tr></thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr key={r.start} className="border-b border-border/50">
+                        <td className="px-2 py-1.5">{r.period}</td>
+                        <td className="px-2 py-1.5 text-right">{r.orders}</td>
+                        <td className="px-2 py-1.5 text-right">{formatCAD(r.gross)}</td>
+                        <td className="px-2 py-1.5 text-right">{formatCAD(r.commission)}</td>
+                        <td className="px-2 py-1.5 text-right font-semibold text-navy">{formatCAD(r.net)}</td>
+                        <td className="px-2 py-1.5 text-right capitalize"><span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${r.status === "paid" ? "bg-success/15 text-success" : "bg-deal/15 text-deal"}`}>{r.status}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
         </div>
 
         <div className="rounded-xl border border-border bg-card p-5">
