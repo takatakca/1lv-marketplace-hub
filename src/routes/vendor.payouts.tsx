@@ -6,7 +6,7 @@ import { formatCAD } from "@/lib/data";
 import { useAuth } from "@/hooks/use-auth";
 import { isDemoMode } from "@/lib/demo-mode";
 import { getMyVendor, type VendorRecord } from "@/services/vendors";
-import { getVendorStats, type VendorStats } from "@/services/vendor-stats";
+import { getVendorStats, getVendorPayoutHistory, type VendorStats, type PayoutPeriod } from "@/services/vendor-stats";
 import { DemoBanner, PreviewModeNotice } from "@/components/DemoBanner";
 
 function Page() {
