@@ -77,7 +77,11 @@ function Page() {
     setSaving(true);
     try {
       const v = await upsertMyVendor(user!.id, form);
-      setLastSaved(v.updated_at);
+      // persist logo/banner if changed
+      if ((logoUrl ?? null) !== (v.logo_url ?? null) || (bannerUrl ?? null) !== (v.banner_url ?? null)) {
+        await supabase.from("vendors").update({ logo_url: logoUrl, banner_url: bannerUrl }).eq("id", v.id);
+      }
+      setLastSaved(new Date().toISOString());
       toast.success("Settings saved");
     } catch (err) { toast.error((err as Error).message); }
     finally { setSaving(false); }
