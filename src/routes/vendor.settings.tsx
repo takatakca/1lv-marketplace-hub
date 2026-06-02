@@ -26,6 +26,8 @@ function Page() {
   const { user } = useAuth();
   const demo = isDemoMode(user);
   const [form, setForm] = useState<FormState>(empty);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [bannerUrl, setBannerUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(!demo);
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
