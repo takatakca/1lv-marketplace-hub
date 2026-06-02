@@ -1,4 +1,4 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ShieldCheck, Mail, AlertTriangle, Store as StoreIcon } from "lucide-react";
 import { getVendorBySlug, getActiveProductsByVendor } from "@/services/vendor-public";
