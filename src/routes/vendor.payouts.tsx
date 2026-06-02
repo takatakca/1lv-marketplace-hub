@@ -14,6 +14,7 @@ function Page() {
   const demo = isDemoMode(user);
   const [vendor, setVendor] = useState<VendorRecord | null>(null);
   const [stats, setStats] = useState<VendorStats | null>(null);
+  const [history, setHistory] = useState<PayoutPeriod[]>([]);
   const [loading, setLoading] = useState(!demo);
 
   useEffect(() => {
@@ -22,7 +23,10 @@ function Page() {
       try {
         const v = await getMyVendor(user!.id);
         setVendor(v);
-        if (v) setStats(await getVendorStats(v.id));
+        if (v) {
+          const [s, h] = await Promise.all([getVendorStats(v.id), getVendorPayoutHistory(v.id)]);
+          setStats(s); setHistory(h);
+        }
       } finally { setLoading(false); }
     })();
   }, [demo, user]);
