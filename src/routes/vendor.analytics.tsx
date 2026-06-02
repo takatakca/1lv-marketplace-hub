@@ -72,8 +72,39 @@ function Page() {
       </div>
 
       <div className="mt-8 rounded-xl border border-border bg-card p-6">
-        <h3 className="text-sm font-semibold text-navy">Sales (last 30 days)</h3>
-        <div className="mt-4 grid h-44 place-items-center rounded-md bg-muted/40 text-sm text-muted-foreground">Chart coming soon</div>
+        <h3 className="text-sm font-semibold text-navy">Sales — last 7 days</h3>
+        {(() => {
+          const rows: DayBucket[] = (useDemo || !days || days.every((d) => d.orders === 0))
+            ? Array.from({ length: 7 }).map((_, i) => {
+                const d = new Date(); d.setDate(d.getDate() - (6 - i));
+                const orders = [2,1,4,3,5,2,6][i]; const gmv = orders * 79.9;
+                return { date: d.toISOString().slice(0,10), orders, gmv, commission: gmv * 0.1, payout: gmv * 0.9 };
+              })
+            : days!;
+          const max = Math.max(1, ...rows.map((r) => r.gmv));
+          return (
+            <>
+              <div className="mt-4 flex items-end gap-2 h-32">
+                {rows.map((r) => (
+                  <div key={r.date} className="flex-1 flex flex-col items-center gap-1">
+                    <div className="w-full rounded-t bg-electric/70" style={{ height: `${(r.gmv / max) * 100}%`, minHeight: r.gmv > 0 ? 4 : 0 }} title={`${formatCAD(r.gmv)} — ${r.orders} orders`} />
+                    <span className="text-[10px] text-muted-foreground">{r.date.slice(5)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="text-muted-foreground"><tr className="border-b border-border"><th className="px-2 py-1 text-left">Date</th><th className="px-2 py-1 text-right">Orders</th><th className="px-2 py-1 text-right">GMV</th><th className="px-2 py-1 text-right">Commission</th><th className="px-2 py-1 text-right">Est. payout</th></tr></thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr key={r.date} className="border-b border-border/50"><td className="px-2 py-1.5">{r.date}</td><td className="px-2 py-1.5 text-right">{r.orders}</td><td className="px-2 py-1.5 text-right">{formatCAD(r.gmv)}</td><td className="px-2 py-1.5 text-right">{formatCAD(r.commission)}</td><td className="px-2 py-1.5 text-right font-semibold text-navy">{formatCAD(r.payout)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       <div className="mt-8">
