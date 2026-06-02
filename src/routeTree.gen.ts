@@ -39,6 +39,7 @@ import { Route as VendorOrdersRouteImport } from './routes/vendor.orders'
 import { Route as VendorOnboardingRouteImport } from './routes/vendor.onboarding'
 import { Route as VendorImportsRouteImport } from './routes/vendor.imports'
 import { Route as VendorAnalyticsRouteImport } from './routes/vendor.analytics'
+import { Route as StoreSlugRouteImport } from './routes/store.$slug'
 import { Route as ProductSlugRouteImport } from './routes/product.$slug'
 import { Route as OrdersIdRouteImport } from './routes/orders.$id'
 import { Route as CategorySlugRouteImport } from './routes/category.$slug'
@@ -209,6 +210,11 @@ const VendorAnalyticsRoute = VendorAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => VendorRoute,
 } as any)
+const StoreSlugRoute = StoreSlugRouteImport.update({
+  id: '/store/$slug',
+  path: '/store/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProductSlugRoute = ProductSlugRouteImport.update({
   id: '/product/$slug',
   path: '/product/$slug',
@@ -340,6 +346,7 @@ export interface FileRoutesByFullPath {
   '/category/$slug': typeof CategorySlugRoute
   '/orders/$id': typeof OrdersIdRoute
   '/product/$slug': typeof ProductSlugRoute
+  '/store/$slug': typeof StoreSlugRoute
   '/vendor/analytics': typeof VendorAnalyticsRoute
   '/vendor/imports': typeof VendorImportsRoute
   '/vendor/onboarding': typeof VendorOnboardingRoute
@@ -389,6 +396,7 @@ export interface FileRoutesByTo {
   '/category/$slug': typeof CategorySlugRoute
   '/orders/$id': typeof OrdersIdRoute
   '/product/$slug': typeof ProductSlugRoute
+  '/store/$slug': typeof StoreSlugRoute
   '/vendor/analytics': typeof VendorAnalyticsRoute
   '/vendor/imports': typeof VendorImportsRoute
   '/vendor/onboarding': typeof VendorOnboardingRoute
@@ -439,6 +447,7 @@ export interface FileRoutesById {
   '/category/$slug': typeof CategorySlugRoute
   '/orders/$id': typeof OrdersIdRoute
   '/product/$slug': typeof ProductSlugRoute
+  '/store/$slug': typeof StoreSlugRoute
   '/vendor/analytics': typeof VendorAnalyticsRoute
   '/vendor/imports': typeof VendorImportsRoute
   '/vendor/onboarding': typeof VendorOnboardingRoute
@@ -492,6 +501,7 @@ export interface FileRouteTypes {
     | '/category/$slug'
     | '/orders/$id'
     | '/product/$slug'
+    | '/store/$slug'
     | '/vendor/analytics'
     | '/vendor/imports'
     | '/vendor/onboarding'
@@ -541,6 +551,7 @@ export interface FileRouteTypes {
     | '/category/$slug'
     | '/orders/$id'
     | '/product/$slug'
+    | '/store/$slug'
     | '/vendor/analytics'
     | '/vendor/imports'
     | '/vendor/onboarding'
@@ -590,6 +601,7 @@ export interface FileRouteTypes {
     | '/category/$slug'
     | '/orders/$id'
     | '/product/$slug'
+    | '/store/$slug'
     | '/vendor/analytics'
     | '/vendor/imports'
     | '/vendor/onboarding'
@@ -630,6 +642,7 @@ export interface RootRouteChildren {
   WishlistRoute: typeof WishlistRoute
   CategorySlugRoute: typeof CategorySlugRoute
   ProductSlugRoute: typeof ProductSlugRoute
+  StoreSlugRoute: typeof StoreSlugRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -843,6 +856,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/vendor/analytics'
       preLoaderRoute: typeof VendorAnalyticsRouteImport
       parentRoute: typeof VendorRoute
+    }
+    '/store/$slug': {
+      id: '/store/$slug'
+      path: '/store/$slug'
+      fullPath: '/store/$slug'
+      preLoaderRoute: typeof StoreSlugRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/product/$slug': {
       id: '/product/$slug'
@@ -1103,6 +1123,7 @@ const rootRouteChildren: RootRouteChildren = {
   WishlistRoute: WishlistRoute,
   CategorySlugRoute: CategorySlugRoute,
   ProductSlugRoute: ProductSlugRoute,
+  StoreSlugRoute: StoreSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

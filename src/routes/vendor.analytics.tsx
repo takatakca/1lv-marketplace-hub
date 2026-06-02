@@ -7,7 +7,7 @@ import { products as demoProducts, formatCAD } from "@/lib/data";
 import { useAuth } from "@/hooks/use-auth";
 import { isDemoMode } from "@/lib/demo-mode";
 import { getMyVendor } from "@/services/vendors";
-import { getVendorStats, type VendorStats } from "@/services/vendor-stats";
+import { getVendorStats, getVendorSalesByDay, type VendorStats, type DayBucket } from "@/services/vendor-stats";
 import { listVendorProducts, type ProductRecord } from "@/services/products";
 import { DemoBanner, PreviewModeNotice } from "@/components/DemoBanner";
 
