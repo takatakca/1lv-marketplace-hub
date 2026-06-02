@@ -54,6 +54,8 @@ function Page() {
             address: v.address ?? "", city: v.city ?? "", province: v.province ?? "", postal_code: v.postal_code ?? "",
             description: v.description ?? "", shipping_policy: v.shipping_policy ?? "", return_policy: v.return_policy ?? "",
           });
+          setLogoUrl(v.logo_url ?? null);
+          setBannerUrl(v.banner_url ?? null);
           setLastSaved(v.updated_at);
         }
       })
