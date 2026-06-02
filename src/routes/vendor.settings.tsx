@@ -173,10 +173,11 @@ function Page() {
 
           <section>
             <h3 className="mb-3 text-sm font-bold text-navy">Branding</h3>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">Logo upload (coming soon)</div>
-              <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">Banner upload (coming soon)</div>
+            <div className="grid gap-6 sm:grid-cols-2">
+              <ImageUploader kind="logo" label="Logo" aspect="square" demo={demo} userId={user?.id ?? null} value={logoUrl} onChange={setLogoUrl} />
+              <ImageUploader kind="banner" label="Banner" aspect="banner" demo={demo} userId={user?.id ?? null} value={bannerUrl} onChange={setBannerUrl} />
             </div>
+            <p className="mt-2 text-[11px] text-muted-foreground">Saved when you click “Save settings”.</p>
           </section>
 
           <div className="flex gap-3 border-t border-border pt-4">
