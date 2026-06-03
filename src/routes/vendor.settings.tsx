@@ -48,6 +48,9 @@ function Page() {
     getMyVendor(user!.id)
       .then((v) => {
         if (v) {
+          setVendor(v);
+          setLogo(v.logo_url);
+          setBanner(v.banner_url);
           setForm({
             store_name: v.store_name ?? "", business_name: v.business_name ?? "",
             contact_email: v.contact_email ?? "", phone: v.phone ?? "",
@@ -59,6 +62,13 @@ function Page() {
       })
       .finally(() => setLoading(false));
   }, [demo, user]);
+
+  const handleAsset = async (field: "logo_url" | "banner_url", path: string | null) => {
+    if (field === "logo_url") setLogo(path); else setBanner(path);
+    if (demo || !vendor) return;
+    try { await setVendorAssetUrl(vendor.id, field, path); }
+    catch (e) { toast.error((e as Error).message); }
+  };
 
   const validate = () => {
     const e: Partial<Record<keyof FormState, string>> = {};
