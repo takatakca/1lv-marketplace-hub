@@ -101,3 +101,15 @@ export async function setVendorStatus(id: string, status: VendorStatus) {
   const { error } = await supabase.from("vendors").update({ status: status as never }).eq("id", id);
   if (error) throw error;
 }
+
+export async function setVendorAssetUrl(vendorId: string, field: "logo_url" | "banner_url", path: string | null) {
+  const patch = (field === "logo_url" ? { logo_url: path } : { banner_url: path }) as never;
+  const { error } = await supabase.from("vendors").update(patch).eq("id", vendorId);
+  if (error) throw error;
+}
+
+export async function getVendorBySlug(slug: string): Promise<VendorRecord | null> {
+  const { data, error } = await supabase.from("vendors").select("*").eq("slug", slug).maybeSingle();
+  if (error) throw error;
+  return data as VendorRecord | null;
+}

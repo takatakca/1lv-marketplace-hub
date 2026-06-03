@@ -2,9 +2,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
-import { getMyVendor, upsertMyVendor } from "@/services/vendors";
+import { getMyVendor, setVendorAssetUrl, upsertMyVendor, type VendorRecord } from "@/services/vendors";
 import { isDemoMode } from "@/lib/demo-mode";
 import { DemoBanner, PreviewModeNotice } from "@/components/DemoBanner";
+import { VendorAssetUpload } from "@/components/VendorAssetUpload";
 
 type FormState = {
   store_name: string; business_name: string; contact_email: string; phone: string;
@@ -28,6 +29,9 @@ function Page() {
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
+  const [vendor, setVendor] = useState<VendorRecord | null>(null);
+  const [logo, setLogo] = useState<string | null>(null);
+  const [banner, setBanner] = useState<string | null>(null);
 
   useEffect(() => {
     if (demo) {
@@ -44,6 +48,9 @@ function Page() {
     getMyVendor(user!.id)
       .then((v) => {
         if (v) {
+          setVendor(v);
+          setLogo(v.logo_url);
+          setBanner(v.banner_url);
           setForm({
             store_name: v.store_name ?? "", business_name: v.business_name ?? "",
             contact_email: v.contact_email ?? "", phone: v.phone ?? "",
@@ -55,6 +62,13 @@ function Page() {
       })
       .finally(() => setLoading(false));
   }, [demo, user]);
+
+  const handleAsset = async (field: "logo_url" | "banner_url", path: string | null) => {
+    if (field === "logo_url") setLogo(path); else setBanner(path);
+    if (demo || !vendor) return;
+    try { await setVendorAssetUrl(vendor.id, field, path); }
+    catch (e) { toast.error((e as Error).message); }
+  };
 
   const validate = () => {
     const e: Partial<Record<keyof FormState, string>> = {};
@@ -164,9 +178,15 @@ function Page() {
           <section>
             <h3 className="mb-3 text-sm font-bold text-navy">Branding</h3>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">Logo upload (coming soon)</div>
-              <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">Banner upload (coming soon)</div>
+              <VendorAssetUpload kind="logo" label="Logo" userId={demo ? null : user?.id} value={logo} onChange={(p) => handleAsset("logo_url", p)} aspect="square" />
+              <VendorAssetUpload kind="banner" label="Banner" userId={demo ? null : user?.id} value={banner} onChange={(p) => handleAsset("banner_url", p)} aspect="banner" />
             </div>
+            {vendor?.slug && !demo && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                Public store page:{" "}
+                <Link to="/store/$slug" params={{ slug: vendor.slug }} className="font-semibold text-electric hover:underline">/store/{vendor.slug}</Link>
+              </p>
+            )}
           </section>
 
           <div className="flex gap-3 border-t border-border pt-4">
