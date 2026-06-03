@@ -2,9 +2,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
-import { getMyVendor, upsertMyVendor } from "@/services/vendors";
+import { getMyVendor, setVendorAssetUrl, upsertMyVendor, type VendorRecord } from "@/services/vendors";
 import { isDemoMode } from "@/lib/demo-mode";
 import { DemoBanner, PreviewModeNotice } from "@/components/DemoBanner";
+import { VendorAssetUpload } from "@/components/VendorAssetUpload";
 
 type FormState = {
   store_name: string; business_name: string; contact_email: string; phone: string;
