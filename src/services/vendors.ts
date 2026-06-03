@@ -103,7 +103,8 @@ export async function setVendorStatus(id: string, status: VendorStatus) {
 }
 
 export async function setVendorAssetUrl(vendorId: string, field: "logo_url" | "banner_url", path: string | null) {
-  const { error } = await supabase.from("vendors").update({ [field]: path }).eq("id", vendorId);
+  const patch = (field === "logo_url" ? { logo_url: path } : { banner_url: path }) as never;
+  const { error } = await supabase.from("vendors").update(patch).eq("id", vendorId);
   if (error) throw error;
 }
 
