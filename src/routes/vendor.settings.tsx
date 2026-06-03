@@ -178,9 +178,15 @@ function Page() {
           <section>
             <h3 className="mb-3 text-sm font-bold text-navy">Branding</h3>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">Logo upload (coming soon)</div>
-              <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">Banner upload (coming soon)</div>
+              <VendorAssetUpload kind="logo" label="Logo" userId={demo ? null : user?.id} value={logo} onChange={(p) => handleAsset("logo_url", p)} aspect="square" />
+              <VendorAssetUpload kind="banner" label="Banner" userId={demo ? null : user?.id} value={banner} onChange={(p) => handleAsset("banner_url", p)} aspect="banner" />
             </div>
+            {vendor?.slug && !demo && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                Public store page:{" "}
+                <Link to="/store/$slug" params={{ slug: vendor.slug }} className="font-semibold text-electric hover:underline">/store/{vendor.slug}</Link>
+              </p>
+            )}
           </section>
 
           <div className="flex gap-3 border-t border-border pt-4">
