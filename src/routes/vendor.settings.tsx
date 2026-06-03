@@ -29,6 +29,9 @@ function Page() {
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
+  const [vendor, setVendor] = useState<VendorRecord | null>(null);
+  const [logo, setLogo] = useState<string | null>(null);
+  const [banner, setBanner] = useState<string | null>(null);
 
   useEffect(() => {
     if (demo) {
