@@ -3,10 +3,8 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { getMyVendor, upsertMyVendor } from "@/services/vendors";
-import { supabase } from "@/integrations/supabase/client";
 import { isDemoMode } from "@/lib/demo-mode";
 import { DemoBanner, PreviewModeNotice } from "@/components/DemoBanner";
-import { ImageUploader } from "@/components/ImageUploader";
 
 type FormState = {
   store_name: string; business_name: string; contact_email: string; phone: string;
@@ -26,8 +24,6 @@ function Page() {
   const { user } = useAuth();
   const demo = isDemoMode(user);
   const [form, setForm] = useState<FormState>(empty);
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [bannerUrl, setBannerUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(!demo);
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
@@ -54,8 +50,6 @@ function Page() {
             address: v.address ?? "", city: v.city ?? "", province: v.province ?? "", postal_code: v.postal_code ?? "",
             description: v.description ?? "", shipping_policy: v.shipping_policy ?? "", return_policy: v.return_policy ?? "",
           });
-          setLogoUrl(v.logo_url ?? null);
-          setBannerUrl(v.banner_url ?? null);
           setLastSaved(v.updated_at);
         }
       })
@@ -77,11 +71,7 @@ function Page() {
     setSaving(true);
     try {
       const v = await upsertMyVendor(user!.id, form);
-      // persist logo/banner if changed
-      if ((logoUrl ?? null) !== (v.logo_url ?? null) || (bannerUrl ?? null) !== (v.banner_url ?? null)) {
-        await supabase.from("vendors").update({ logo_url: logoUrl, banner_url: bannerUrl }).eq("id", v.id);
-      }
-      setLastSaved(new Date().toISOString());
+      setLastSaved(v.updated_at);
       toast.success("Settings saved");
     } catch (err) { toast.error((err as Error).message); }
     finally { setSaving(false); }
@@ -173,11 +163,10 @@ function Page() {
 
           <section>
             <h3 className="mb-3 text-sm font-bold text-navy">Branding</h3>
-            <div className="grid gap-6 sm:grid-cols-2">
-              <ImageUploader kind="logo" label="Logo" aspect="square" demo={demo} userId={user?.id ?? null} value={logoUrl} onChange={setLogoUrl} />
-              <ImageUploader kind="banner" label="Banner" aspect="banner" demo={demo} userId={user?.id ?? null} value={bannerUrl} onChange={setBannerUrl} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">Logo upload (coming soon)</div>
+              <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">Banner upload (coming soon)</div>
             </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">Saved when you click “Save settings”.</p>
           </section>
 
           <div className="flex gap-3 border-t border-border pt-4">
