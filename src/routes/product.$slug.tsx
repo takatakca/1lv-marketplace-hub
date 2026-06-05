@@ -188,9 +188,12 @@ function ProductPage() {
 
         <section className="mt-16">
           <h2 className="mb-4 font-display text-xl font-extrabold text-navy">More from this category</h2>
-          <ProductGrid products={products.slice(0, 5)} />
+          <ProductGrid products={products.slice(0, 6)} cols={6} />
         </section>
+
+        <RecentlyViewed excludeId={product.id} />
       </div>
+      <StickyBuyBar product={product} />
     </AppLayout>
   );
 }
