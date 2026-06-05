@@ -1,14 +1,24 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Trash2, ShoppingBag } from "lucide-react";
+import { Trash2, ShoppingBag, ShieldCheck, Truck, RefreshCw, Ticket } from "lucide-react";
+import { useState } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { EmptyState } from "@/components/EmptyState";
+import { FreeShippingBar } from "@/components/FreeShippingBar";
 import { useCart } from "@/hooks/use-cart";
 import { formatCAD } from "@/lib/data";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/cart")({
   component: CartPage,
   head: () => ({ meta: [{ title: "Your cart — 1LV.CA" }] }),
 });
+
+const COUPONS: Record<string, { kind: "pct" | "fixed" | "ship"; value: number; label: string }> = {
+  WELCOME10: { kind: "pct", value: 10, label: "10% off" },
+  SAVE20: { kind: "fixed", value: 20, label: "$20 off" },
+  FREESHIP: { kind: "ship", value: 0, label: "Free shipping" },
+  FLASH5: { kind: "pct", value: 5, label: "5% off deals" },
+};
 
 function CartPage() {
   const { items, remove, setQty, subtotal, count } = useCart();
