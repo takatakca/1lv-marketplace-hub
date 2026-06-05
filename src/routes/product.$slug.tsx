@@ -1,13 +1,16 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useState } from "react";
-import { ChevronRight, Heart, MinusCircle, PlusCircle, ShieldCheck, Truck, RefreshCw, Store } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronRight, Heart, MinusCircle, PlusCircle, ShieldCheck, Truck, RefreshCw, Store, Ticket } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
 import { PriceDisplay } from "@/components/PriceDisplay";
 import { RatingStars } from "@/components/RatingStars";
+import { StickyBuyBar } from "@/components/StickyBuyBar";
+import { RecentlyViewed } from "@/components/RecentlyViewed";
 import { getProduct, getVendor, products, productsByCategory, type Product } from "@/lib/data";
 import { useCart } from "@/hooks/use-cart";
 import { useWishlist } from "@/hooks/use-wishlist";
+import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 import { toast } from "sonner";
 
 type LoaderData = { product: Product };
