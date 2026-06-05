@@ -136,7 +136,7 @@ export function Header() {
             >
               <Menu size={16} /> All categories <ChevronDown size={14} />
             </button>
-            {categories.slice(0, 8).map((c) => (
+            {categories.slice(0, 6).map((c) => (
               <Link
                 key={c.slug}
                 to="/category/$slug"
@@ -147,6 +147,10 @@ export function Header() {
                 {c.name}
               </Link>
             ))}
+            <Link to="/deals" onMouseEnter={() => setMegaOpen(false)} className="px-3 py-2.5 text-sm font-semibold text-deal hover:underline">⚡ Deals</Link>
+            <Link to="/trending" onMouseEnter={() => setMegaOpen(false)} className="px-3 py-2.5 text-sm text-navy/80 hover:text-electric">Trending</Link>
+            <Link to="/new-arrivals" onMouseEnter={() => setMegaOpen(false)} className="px-3 py-2.5 text-sm text-navy/80 hover:text-electric">New</Link>
+            <Link to="/coupons" onMouseEnter={() => setMegaOpen(false)} className="px-3 py-2.5 text-sm text-navy/80 hover:text-electric">Coupons</Link>
             <Link to="/become-a-vendor" className="ml-auto px-3 py-2.5 text-sm font-medium text-deal hover:underline">
               Become a vendor →
             </Link>

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WishlistRouteImport } from './routes/wishlist'
 import { Route as VendorPricingRouteImport } from './routes/vendor-pricing'
 import { Route as VendorRouteImport } from './routes/vendor'
+import { Route as TrendingRouteImport } from './routes/trending'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ShippingRouteImport } from './routes/shipping'
@@ -20,8 +21,11 @@ import { Route as ReturnsRouteImport } from './routes/returns'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as OrderConfirmationRouteImport } from './routes/order-confirmation'
+import { Route as NewArrivalsRouteImport } from './routes/new-arrivals'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as HelpRouteImport } from './routes/help'
+import { Route as DealsRouteImport } from './routes/deals'
+import { Route as CouponsRouteImport } from './routes/coupons'
 import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as CategoriesRouteImport } from './routes/categories'
 import { Route as CartRouteImport } from './routes/cart'
@@ -75,6 +79,11 @@ const VendorRoute = VendorRouteImport.update({
   path: '/vendor',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TrendingRoute = TrendingRouteImport.update({
+  id: '/trending',
+  path: '/trending',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
@@ -115,6 +124,11 @@ const OrderConfirmationRoute = OrderConfirmationRouteImport.update({
   path: '/order-confirmation',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NewArrivalsRoute = NewArrivalsRouteImport.update({
+  id: '/new-arrivals',
+  path: '/new-arrivals',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -123,6 +137,16 @@ const LoginRoute = LoginRouteImport.update({
 const HelpRoute = HelpRouteImport.update({
   id: '/help',
   path: '/help',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DealsRoute = DealsRouteImport.update({
+  id: '/deals',
+  path: '/deals',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CouponsRoute = CouponsRouteImport.update({
+  id: '/coupons',
+  path: '/coupons',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CheckoutRoute = CheckoutRouteImport.update({
@@ -319,8 +343,11 @@ export interface FileRoutesByFullPath {
   '/cart': typeof CartRoute
   '/categories': typeof CategoriesRoute
   '/checkout': typeof CheckoutRoute
+  '/coupons': typeof CouponsRoute
+  '/deals': typeof DealsRoute
   '/help': typeof HelpRoute
   '/login': typeof LoginRoute
+  '/new-arrivals': typeof NewArrivalsRoute
   '/order-confirmation': typeof OrderConfirmationRoute
   '/orders': typeof OrdersRouteWithChildren
   '/privacy': typeof PrivacyRoute
@@ -329,6 +356,7 @@ export interface FileRoutesByFullPath {
   '/shipping': typeof ShippingRoute
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
+  '/trending': typeof TrendingRoute
   '/vendor': typeof VendorRouteWithChildren
   '/vendor-pricing': typeof VendorPricingRoute
   '/wishlist': typeof WishlistRoute
@@ -370,8 +398,11 @@ export interface FileRoutesByTo {
   '/cart': typeof CartRoute
   '/categories': typeof CategoriesRoute
   '/checkout': typeof CheckoutRoute
+  '/coupons': typeof CouponsRoute
+  '/deals': typeof DealsRoute
   '/help': typeof HelpRoute
   '/login': typeof LoginRoute
+  '/new-arrivals': typeof NewArrivalsRoute
   '/order-confirmation': typeof OrderConfirmationRoute
   '/orders': typeof OrdersRouteWithChildren
   '/privacy': typeof PrivacyRoute
@@ -380,6 +411,7 @@ export interface FileRoutesByTo {
   '/shipping': typeof ShippingRoute
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
+  '/trending': typeof TrendingRoute
   '/vendor-pricing': typeof VendorPricingRoute
   '/wishlist': typeof WishlistRoute
   '/admin/categories': typeof AdminCategoriesRoute
@@ -420,8 +452,11 @@ export interface FileRoutesById {
   '/cart': typeof CartRoute
   '/categories': typeof CategoriesRoute
   '/checkout': typeof CheckoutRoute
+  '/coupons': typeof CouponsRoute
+  '/deals': typeof DealsRoute
   '/help': typeof HelpRoute
   '/login': typeof LoginRoute
+  '/new-arrivals': typeof NewArrivalsRoute
   '/order-confirmation': typeof OrderConfirmationRoute
   '/orders': typeof OrdersRouteWithChildren
   '/privacy': typeof PrivacyRoute
@@ -430,6 +465,7 @@ export interface FileRoutesById {
   '/shipping': typeof ShippingRoute
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
+  '/trending': typeof TrendingRoute
   '/vendor': typeof VendorRouteWithChildren
   '/vendor-pricing': typeof VendorPricingRoute
   '/wishlist': typeof WishlistRoute
@@ -474,8 +510,11 @@ export interface FileRouteTypes {
     | '/cart'
     | '/categories'
     | '/checkout'
+    | '/coupons'
+    | '/deals'
     | '/help'
     | '/login'
+    | '/new-arrivals'
     | '/order-confirmation'
     | '/orders'
     | '/privacy'
@@ -484,6 +523,7 @@ export interface FileRouteTypes {
     | '/shipping'
     | '/signup'
     | '/terms'
+    | '/trending'
     | '/vendor'
     | '/vendor-pricing'
     | '/wishlist'
@@ -525,8 +565,11 @@ export interface FileRouteTypes {
     | '/cart'
     | '/categories'
     | '/checkout'
+    | '/coupons'
+    | '/deals'
     | '/help'
     | '/login'
+    | '/new-arrivals'
     | '/order-confirmation'
     | '/orders'
     | '/privacy'
@@ -535,6 +578,7 @@ export interface FileRouteTypes {
     | '/shipping'
     | '/signup'
     | '/terms'
+    | '/trending'
     | '/vendor-pricing'
     | '/wishlist'
     | '/admin/categories'
@@ -574,8 +618,11 @@ export interface FileRouteTypes {
     | '/cart'
     | '/categories'
     | '/checkout'
+    | '/coupons'
+    | '/deals'
     | '/help'
     | '/login'
+    | '/new-arrivals'
     | '/order-confirmation'
     | '/orders'
     | '/privacy'
@@ -584,6 +631,7 @@ export interface FileRouteTypes {
     | '/shipping'
     | '/signup'
     | '/terms'
+    | '/trending'
     | '/vendor'
     | '/vendor-pricing'
     | '/wishlist'
@@ -627,8 +675,11 @@ export interface RootRouteChildren {
   CartRoute: typeof CartRoute
   CategoriesRoute: typeof CategoriesRoute
   CheckoutRoute: typeof CheckoutRoute
+  CouponsRoute: typeof CouponsRoute
+  DealsRoute: typeof DealsRoute
   HelpRoute: typeof HelpRoute
   LoginRoute: typeof LoginRoute
+  NewArrivalsRoute: typeof NewArrivalsRoute
   OrderConfirmationRoute: typeof OrderConfirmationRoute
   OrdersRoute: typeof OrdersRouteWithChildren
   PrivacyRoute: typeof PrivacyRoute
@@ -637,6 +688,7 @@ export interface RootRouteChildren {
   ShippingRoute: typeof ShippingRoute
   SignupRoute: typeof SignupRoute
   TermsRoute: typeof TermsRoute
+  TrendingRoute: typeof TrendingRoute
   VendorRoute: typeof VendorRouteWithChildren
   VendorPricingRoute: typeof VendorPricingRoute
   WishlistRoute: typeof WishlistRoute
@@ -666,6 +718,13 @@ declare module '@tanstack/react-router' {
       path: '/vendor'
       fullPath: '/vendor'
       preLoaderRoute: typeof VendorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/trending': {
+      id: '/trending'
+      path: '/trending'
+      fullPath: '/trending'
+      preLoaderRoute: typeof TrendingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/terms': {
@@ -724,6 +783,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrderConfirmationRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/new-arrivals': {
+      id: '/new-arrivals'
+      path: '/new-arrivals'
+      fullPath: '/new-arrivals'
+      preLoaderRoute: typeof NewArrivalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -736,6 +802,20 @@ declare module '@tanstack/react-router' {
       path: '/help'
       fullPath: '/help'
       preLoaderRoute: typeof HelpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/deals': {
+      id: '/deals'
+      path: '/deals'
+      fullPath: '/deals'
+      preLoaderRoute: typeof DealsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/coupons': {
+      id: '/coupons'
+      path: '/coupons'
+      fullPath: '/coupons'
+      preLoaderRoute: typeof CouponsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/checkout': {
@@ -1108,8 +1188,11 @@ const rootRouteChildren: RootRouteChildren = {
   CartRoute: CartRoute,
   CategoriesRoute: CategoriesRoute,
   CheckoutRoute: CheckoutRoute,
+  CouponsRoute: CouponsRoute,
+  DealsRoute: DealsRoute,
   HelpRoute: HelpRoute,
   LoginRoute: LoginRoute,
+  NewArrivalsRoute: NewArrivalsRoute,
   OrderConfirmationRoute: OrderConfirmationRoute,
   OrdersRoute: OrdersRouteWithChildren,
   PrivacyRoute: PrivacyRoute,
@@ -1118,6 +1201,7 @@ const rootRouteChildren: RootRouteChildren = {
   ShippingRoute: ShippingRoute,
   SignupRoute: SignupRoute,
   TermsRoute: TermsRoute,
+  TrendingRoute: TrendingRoute,
   VendorRoute: VendorRouteWithChildren,
   VendorPricingRoute: VendorPricingRoute,
   WishlistRoute: WishlistRoute,
