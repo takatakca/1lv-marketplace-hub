@@ -22,9 +22,34 @@ const COUPONS: Record<string, { kind: "pct" | "fixed" | "ship"; value: number; l
 
 function CartPage() {
   const { items, remove, setQty, subtotal, count } = useCart();
-  const shipping = subtotal === 0 || subtotal >= 49 ? 0 : 7.99;
-  const taxes = subtotal * 0.14975; // example QC GST+QST
-  const total = subtotal + shipping + taxes;
+  const [couponInput, setCouponInput] = useState("");
+  const [coupon, setCoupon] = useState<{ code: string; kind: "pct" | "fixed" | "ship"; value: number; label: string } | null>(null);
+
+  let discount = 0;
+  let freeShip = false;
+  if (coupon) {
+    if (coupon.kind === "pct") discount = subtotal * (coupon.value / 100);
+    else if (coupon.kind === "fixed") discount = Math.min(coupon.value, subtotal);
+    else if (coupon.kind === "ship") freeShip = true;
+  }
+  const shipping = subtotal === 0 || subtotal >= 49 || freeShip ? 0 : 7.99;
+  const taxableBase = Math.max(0, subtotal - discount);
+  const taxes = +(taxableBase * 0.14975).toFixed(2);
+  const total = +(taxableBase + shipping + taxes).toFixed(2);
+
+  // Vendor grouping
+  const byVendor = items.reduce<Record<string, typeof items>>((acc, it) => {
+    (acc[it.vendorSlug] ??= []).push(it);
+    return acc;
+  }, {});
+
+  const applyCoupon = () => {
+    const code = couponInput.trim().toUpperCase();
+    const c = COUPONS[code];
+    if (!c) { toast.error("Invalid coupon code"); return; }
+    setCoupon({ code, ...c });
+    toast.success(`Applied ${c.label}`);
+  };
 
   return (
     <AppLayout>
@@ -44,8 +69,18 @@ function CartPage() {
           </div>
         ) : (
           <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_360px]">
-            <ul className="space-y-3">
-              {items.map((it) => (
+            <div className="space-y-4">
+              <FreeShippingBar subtotal={subtotal} />
+              {Object.entries(byVendor).map(([vendorSlug, group]) => (
+                <div key={vendorSlug} className="rounded-xl border border-border bg-card">
+                  <div className="flex items-center justify-between border-b border-border px-4 py-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Sold by</span>
+                    <Link to="/store/$slug" params={{ slug: vendorSlug }} className="text-sm font-semibold text-electric hover:underline">
+                      {vendorSlug.replace(/-/g, " ")}
+                    </Link>
+                  </div>
+                  <ul className="divide-y divide-border">
+                    {group.map((it) => (
                 <li key={it.productId} className="flex gap-4 rounded-xl border border-border bg-card p-4">
                   <Link to="/product/$slug" params={{ slug: it.slug }}>
                     <img src={it.image} alt={it.title} className="h-24 w-24 rounded-lg object-cover" />
