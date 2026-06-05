@@ -175,7 +175,13 @@ function Home() {
       </Section>
 
       <Section icon={<Trophy size={18} />} title="Best sellers" accent="bg-deal/10 text-deal" more="See top products">
-        <ProductGrid products={best.slice(0, 5)} />
+        <ProductGrid products={best.slice(0, 6)} cols={6} />
+      </Section>
+
+      <RecentlyViewed />
+
+      <Section icon={<Sparkles size={18} />} title="Recommended for you" more="See more">
+        <ProductGrid products={products.slice(0, 12)} cols={6} />
       </Section>
 
       {/* Vendor CTA */}
