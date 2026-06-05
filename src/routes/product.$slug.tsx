@@ -45,10 +45,12 @@ function ProductPage() {
   const [variant, setVariant] = useState<Record<string, string>>(initialVariant);
   const { add } = useCart();
   const { has, toggle } = useWishlist();
+  const { push } = useRecentlyViewed();
+  useEffect(() => { push(product.id); }, [product.id, push]);
 
   return (
     <AppLayout>
-      <div className="mx-auto max-w-7xl px-4 py-6">
+      <div className="mx-auto max-w-7xl px-4 py-6 pb-32 md:pb-6">
         {/* Breadcrumb */}
         <nav className="mb-4 flex items-center gap-1 text-xs text-muted-foreground">
           <Link to="/" className="hover:text-electric">Home</Link>
