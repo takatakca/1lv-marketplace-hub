@@ -1,13 +1,16 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useState } from "react";
-import { ChevronRight, Heart, MinusCircle, PlusCircle, ShieldCheck, Truck, RefreshCw, Store } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronRight, Heart, MinusCircle, PlusCircle, ShieldCheck, Truck, RefreshCw, Store, Ticket } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
 import { PriceDisplay } from "@/components/PriceDisplay";
 import { RatingStars } from "@/components/RatingStars";
+import { StickyBuyBar } from "@/components/StickyBuyBar";
+import { RecentlyViewed } from "@/components/RecentlyViewed";
 import { getProduct, getVendor, products, productsByCategory, type Product } from "@/lib/data";
 import { useCart } from "@/hooks/use-cart";
 import { useWishlist } from "@/hooks/use-wishlist";
+import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 import { toast } from "sonner";
 
 type LoaderData = { product: Product };
@@ -42,10 +45,12 @@ function ProductPage() {
   const [variant, setVariant] = useState<Record<string, string>>(initialVariant);
   const { add } = useCart();
   const { has, toggle } = useWishlist();
+  const { push } = useRecentlyViewed();
+  useEffect(() => { push(product.id); }, [product.id, push]);
 
   return (
     <AppLayout>
-      <div className="mx-auto max-w-7xl px-4 py-6">
+      <div className="mx-auto max-w-7xl px-4 py-6 pb-32 md:pb-6">
         {/* Breadcrumb */}
         <nav className="mb-4 flex items-center gap-1 text-xs text-muted-foreground">
           <Link to="/" className="hover:text-electric">Home</Link>
@@ -121,6 +126,15 @@ function ProductPage() {
           <div className="lg:sticky lg:top-28 lg:self-start">
             <div className="space-y-4 rounded-2xl border border-border bg-card p-5 shadow-card">
               <PriceDisplay price={product.price} compareAt={product.compareAt} size="lg" />
+              {product.compareAt && product.compareAt > product.price && (
+                <div className="rounded-md bg-deal/10 px-3 py-2 text-xs font-semibold text-deal">
+                  🔥 Limited-time price — save {Math.round(((product.compareAt - product.price) / product.compareAt) * 100)}%
+                </div>
+              )}
+              <Link to="/coupons" className="flex items-center gap-2 rounded-md border border-dashed border-deal/40 bg-deal/5 px-3 py-2 text-xs text-navy hover:border-deal">
+                <Ticket size={14} className="text-deal" />
+                Coupons available — use <span className="font-mono font-bold text-deal">WELCOME10</span>
+              </Link>
 
               <div className="flex items-center gap-3">
                 <span className="text-sm font-medium text-navy">Quantity</span>
@@ -174,9 +188,12 @@ function ProductPage() {
 
         <section className="mt-16">
           <h2 className="mb-4 font-display text-xl font-extrabold text-navy">More from this category</h2>
-          <ProductGrid products={products.slice(0, 5)} />
+          <ProductGrid products={products.slice(0, 6)} cols={6} />
         </section>
+
+        <RecentlyViewed excludeId={product.id} />
       </div>
+      <StickyBuyBar product={product} />
     </AppLayout>
   );
 }

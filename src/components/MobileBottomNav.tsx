@@ -1,6 +1,6 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import {
-  Home, LayoutGrid, Heart, ShoppingCart, User,
+  Home, LayoutGrid, Zap, ShoppingCart, User,
   LayoutDashboard, Package, ShoppingBag, Shield,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -13,7 +13,7 @@ type Item = { to: string; icon: LucideIcon; label: string; badgeCart?: boolean }
 const customerItems: Item[] = [
   { to: "/", icon: Home, label: "Home" },
   { to: "/categories", icon: LayoutGrid, label: "Browse" },
-  { to: "/wishlist", icon: Heart, label: "Saved" },
+  { to: "/deals", icon: Zap, label: "Deals" },
   { to: "/cart", icon: ShoppingCart, label: "Cart", badgeCart: true },
   { to: "/account", icon: User, label: "Account" },
 ];

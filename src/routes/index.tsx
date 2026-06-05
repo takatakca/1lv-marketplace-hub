@@ -1,7 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Zap, Sparkles, TrendingUp, Trophy, MapPin, ChevronRight, ShieldCheck, Truck, RefreshCw } from "lucide-react";
+import { Zap, Sparkles, TrendingUp, Trophy, MapPin, ChevronRight, ShieldCheck, Truck, RefreshCw, Tag } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
+import { CountdownTimer } from "@/components/CountdownTimer";
+import { CouponStrip } from "@/components/CouponStrip";
+import { RecentlyViewed } from "@/components/RecentlyViewed";
 import { categories, products, productsByTag, vendors } from "@/lib/data";
 
 export const Route = createFileRoute("/")({
@@ -111,8 +114,23 @@ function Home() {
         </div>
       </section>
 
-      <Section icon={<Zap size={18} />} title="⚡ Flash Deals" accent="bg-deal/10 text-deal" more="Shop all">
-        <ProductGrid products={flash.slice(0, 5)} />
+      <CouponStrip />
+
+      <Section
+        icon={<Zap size={18} />}
+        title="⚡ Flash Deals"
+        accent="bg-deal/10 text-deal"
+        more="Shop all"
+      >
+        <div className="mb-3 flex items-center justify-between rounded-lg bg-deal/5 px-3 py-2">
+          <span className="text-xs font-semibold text-navy">Refreshes daily · limited stock</span>
+          <CountdownTimer />
+        </div>
+        <ProductGrid products={flash.slice(0, 6)} cols={6} />
+      </Section>
+
+      <Section icon={<Tag size={18} />} title="💸 Under $25" accent="bg-deal/10 text-deal" more="All deals">
+        <ProductGrid products={products.filter((p) => p.price < 25).slice(0, 6)} cols={6} />
       </Section>
 
       {/* Promo banner */}
@@ -157,7 +175,13 @@ function Home() {
       </Section>
 
       <Section icon={<Trophy size={18} />} title="Best sellers" accent="bg-deal/10 text-deal" more="See top products">
-        <ProductGrid products={best.slice(0, 5)} />
+        <ProductGrid products={best.slice(0, 6)} cols={6} />
+      </Section>
+
+      <RecentlyViewed />
+
+      <Section icon={<Sparkles size={18} />} title="Recommended for you" more="See more">
+        <ProductGrid products={products.slice(0, 12)} cols={6} />
       </Section>
 
       {/* Vendor CTA */}
