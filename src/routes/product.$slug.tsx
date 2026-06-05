@@ -126,6 +126,15 @@ function ProductPage() {
           <div className="lg:sticky lg:top-28 lg:self-start">
             <div className="space-y-4 rounded-2xl border border-border bg-card p-5 shadow-card">
               <PriceDisplay price={product.price} compareAt={product.compareAt} size="lg" />
+              {product.compareAt && product.compareAt > product.price && (
+                <div className="rounded-md bg-deal/10 px-3 py-2 text-xs font-semibold text-deal">
+                  🔥 Limited-time price — save {Math.round(((product.compareAt - product.price) / product.compareAt) * 100)}%
+                </div>
+              )}
+              <Link to="/coupons" className="flex items-center gap-2 rounded-md border border-dashed border-deal/40 bg-deal/5 px-3 py-2 text-xs text-navy hover:border-deal">
+                <Ticket size={14} className="text-deal" />
+                Coupons available — use <span className="font-mono font-bold text-deal">WELCOME10</span>
+              </Link>
 
               <div className="flex items-center gap-3">
                 <span className="text-sm font-medium text-navy">Quantity</span>
