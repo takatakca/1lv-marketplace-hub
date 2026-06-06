@@ -17,13 +17,16 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ShippingRouteImport } from './routes/shipping'
 import { Route as SearchRouteImport } from './routes/search'
+import { Route as RoleSelectRouteImport } from './routes/role-select'
 import { Route as ReturnsRouteImport } from './routes/returns'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as OrderConfirmationRouteImport } from './routes/order-confirmation'
 import { Route as NewArrivalsRouteImport } from './routes/new-arrivals'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as HelpRouteImport } from './routes/help'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DealsRouteImport } from './routes/deals'
 import { Route as CouponsRouteImport } from './routes/coupons'
 import { Route as CheckoutRouteImport } from './routes/checkout'
@@ -104,9 +107,19 @@ const SearchRoute = SearchRouteImport.update({
   path: '/search',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RoleSelectRoute = RoleSelectRouteImport.update({
+  id: '/role-select',
+  path: '/role-select',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReturnsRoute = ReturnsRouteImport.update({
   id: '/returns',
   path: '/returns',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -137,6 +150,11 @@ const LoginRoute = LoginRouteImport.update({
 const HelpRoute = HelpRouteImport.update({
   id: '/help',
   path: '/help',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DealsRoute = DealsRouteImport.update({
@@ -345,13 +363,16 @@ export interface FileRoutesByFullPath {
   '/checkout': typeof CheckoutRoute
   '/coupons': typeof CouponsRoute
   '/deals': typeof DealsRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/help': typeof HelpRoute
   '/login': typeof LoginRoute
   '/new-arrivals': typeof NewArrivalsRoute
   '/order-confirmation': typeof OrderConfirmationRoute
   '/orders': typeof OrdersRouteWithChildren
   '/privacy': typeof PrivacyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/returns': typeof ReturnsRoute
+  '/role-select': typeof RoleSelectRoute
   '/search': typeof SearchRoute
   '/shipping': typeof ShippingRoute
   '/signup': typeof SignupRoute
@@ -400,13 +421,16 @@ export interface FileRoutesByTo {
   '/checkout': typeof CheckoutRoute
   '/coupons': typeof CouponsRoute
   '/deals': typeof DealsRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/help': typeof HelpRoute
   '/login': typeof LoginRoute
   '/new-arrivals': typeof NewArrivalsRoute
   '/order-confirmation': typeof OrderConfirmationRoute
   '/orders': typeof OrdersRouteWithChildren
   '/privacy': typeof PrivacyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/returns': typeof ReturnsRoute
+  '/role-select': typeof RoleSelectRoute
   '/search': typeof SearchRoute
   '/shipping': typeof ShippingRoute
   '/signup': typeof SignupRoute
@@ -454,13 +478,16 @@ export interface FileRoutesById {
   '/checkout': typeof CheckoutRoute
   '/coupons': typeof CouponsRoute
   '/deals': typeof DealsRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/help': typeof HelpRoute
   '/login': typeof LoginRoute
   '/new-arrivals': typeof NewArrivalsRoute
   '/order-confirmation': typeof OrderConfirmationRoute
   '/orders': typeof OrdersRouteWithChildren
   '/privacy': typeof PrivacyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/returns': typeof ReturnsRoute
+  '/role-select': typeof RoleSelectRoute
   '/search': typeof SearchRoute
   '/shipping': typeof ShippingRoute
   '/signup': typeof SignupRoute
@@ -512,13 +539,16 @@ export interface FileRouteTypes {
     | '/checkout'
     | '/coupons'
     | '/deals'
+    | '/forgot-password'
     | '/help'
     | '/login'
     | '/new-arrivals'
     | '/order-confirmation'
     | '/orders'
     | '/privacy'
+    | '/reset-password'
     | '/returns'
+    | '/role-select'
     | '/search'
     | '/shipping'
     | '/signup'
@@ -567,13 +597,16 @@ export interface FileRouteTypes {
     | '/checkout'
     | '/coupons'
     | '/deals'
+    | '/forgot-password'
     | '/help'
     | '/login'
     | '/new-arrivals'
     | '/order-confirmation'
     | '/orders'
     | '/privacy'
+    | '/reset-password'
     | '/returns'
+    | '/role-select'
     | '/search'
     | '/shipping'
     | '/signup'
@@ -620,13 +653,16 @@ export interface FileRouteTypes {
     | '/checkout'
     | '/coupons'
     | '/deals'
+    | '/forgot-password'
     | '/help'
     | '/login'
     | '/new-arrivals'
     | '/order-confirmation'
     | '/orders'
     | '/privacy'
+    | '/reset-password'
     | '/returns'
+    | '/role-select'
     | '/search'
     | '/shipping'
     | '/signup'
@@ -677,13 +713,16 @@ export interface RootRouteChildren {
   CheckoutRoute: typeof CheckoutRoute
   CouponsRoute: typeof CouponsRoute
   DealsRoute: typeof DealsRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   HelpRoute: typeof HelpRoute
   LoginRoute: typeof LoginRoute
   NewArrivalsRoute: typeof NewArrivalsRoute
   OrderConfirmationRoute: typeof OrderConfirmationRoute
   OrdersRoute: typeof OrdersRouteWithChildren
   PrivacyRoute: typeof PrivacyRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   ReturnsRoute: typeof ReturnsRoute
+  RoleSelectRoute: typeof RoleSelectRoute
   SearchRoute: typeof SearchRoute
   ShippingRoute: typeof ShippingRoute
   SignupRoute: typeof SignupRoute
@@ -755,11 +794,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SearchRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/role-select': {
+      id: '/role-select'
+      path: '/role-select'
+      fullPath: '/role-select'
+      preLoaderRoute: typeof RoleSelectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/returns': {
       id: '/returns'
       path: '/returns'
       fullPath: '/returns'
       preLoaderRoute: typeof ReturnsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -802,6 +855,13 @@ declare module '@tanstack/react-router' {
       path: '/help'
       fullPath: '/help'
       preLoaderRoute: typeof HelpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/deals': {
@@ -1190,13 +1250,16 @@ const rootRouteChildren: RootRouteChildren = {
   CheckoutRoute: CheckoutRoute,
   CouponsRoute: CouponsRoute,
   DealsRoute: DealsRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   HelpRoute: HelpRoute,
   LoginRoute: LoginRoute,
   NewArrivalsRoute: NewArrivalsRoute,
   OrderConfirmationRoute: OrderConfirmationRoute,
   OrdersRoute: OrdersRouteWithChildren,
   PrivacyRoute: PrivacyRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   ReturnsRoute: ReturnsRoute,
+  RoleSelectRoute: RoleSelectRoute,
   SearchRoute: SearchRoute,
   ShippingRoute: ShippingRoute,
   SignupRoute: SignupRoute,
