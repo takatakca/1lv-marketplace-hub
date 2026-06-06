@@ -120,7 +120,7 @@ function Row({ label, value, capitalize }: { label: string; value: React.ReactNo
 
 function Shortcut({ to, icon, title, desc }: { to: string; icon: React.ReactNode; title: string; desc: string }) {
   return (
-    <Link to={to} className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:border-electric">
+    <Link to={to as never} className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:border-electric">
       <span className="grid h-9 w-9 place-items-center rounded-lg bg-muted text-navy">{icon}</span>
       <div className="flex-1">
         <p className="text-sm font-bold text-navy">{title}</p>
