@@ -46,7 +46,7 @@ export const Route = createFileRoute("/store/$slug")({
 });
 
 function StorePage() {
-  const { vendor, products } = Route.useLoaderData() as { vendor: VendorRecord; products: ProductRecord[] };
+  const { vendor, products } = Route.useLoaderData() as { vendor: PublicVendorRecord; products: ProductRecord[] };
   const [logo, setLogo] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
 
