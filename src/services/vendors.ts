@@ -113,3 +113,35 @@ export async function getVendorBySlug(slug: string): Promise<VendorRecord | null
   if (error) throw error;
   return data as VendorRecord | null;
 }
+
+/**
+ * Public storefront vendor lookup — only returns safe, customer-facing fields.
+ * Contact email, phone, address, Stripe IDs, and commission rate are intentionally
+ * excluded; those live on the base `vendors` table and are only readable by
+ * the vendor themselves or an admin.
+ */
+export type PublicVendorRecord = {
+  id: string;
+  user_id: string;
+  slug: string;
+  store_name: string;
+  description: string | null;
+  logo_url: string | null;
+  banner_url: string | null;
+  return_policy: string | null;
+  shipping_policy: string | null;
+  country: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function getPublicVendorBySlug(slug: string): Promise<PublicVendorRecord | null> {
+  const { data, error } = await supabase
+    .from("public_vendors" as never)
+    .select("*")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as unknown as PublicVendorRecord) ?? null;
+}
