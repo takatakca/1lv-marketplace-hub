@@ -1,15 +1,15 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ShieldCheck, MapPin, Mail, Phone, Package } from "lucide-react";
+import { ShieldCheck, MapPin, Package } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
-import { getVendorBySlug, type VendorRecord } from "@/services/vendors";
+import { getPublicVendorBySlug, type PublicVendorRecord } from "@/services/vendors";
 import { listVendorProducts, type ProductRecord } from "@/services/products";
 import { resolveAssetUrl } from "@/services/vendor-assets";
 import { formatCAD } from "@/lib/data";
 
 export const Route = createFileRoute("/store/$slug")({
   loader: async ({ params }) => {
-    const vendor = await getVendorBySlug(params.slug);
+    const vendor = await getPublicVendorBySlug(params.slug);
     if (!vendor) throw notFound();
     const products = await listVendorProducts(vendor.id);
     return { vendor, products: products.filter((p) => p.status === "active") };
