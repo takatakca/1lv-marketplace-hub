@@ -1,15 +1,15 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ShieldCheck, MapPin, Mail, Phone, Package } from "lucide-react";
+import { ShieldCheck, MapPin, Package } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
-import { getVendorBySlug, type VendorRecord } from "@/services/vendors";
+import { getPublicVendorBySlug, type PublicVendorRecord } from "@/services/vendors";
 import { listVendorProducts, type ProductRecord } from "@/services/products";
 import { resolveAssetUrl } from "@/services/vendor-assets";
 import { formatCAD } from "@/lib/data";
 
 export const Route = createFileRoute("/store/$slug")({
   loader: async ({ params }) => {
-    const vendor = await getVendorBySlug(params.slug);
+    const vendor = await getPublicVendorBySlug(params.slug);
     if (!vendor) throw notFound();
     const products = await listVendorProducts(vendor.id);
     return { vendor, products: products.filter((p) => p.status === "active") };
@@ -46,7 +46,7 @@ export const Route = createFileRoute("/store/$slug")({
 });
 
 function StorePage() {
-  const { vendor, products } = Route.useLoaderData() as { vendor: VendorRecord; products: ProductRecord[] };
+  const { vendor, products } = Route.useLoaderData() as { vendor: PublicVendorRecord; products: ProductRecord[] };
   const [logo, setLogo] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
 
@@ -84,24 +84,12 @@ function StorePage() {
               )}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-              {(vendor.city || vendor.country) && (
-                <span className="inline-flex items-center gap-1"><MapPin size={11} /> {[vendor.city, vendor.province, vendor.country].filter(Boolean).join(", ")}</span>
+              {vendor.country && (
+                <span className="inline-flex items-center gap-1"><MapPin size={11} /> {vendor.country}</span>
               )}
               <span className="inline-flex items-center gap-1"><Package size={11} /> {products.length} product{products.length === 1 ? "" : "s"}</span>
             </div>
             {vendor.description && <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{vendor.description}</p>}
-          </div>
-          <div className="flex flex-col gap-2 sm:items-end">
-            {vendor.contact_email && (
-              <a href={`mailto:${vendor.contact_email}`} className="inline-flex items-center gap-1.5 rounded-md bg-electric px-3 py-2 text-xs font-semibold text-white hover:opacity-90">
-                <Mail size={12} /> Contact store
-              </a>
-            )}
-            {vendor.phone && (
-              <a href={`tel:${vendor.phone}`} className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs font-semibold text-navy hover:border-electric">
-                <Phone size={12} /> {vendor.phone}
-              </a>
-            )}
           </div>
         </div>
 

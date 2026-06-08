@@ -125,14 +125,16 @@ export async function createOrder(input: CheckoutInput): Promise<CheckoutResult>
   const { error: itemsErr } = await supabase.from("order_items").insert(itemRows);
   if (itemsErr) throw itemsErr;
 
-  // Build per-vendor split rows
+  // Build per-vendor split rows — commission_rate is sensitive, fetch via SECURITY DEFINER RPC
   const vendorIds = Array.from(new Set(validated.map((v) => v.vendor_id)));
-  const { data: vendorRows } = await supabase
-    .from("vendors")
-    .select("id, commission_rate")
-    .in("id", vendorIds);
+  const { data: vendorRows } = await supabase.rpc("get_vendor_commission_rates" as never, {
+    _vendor_ids: vendorIds,
+  } as never);
   const rateById = new Map<string, number>(
-    (vendorRows ?? []).map((r) => [r.id, Number((r as { commission_rate?: number }).commission_rate ?? 0.1)]),
+    ((vendorRows ?? []) as Array<{ id: string; commission_rate: number }>).map((r) => [
+      r.id,
+      Number(r.commission_rate ?? 0.1),
+    ]),
   );
 
   const splits = vendorIds.map((vid) => {
@@ -161,13 +163,23 @@ export async function createOrder(input: CheckoutInput): Promise<CheckoutResult>
 }
 
 export async function getOrderByNumber(orderNumber: string) {
-  const { data, error } = await supabase
-    .from("orders")
-    .select("*, order_items(*)")
-    .eq("order_number", orderNumber)
-    .maybeSingle();
+  // Authenticated owners (logged-in customers) can read their own orders via RLS.
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) {
+    const { data } = await supabase
+      .from("orders")
+      .select("*, order_items(*)")
+      .eq("order_number", orderNumber)
+      .maybeSingle();
+    if (data) return data as unknown as { order_number: string; total: number; status: string; payment_status: string; created_at: string; order_items?: Array<{ id: string; title: string; quantity: number; unit_price: number; status: string; tracking_number: string | null; carrier: string | null }> } | null;
+  }
+  // Guest fallback: only returns the safe minimal set, and only when the exact
+  // order number matches a guest order (customer_id IS NULL).
+  const { data, error } = await supabase.rpc("lookup_guest_order" as never, {
+    _order_number: orderNumber,
+  } as never);
   if (error) throw error;
-  return data;
+  return (data as unknown as { order_number: string; total: number; status: string; payment_status: string; created_at: string; order_items?: Array<{ id: string; title: string; quantity: number; unit_price: number; status: string; tracking_number: string | null; carrier: string | null }> } | null) ?? null;
 }
 
 export async function listMyOrders(customerId: string) {

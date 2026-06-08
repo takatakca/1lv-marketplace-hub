@@ -109,6 +109,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "order_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "public_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "public_vendors"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "order_items_vendor_id_fkey"
             columns: ["vendor_id"]
             isOneToOne: false
@@ -255,6 +269,13 @@ export type Database = {
             foreignKeyName: "products_vendor_id_fkey"
             columns: ["vendor_id"]
             isOneToOne: false
+            referencedRelation: "public_vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
             referencedRelation: "vendors"
             referencedColumns: ["id"]
           },
@@ -384,6 +405,13 @@ export type Database = {
             foreignKeyName: "vendor_orders_vendor_id_fkey"
             columns: ["vendor_id"]
             isOneToOne: false
+            referencedRelation: "public_vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_orders_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
             referencedRelation: "vendors"
             referencedColumns: ["id"]
           },
@@ -484,9 +512,132 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      public_products: {
+        Row: {
+          category_slug: string | null
+          compare_at_price: number | null
+          created_at: string | null
+          description: string | null
+          id: string | null
+          images: Json | null
+          inventory_quantity: number | null
+          price: number | null
+          short_description: string | null
+          slug: string | null
+          status: Database["public"]["Enums"]["product_status"] | null
+          title: string | null
+          track_inventory: boolean | null
+          updated_at: string | null
+          vendor_id: string | null
+        }
+        Insert: {
+          category_slug?: string | null
+          compare_at_price?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          images?: Json | null
+          inventory_quantity?: number | null
+          price?: number | null
+          short_description?: string | null
+          slug?: string | null
+          status?: Database["public"]["Enums"]["product_status"] | null
+          title?: string | null
+          track_inventory?: boolean | null
+          updated_at?: string | null
+          vendor_id?: string | null
+        }
+        Update: {
+          category_slug?: string | null
+          compare_at_price?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          images?: Json | null
+          inventory_quantity?: number | null
+          price?: number | null
+          short_description?: string | null
+          slug?: string | null
+          status?: Database["public"]["Enums"]["product_status"] | null
+          title?: string | null
+          track_inventory?: boolean | null
+          updated_at?: string | null
+          vendor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "public_vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      public_vendors: {
+        Row: {
+          banner_url: string | null
+          country: string | null
+          created_at: string | null
+          description: string | null
+          id: string | null
+          logo_url: string | null
+          return_policy: string | null
+          shipping_policy: string | null
+          slug: string | null
+          status: Database["public"]["Enums"]["vendor_status"] | null
+          store_name: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          banner_url?: string | null
+          country?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          logo_url?: string | null
+          return_policy?: string | null
+          shipping_policy?: string | null
+          slug?: string | null
+          status?: Database["public"]["Enums"]["vendor_status"] | null
+          store_name?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          banner_url?: string | null
+          country?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          logo_url?: string | null
+          return_policy?: string | null
+          shipping_policy?: string | null
+          slug?: string | null
+          status?: Database["public"]["Enums"]["vendor_status"] | null
+          store_name?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      get_vendor_commission_rates: {
+        Args: { _vendor_ids: string[] }
+        Returns: {
+          commission_rate: number
+          id: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -494,6 +645,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      lookup_guest_order: { Args: { _order_number: string }; Returns: Json }
     }
     Enums: {
       app_role: "admin" | "vendor" | "customer"
