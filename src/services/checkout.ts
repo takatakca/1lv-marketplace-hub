@@ -125,14 +125,16 @@ export async function createOrder(input: CheckoutInput): Promise<CheckoutResult>
   const { error: itemsErr } = await supabase.from("order_items").insert(itemRows);
   if (itemsErr) throw itemsErr;
 
-  // Build per-vendor split rows
+  // Build per-vendor split rows — commission_rate is sensitive, fetch via SECURITY DEFINER RPC
   const vendorIds = Array.from(new Set(validated.map((v) => v.vendor_id)));
-  const { data: vendorRows } = await supabase
-    .from("vendors")
-    .select("id, commission_rate")
-    .in("id", vendorIds);
+  const { data: vendorRows } = await supabase.rpc("get_vendor_commission_rates" as never, {
+    _vendor_ids: vendorIds,
+  } as never);
   const rateById = new Map<string, number>(
-    (vendorRows ?? []).map((r) => [r.id, Number((r as { commission_rate?: number }).commission_rate ?? 0.1)]),
+    ((vendorRows ?? []) as Array<{ id: string; commission_rate: number }>).map((r) => [
+      r.id,
+      Number(r.commission_rate ?? 0.1),
+    ]),
   );
 
   const splits = vendorIds.map((vid) => {
