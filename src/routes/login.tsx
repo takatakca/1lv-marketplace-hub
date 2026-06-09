@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { AuthShell } from "@/components/AuthShell";
 import { SocialAuthButtons } from "@/components/SocialAuthButtons";
 import { PasswordField } from "@/components/PasswordField";
