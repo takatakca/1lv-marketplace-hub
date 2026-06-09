@@ -19,7 +19,7 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const nav = useNavigate();
   const { user } = useAuth();
-  if (user) nav({ to: "/account" });
+  useEffect(() => { if (user) nav({ to: "/account" }); }, [user, nav]);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
