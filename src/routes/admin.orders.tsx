@@ -67,7 +67,7 @@ function Page() {
 
   const tableRows = useDemo
     ? products.slice(0, 12).map((p, i) => ({
-        order: ("1LV-" + (10100 + i)) as unknown as React.ReactNode,
+        order: "1LV-" + (10100 + i),
         customer: ["Jane", "Marc", "Sarah", "Liam", "Noor", "Ava"][i % 6],
         vendors: badge("1 vendor", "muted"),
         total: formatCAD(p.price),
