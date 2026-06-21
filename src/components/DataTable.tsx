@@ -31,11 +31,15 @@ export function DataTable<T extends Record<string, unknown>>({
         <tbody>
           {rows.map((r, i) => (
             <tr key={i} className="border-t border-border hover:bg-muted/30">
-              {columns.map((c) => (
-                <td key={String(c.key)} className={`px-4 py-3 ${c.className ?? ""}`}>
-                  {c.render ? c.render(r) : String((r as Record<string, unknown>)[c.key as string] ?? "—")}
-                </td>
-              ))}
+              {columns.map((c) => {
+                const v = (r as Record<string, unknown>)[c.key as string];
+                const isNode = v !== null && typeof v === "object";
+                return (
+                  <td key={String(c.key)} className={`px-4 py-3 ${c.className ?? ""}`}>
+                    {c.render ? c.render(r) : isNode ? (v as React.ReactNode) : String(v ?? "—")}
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>
