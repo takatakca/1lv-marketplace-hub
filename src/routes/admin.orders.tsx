@@ -150,7 +150,7 @@ function Page() {
             { key: "fulfillment", label: "Fulfillment" },
             { key: "date", label: "Date" },
           ]}
-          rows={tableRows}
+          rows={tableRows as unknown as Record<string, unknown>[]}
         />
       )}
     </>
