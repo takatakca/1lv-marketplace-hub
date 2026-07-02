@@ -131,8 +131,11 @@ export async function insertJobRow(input: {
   product_id?: string | null;
 }) {
   const { error } = await supabase.from("product_import_job_rows").insert({
-    ...input,
-    errors: input.errors ?? [],
+    job_id: input.job_id,
+    row_index: input.row_index,
+    row_status: input.row_status,
+    raw: input.raw as never,
+    errors: (input.errors ?? []) as never,
     product_id: input.product_id ?? null,
   });
   if (error) throw error;
