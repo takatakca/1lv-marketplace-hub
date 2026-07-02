@@ -118,7 +118,7 @@ export async function finalizeImportJob(
   id: string,
   patch: { status: JobStatus; success_rows: number; failed_rows: number; errors?: unknown },
 ) {
-  const { error } = await supabase.from("product_import_jobs").update(patch).eq("id", id);
+  const { error } = await supabase.from("product_import_jobs").update(patch as never).eq("id", id);
   if (error) throw error;
 }
 
