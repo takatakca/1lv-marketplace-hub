@@ -71,7 +71,7 @@ export async function createIntegration(input: {
 }) {
   const { data, error } = await supabase
     .from("supplier_integrations")
-    .insert({ ...input, settings: input.settings ?? {}, status: "setup_required" })
+    .insert({ ...input, settings: (input.settings ?? {}) as never, status: "setup_required" })
     .select(SAFE_INTEGRATION_COLS)
     .single();
   if (error) throw error;
