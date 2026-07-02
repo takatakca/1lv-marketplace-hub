@@ -197,6 +197,134 @@ export type Database = {
         }
         Relationships: []
       }
+      product_import_job_rows: {
+        Row: {
+          created_at: string
+          errors: Json
+          id: string
+          job_id: string
+          product_id: string | null
+          raw: Json
+          row_index: number
+          row_status: string
+        }
+        Insert: {
+          created_at?: string
+          errors?: Json
+          id?: string
+          job_id: string
+          product_id?: string | null
+          raw?: Json
+          row_index: number
+          row_status?: string
+        }
+        Update: {
+          created_at?: string
+          errors?: Json
+          id?: string
+          job_id?: string
+          product_id?: string | null
+          raw?: Json
+          row_index?: number
+          row_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_import_job_rows_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "product_import_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_import_job_rows_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_import_job_rows_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "public_products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_import_jobs: {
+        Row: {
+          created_at: string
+          errors: Json
+          failed_rows: number
+          file_url: string | null
+          id: string
+          integration_id: string | null
+          owner_id: string
+          provider_type: string
+          source_filename: string | null
+          status: string
+          success_rows: number
+          total_rows: number
+          updated_at: string
+          vendor_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          errors?: Json
+          failed_rows?: number
+          file_url?: string | null
+          id?: string
+          integration_id?: string | null
+          owner_id: string
+          provider_type: string
+          source_filename?: string | null
+          status?: string
+          success_rows?: number
+          total_rows?: number
+          updated_at?: string
+          vendor_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          errors?: Json
+          failed_rows?: number
+          file_url?: string | null
+          id?: string
+          integration_id?: string | null
+          owner_id?: string
+          provider_type?: string
+          source_filename?: string | null
+          status?: string
+          success_rows?: number
+          total_rows?: number
+          updated_at?: string
+          vendor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_import_jobs_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_integrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_import_jobs_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "public_vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_import_jobs_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           category_slug: string | null
@@ -331,6 +459,60 @@ export type Database = {
           type?: string
         }
         Relationships: []
+      }
+      supplier_integrations: {
+        Row: {
+          created_at: string
+          credentials_encrypted: string | null
+          id: string
+          owner_id: string
+          provider_name: string
+          provider_type: string
+          settings: Json
+          status: string
+          updated_at: string
+          vendor_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          credentials_encrypted?: string | null
+          id?: string
+          owner_id: string
+          provider_name: string
+          provider_type: string
+          settings?: Json
+          status?: string
+          updated_at?: string
+          vendor_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          credentials_encrypted?: string | null
+          id?: string
+          owner_id?: string
+          provider_name?: string
+          provider_type?: string
+          settings?: Json
+          status?: string
+          updated_at?: string
+          vendor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_integrations_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "public_vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_integrations_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
