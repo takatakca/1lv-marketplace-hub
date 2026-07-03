@@ -1,21 +1,10 @@
 /**
- * Payments service — Stripe-ready placeholder.
+ * Payments service — thin client wrapper around Stripe server functions.
  *
- * Real Stripe integration requires server-side code with STRIPE_SECRET_KEY
- * and STRIPE_WEBHOOK_SECRET. These functions are intentionally stubs so the
- * checkout flow stays usable in Lovable preview until Stripe is enabled.
- *
- * Required env vars (set when enabling Stripe):
- *   VITE_STRIPE_PUBLISHABLE_KEY   (client, safe)
- *   STRIPE_SECRET_KEY             (server only — NEVER expose to client)
- *   STRIPE_WEBHOOK_SECRET         (server only)
- *
- * TODO (server function):
- *   - createPaymentIntent: POST { orderId } -> { clientSecret }
- *   - confirmPayment:      called by Stripe Elements
- *   - webhook handler:     /api/public/webhooks/stripe (verify signature,
- *                          update orders.payment_status, set status=paid)
+ * Secret keys live only on the server. This file must never import
+ * STRIPE_SECRET_KEY or make direct Stripe API calls.
  */
+import { createPaymentIntent as createPaymentIntentFn } from "@/lib/stripe.functions";
 
 export type PaymentIntent = {
   clientSecret: string | null;
@@ -27,16 +16,25 @@ export function isStripeConfigured() {
   return Boolean(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 }
 
-export async function createPaymentIntent(_orderId: string, _amountCAD: number): Promise<PaymentIntent> {
-  // TODO: call server function that talks to Stripe with STRIPE_SECRET_KEY
-  return {
-    clientSecret: null,
-    pending: true,
-    reason: "Stripe setup required — order created in pending-payment mode.",
-  };
+export async function createPaymentIntent(orderId: string, _amountCAD: number): Promise<PaymentIntent> {
+  // Demo/synthetic orders (non-UUID) skip Stripe entirely.
+  if (!/^[0-9a-f-]{36}$/i.test(orderId)) {
+    return { clientSecret: null, pending: true, reason: "Demo order — Stripe skipped." };
+  }
+  try {
+    const res = await createPaymentIntentFn({ data: { orderId } });
+    return res;
+  } catch (err) {
+    return {
+      clientSecret: null,
+      pending: true,
+      reason: err instanceof Error ? err.message : "Stripe setup required",
+    };
+  }
 }
 
 export async function confirmPayment(_clientSecret: string): Promise<{ ok: boolean }> {
-  // TODO: integrate Stripe.js Elements on the client + server confirmation
+  // Stripe.js Elements will confirm on the client using VITE_STRIPE_PUBLISHABLE_KEY.
+  // Wire this up when the checkout UI is upgraded to full Elements integration.
   return { ok: false };
 }
