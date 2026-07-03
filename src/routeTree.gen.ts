@@ -66,6 +66,7 @@ import { Route as VendorOrdersIndexRouteImport } from './routes/vendor.orders.in
 import { Route as VendorProductsNewRouteImport } from './routes/vendor.products.new'
 import { Route as VendorOrdersIdRouteImport } from './routes/vendor.orders.$id'
 import { Route as VendorProductsIdEditRouteImport } from './routes/vendor.products.$id.edit'
+import { Route as ApiPublicWebhooksStripeRouteImport } from './routes/api/public/webhooks.stripe'
 
 const WishlistRoute = WishlistRouteImport.update({
   id: '/wishlist',
@@ -352,6 +353,11 @@ const VendorProductsIdEditRoute = VendorProductsIdEditRouteImport.update({
   path: '/$id/edit',
   getParentRoute: () => VendorProductsRoute,
 } as any)
+const ApiPublicWebhooksStripeRoute = ApiPublicWebhooksStripeRouteImport.update({
+  id: '/api/public/webhooks/stripe',
+  path: '/api/public/webhooks/stripe',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -410,6 +416,7 @@ export interface FileRoutesByFullPath {
   '/vendor/products/new': typeof VendorProductsNewRoute
   '/vendor/orders/': typeof VendorOrdersIndexRoute
   '/vendor/products/': typeof VendorProductsIndexRoute
+  '/api/public/webhooks/stripe': typeof ApiPublicWebhooksStripeRoute
   '/vendor/products/$id/edit': typeof VendorProductsIdEditRoute
 }
 export interface FileRoutesByTo {
@@ -465,6 +472,7 @@ export interface FileRoutesByTo {
   '/vendor/products/new': typeof VendorProductsNewRoute
   '/vendor/orders': typeof VendorOrdersIndexRoute
   '/vendor/products': typeof VendorProductsIndexRoute
+  '/api/public/webhooks/stripe': typeof ApiPublicWebhooksStripeRoute
   '/vendor/products/$id/edit': typeof VendorProductsIdEditRoute
 }
 export interface FileRoutesById {
@@ -525,6 +533,7 @@ export interface FileRoutesById {
   '/vendor/products/new': typeof VendorProductsNewRoute
   '/vendor/orders/': typeof VendorOrdersIndexRoute
   '/vendor/products/': typeof VendorProductsIndexRoute
+  '/api/public/webhooks/stripe': typeof ApiPublicWebhooksStripeRoute
   '/vendor/products/$id/edit': typeof VendorProductsIdEditRoute
 }
 export interface FileRouteTypes {
@@ -586,6 +595,7 @@ export interface FileRouteTypes {
     | '/vendor/products/new'
     | '/vendor/orders/'
     | '/vendor/products/'
+    | '/api/public/webhooks/stripe'
     | '/vendor/products/$id/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -641,6 +651,7 @@ export interface FileRouteTypes {
     | '/vendor/products/new'
     | '/vendor/orders'
     | '/vendor/products'
+    | '/api/public/webhooks/stripe'
     | '/vendor/products/$id/edit'
   id:
     | '__root__'
@@ -700,6 +711,7 @@ export interface FileRouteTypes {
     | '/vendor/products/new'
     | '/vendor/orders/'
     | '/vendor/products/'
+    | '/api/public/webhooks/stripe'
     | '/vendor/products/$id/edit'
   fileRoutesById: FileRoutesById
 }
@@ -734,6 +746,7 @@ export interface RootRouteChildren {
   CategorySlugRoute: typeof CategorySlugRoute
   ProductSlugRoute: typeof ProductSlugRoute
   StoreSlugRoute: typeof StoreSlugRoute
+  ApiPublicWebhooksStripeRoute: typeof ApiPublicWebhooksStripeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1137,6 +1150,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VendorProductsIdEditRouteImport
       parentRoute: typeof VendorProductsRoute
     }
+    '/api/public/webhooks/stripe': {
+      id: '/api/public/webhooks/stripe'
+      path: '/api/public/webhooks/stripe'
+      fullPath: '/api/public/webhooks/stripe'
+      preLoaderRoute: typeof ApiPublicWebhooksStripeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -1271,6 +1291,7 @@ const rootRouteChildren: RootRouteChildren = {
   CategorySlugRoute: CategorySlugRoute,
   ProductSlugRoute: ProductSlugRoute,
   StoreSlugRoute: StoreSlugRoute,
+  ApiPublicWebhooksStripeRoute: ApiPublicWebhooksStripeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
