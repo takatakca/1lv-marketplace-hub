@@ -44,9 +44,9 @@ async function handleEvent(evt: StripeEvent) {
 
   // Idempotency: skip if already processed.
   const { data: existing } = await supabaseAdmin
-    .from("stripe_event_log" as never)
+    .from("stripe_event_log")
     .select("id")
-    .eq("event_id", evt.id)
+    .eq("id", evt.id)
     .maybeSingle();
   if (existing) return;
 
