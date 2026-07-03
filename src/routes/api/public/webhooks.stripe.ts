@@ -57,7 +57,7 @@ async function handleEvent(evt: StripeEvent) {
     case "payment_intent.succeeded": {
       const orderId = meta.order_id;
       if (orderId) {
-        await supabaseAdmin.from("orders").update({ payment_status: "paid", status: "paid" }).eq("id", orderId);
+        await supabaseAdmin.from("orders").update({ payment_status: "paid", status: "processing" }).eq("id", orderId);
       }
       break;
     }
