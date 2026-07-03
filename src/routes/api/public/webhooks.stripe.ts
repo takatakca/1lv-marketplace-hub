@@ -138,11 +138,11 @@ async function handleEvent(evt: StripeEvent) {
       break;
   }
 
-  await supabaseAdmin.from("stripe_event_log" as never).insert({
-    event_id: evt.id,
-    event_type: evt.type,
+  await supabaseAdmin.from("stripe_event_log").insert({
+    id: evt.id,
+    type: evt.type,
     payload: evt as unknown as Record<string, unknown>,
-  } as never);
+  });
 }
 
 export const Route = createFileRoute("/api/public/webhooks/stripe")({
