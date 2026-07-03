@@ -131,10 +131,23 @@ function Page() {
         <h2 className="mb-3 text-lg font-bold text-navy">Stripe Connect</h2>
         <p className="text-sm text-muted-foreground">
           Status: <span className="font-semibold capitalize text-navy">
-            {vendor?.stripe_connect_account_id ? (vendor.payouts_enabled ? "active" : "pending verification") : "not connected"}
+            {!vendor?.stripe_connect_account_id
+              ? "not connected"
+              : !vendor.charges_enabled
+                ? "connected — charges disabled"
+                : vendor.payouts_enabled
+                  ? "payouts enabled"
+                  : "connected — payouts pending"}
           </span>
         </p>
-        <p className="mt-2 text-xs text-muted-foreground">Connect activation will be enabled in the payments phase.</p>
+        <button
+          type="button"
+          onClick={() => alert("Stripe Connect onboarding will be enabled once server keys are configured.")}
+          className="mt-3 rounded-md bg-navy px-4 py-2 text-sm font-semibold text-white"
+        >
+          {vendor?.stripe_connect_account_id ? "Manage payout account" : "Connect payout account"}
+        </button>
+        <p className="mt-2 text-xs text-muted-foreground">Payout activation requires Stripe Connect Express onboarding (server-side).</p>
       </div>
 
       <div className="mt-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
