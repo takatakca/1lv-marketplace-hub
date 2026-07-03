@@ -141,7 +141,7 @@ async function handleEvent(evt: StripeEvent) {
   await supabaseAdmin.from("stripe_event_log").insert({
     id: evt.id,
     type: evt.type,
-    payload: evt as unknown as Record<string, unknown>,
+    payload: JSON.parse(JSON.stringify(evt)),
   });
 }
 
