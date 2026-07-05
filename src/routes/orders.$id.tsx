@@ -38,10 +38,11 @@ function OrderDetail() {
           <div className="mt-6 space-y-4">
             <div className="rounded-xl border border-border bg-card p-6">
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-muted-foreground">Status</span><span className="font-semibold capitalize text-electric">{order.status}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Payment</span><span className="font-semibold capitalize text-navy">{order.payment_status}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Fulfillment</span><span className="font-semibold capitalize text-electric">{order.status}</span></div>
+                <div className="flex items-center justify-between"><span className="text-muted-foreground">Payment</span><PaymentBadge status={order.payment_status} /></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-bold text-navy">{formatCAD(Number(order.total))}</span></div>
               </div>
+              {isUnpaid(order.payment_status) && order.id && <RetryButton orderId={order.id} />}
             </div>
             <div className="rounded-xl border border-border bg-card p-6">
               <h2 className="mb-3 font-bold text-navy">Items</h2>
