@@ -97,7 +97,7 @@ function Confirmation() {
                   )}
                 </div>
 
-                {isUnpaid(details.payment_status) && (
+                {isUnpaid(details.payment_status) && details.id && (
                   <RetryPayment orderId={details.id} />
                 )}
               </>
