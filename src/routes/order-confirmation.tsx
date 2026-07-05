@@ -1,8 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CheckCircle2, AlertCircle } from "lucide-react";
+import { CheckCircle2, AlertCircle, LifeBuoy } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { getOrderByNumber } from "@/services/checkout";
+import { createPaymentIntent, isStripeConfigured } from "@/services/payments";
+import { PaymentBadge, isUnpaid } from "@/components/PaymentBadge";
 import { formatCAD } from "@/lib/data";
 
 type Search = { order?: string; demo?: number };
@@ -72,18 +75,40 @@ function Confirmation() {
                   <span className="text-sm text-muted-foreground">Total</span>
                   <span className="text-lg font-bold text-navy">{formatCAD(Number(details.total))}</span>
                 </div>
-                <div className="mt-1 flex justify-between text-sm">
+                <div className="mt-2 flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Payment</span>
-                  <span className="font-semibold text-navy capitalize">{details.payment_status}</span>
+                  <PaymentBadge status={details.payment_status} />
                 </div>
                 <div className="mt-1 flex justify-between text-sm">
-                  <span className="text-muted-foreground">Status</span>
+                  <span className="text-muted-foreground">Fulfillment</span>
                   <span className="font-semibold text-navy capitalize">{details.status}</span>
                 </div>
+
+                <div className="mt-4 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+                  <p className="font-semibold text-navy">Next steps</p>
+                  {details.payment_status === "paid" ? (
+                    <p className="mt-1">Vendors are preparing your items. You'll receive tracking updates by email.</p>
+                  ) : (
+                    <p className="mt-1">
+                      {isStripeConfigured()
+                        ? "Complete payment to release your order to vendors."
+                        : "Stripe is not yet configured. Your order is saved in pending-payment mode."}
+                    </p>
+                  )}
+                </div>
+
+                {isUnpaid(details.payment_status) && details.id && (
+                  <RetryPayment orderId={details.id} />
+                )}
               </>
             ) : (
               <p className="text-sm text-muted-foreground">Order created. Details will appear in your account once available.</p>
             )}
+
+            <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+              <LifeBuoy size={14} />
+              Need help? Reach us at <a href="mailto:support@1lv.ca" className="text-electric hover:underline">support@1lv.ca</a>
+            </div>
           </div>
         )}
 
@@ -97,5 +122,31 @@ function Confirmation() {
         </div>
       </div>
     </AppLayout>
+  );
+}
+
+function RetryPayment({ orderId }: { orderId: string }) {
+  const [busy, setBusy] = useState(false);
+  const onRetry = async () => {
+    setBusy(true);
+    try {
+      const intent = await createPaymentIntent(orderId, 0);
+      if (intent.pending || !intent.clientSecret) {
+        toast.message("Payment not ready", { description: intent.reason ?? "Stripe setup required." });
+      } else {
+        toast.success("Payment session ready — Stripe Elements coming soon.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button
+      onClick={onRetry}
+      disabled={busy}
+      className="mt-4 w-full rounded-md bg-electric px-4 py-2 text-sm font-bold text-electric-foreground disabled:opacity-60"
+    >
+      {busy ? "Preparing…" : "Retry payment"}
+    </button>
   );
 }

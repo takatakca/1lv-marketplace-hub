@@ -1,7 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { getOrderByNumber } from "@/services/checkout";
+import { createPaymentIntent } from "@/services/payments";
+import { PaymentBadge, isUnpaid } from "@/components/PaymentBadge";
 import { formatCAD } from "@/lib/data";
 
 export const Route = createFileRoute("/orders/$id")({ component: OrderDetail });
@@ -35,10 +38,11 @@ function OrderDetail() {
           <div className="mt-6 space-y-4">
             <div className="rounded-xl border border-border bg-card p-6">
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-muted-foreground">Status</span><span className="font-semibold capitalize text-electric">{order.status}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Payment</span><span className="font-semibold capitalize text-navy">{order.payment_status}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Fulfillment</span><span className="font-semibold capitalize text-electric">{order.status}</span></div>
+                <div className="flex items-center justify-between"><span className="text-muted-foreground">Payment</span><PaymentBadge status={order.payment_status} /></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-bold text-navy">{formatCAD(Number(order.total))}</span></div>
               </div>
+              {isUnpaid(order.payment_status) && order.id && <RetryButton orderId={order.id} />}
             </div>
             <div className="rounded-xl border border-border bg-card p-6">
               <h2 className="mb-3 font-bold text-navy">Items</h2>
@@ -73,5 +77,31 @@ function OrderDetail() {
         )}
       </div>
     </AppLayout>
+  );
+}
+
+function RetryButton({ orderId }: { orderId: string }) {
+  const [busy, setBusy] = useState(false);
+  const onRetry = async () => {
+    setBusy(true);
+    try {
+      const intent = await createPaymentIntent(orderId, 0);
+      if (intent.pending || !intent.clientSecret) {
+        toast.message("Payment not ready", { description: intent.reason ?? "Stripe setup required." });
+      } else {
+        toast.success("Payment session ready — Stripe Elements coming soon.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button
+      onClick={onRetry}
+      disabled={busy}
+      className="mt-4 w-full rounded-md bg-electric px-4 py-2 text-sm font-bold text-electric-foreground disabled:opacity-60"
+    >
+      {busy ? "Preparing…" : "Retry payment"}
+    </button>
   );
 }

@@ -24,6 +24,7 @@ function PageHead() {
 
 function Page() {
   const { user } = useAuth();
+  const { success, cancelled } = Route.useSearch();
   const [loading, setLoading] = useState<string | null>(null);
 
   const upgrade = async (plan: "starter" | "growth" | "scale") => {
@@ -58,6 +59,16 @@ function Page() {
   return (
     <div>
       <PageHead />
+      {success ? (
+        <div className="mb-4 rounded-lg border border-success/30 bg-success/5 p-3 text-sm text-success">
+          Subscription started. It may take a moment to appear here while Stripe confirms.
+        </div>
+      ) : null}
+      {cancelled ? (
+        <div className="mb-4 rounded-lg border border-deal/30 bg-deal/5 p-3 text-sm text-deal">
+          Checkout cancelled. You can pick a plan again below.
+        </div>
+      ) : null}
       <div className="grid gap-4 md:grid-cols-3">
         {plans.map((p) => (
           <div key={p.key} className="rounded-xl border border-border bg-card p-6 shadow-card">
@@ -83,4 +94,10 @@ function Page() {
     </div>
   );
 }
-export const Route = createFileRoute("/vendor/subscription")({ component: Page });
+export const Route = createFileRoute("/vendor/subscription")({
+  component: Page,
+  validateSearch: (s: Record<string, unknown>) => ({
+    success: s.success === "1" || s.success === 1 ? 1 : 0,
+    cancelled: s.cancelled === "1" || s.cancelled === 1 ? 1 : 0,
+  }),
+});
