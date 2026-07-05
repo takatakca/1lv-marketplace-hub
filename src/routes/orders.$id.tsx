@@ -79,3 +79,29 @@ function OrderDetail() {
     </AppLayout>
   );
 }
+
+function RetryButton({ orderId }: { orderId: string }) {
+  const [busy, setBusy] = useState(false);
+  const onRetry = async () => {
+    setBusy(true);
+    try {
+      const intent = await createPaymentIntent(orderId, 0);
+      if (intent.pending || !intent.clientSecret) {
+        toast.message("Payment not ready", { description: intent.reason ?? "Stripe setup required." });
+      } else {
+        toast.success("Payment session ready — Stripe Elements coming soon.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button
+      onClick={onRetry}
+      disabled={busy}
+      className="mt-4 w-full rounded-md bg-electric px-4 py-2 text-sm font-bold text-electric-foreground disabled:opacity-60"
+    >
+      {busy ? "Preparing…" : "Retry payment"}
+    </button>
+  );
+}
