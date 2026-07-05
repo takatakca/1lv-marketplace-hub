@@ -59,6 +59,16 @@ function Page() {
   return (
     <div>
       <PageHead />
+      {success ? (
+        <div className="mb-4 rounded-lg border border-success/30 bg-success/5 p-3 text-sm text-success">
+          Subscription started. It may take a moment to appear here while Stripe confirms.
+        </div>
+      ) : null}
+      {cancelled ? (
+        <div className="mb-4 rounded-lg border border-deal/30 bg-deal/5 p-3 text-sm text-deal">
+          Checkout cancelled. You can pick a plan again below.
+        </div>
+      ) : null}
       <div className="grid gap-4 md:grid-cols-3">
         {plans.map((p) => (
           <div key={p.key} className="rounded-xl border border-border bg-card p-6 shadow-card">
