@@ -163,15 +163,24 @@ export async function createOrder(input: CheckoutInput): Promise<CheckoutResult>
 }
 
 export async function getOrderByNumber(orderNumber: string) {
+  type OrderShape = {
+    id: string;
+    order_number: string;
+    total: number;
+    status: string;
+    payment_status: string;
+    created_at: string;
+    order_items?: Array<{ id: string; title: string; quantity: number; unit_price: number; status: string; tracking_number: string | null; carrier: string | null }>;
+  };
   // Authenticated owners (logged-in customers) can read their own orders via RLS.
   const { data: { session } } = await supabase.auth.getSession();
   if (session) {
     const { data } = await supabase
       .from("orders")
-      .select("*, order_items(*)")
+      .select("id, order_number, total, status, payment_status, created_at, order_items(*)")
       .eq("order_number", orderNumber)
       .maybeSingle();
-    if (data) return data as unknown as { order_number: string; total: number; status: string; payment_status: string; created_at: string; order_items?: Array<{ id: string; title: string; quantity: number; unit_price: number; status: string; tracking_number: string | null; carrier: string | null }> } | null;
+    if (data) return data as unknown as OrderShape | null;
   }
   // Guest fallback: only returns the safe minimal set, and only when the exact
   // order number matches a guest order (customer_id IS NULL).
@@ -179,7 +188,7 @@ export async function getOrderByNumber(orderNumber: string) {
     _order_number: orderNumber,
   } as never);
   if (error) throw error;
-  return (data as unknown as { order_number: string; total: number; status: string; payment_status: string; created_at: string; order_items?: Array<{ id: string; title: string; quantity: number; unit_price: number; status: string; tracking_number: string | null; carrier: string | null }> } | null) ?? null;
+  return (data as unknown as OrderShape | null) ?? null;
 }
 
 export async function listMyOrders(customerId: string) {
