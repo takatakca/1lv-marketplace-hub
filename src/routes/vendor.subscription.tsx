@@ -24,6 +24,7 @@ function PageHead() {
 
 function Page() {
   const { user } = useAuth();
+  const { success, cancelled } = Route.useSearch();
   const [loading, setLoading] = useState<string | null>(null);
 
   const upgrade = async (plan: "starter" | "growth" | "scale") => {
