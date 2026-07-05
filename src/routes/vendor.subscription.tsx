@@ -83,4 +83,10 @@ function Page() {
     </div>
   );
 }
-export const Route = createFileRoute("/vendor/subscription")({ component: Page });
+export const Route = createFileRoute("/vendor/subscription")({
+  component: Page,
+  validateSearch: (s: Record<string, unknown>) => ({
+    success: s.success === "1" || s.success === 1 ? 1 : 0,
+    cancelled: s.cancelled === "1" || s.cancelled === 1 ? 1 : 0,
+  }),
+});
