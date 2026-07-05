@@ -1,8 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CheckCircle2, AlertCircle } from "lucide-react";
+import { CheckCircle2, AlertCircle, LifeBuoy } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { getOrderByNumber } from "@/services/checkout";
+import { createPaymentIntent, isStripeConfigured } from "@/services/payments";
+import { PaymentBadge, isUnpaid } from "@/components/PaymentBadge";
 import { formatCAD } from "@/lib/data";
 
 type Search = { order?: string; demo?: number };
