@@ -1,7 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { getOrderByNumber } from "@/services/checkout";
+import { createPaymentIntent } from "@/services/payments";
+import { PaymentBadge, isUnpaid } from "@/components/PaymentBadge";
 import { formatCAD } from "@/lib/data";
 
 export const Route = createFileRoute("/orders/$id")({ component: OrderDetail });
