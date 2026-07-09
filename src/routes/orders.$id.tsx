@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { getOrderByNumber } from "@/services/checkout";
-import { createPaymentIntent } from "@/services/payments";
+import { createPaymentIntent, isStripeConfigured } from "@/services/payments";
 import { PaymentBadge, isUnpaid } from "@/components/PaymentBadge";
+import { StripePaymentForm } from "@/components/StripePaymentForm";
 import { formatCAD } from "@/lib/data";
 
 export const Route = createFileRoute("/orders/$id")({ component: OrderDetail });
@@ -42,7 +43,7 @@ function OrderDetail() {
                 <div className="flex items-center justify-between"><span className="text-muted-foreground">Payment</span><PaymentBadge status={order.payment_status} /></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-bold text-navy">{formatCAD(Number(order.total))}</span></div>
               </div>
-              {isUnpaid(order.payment_status) && order.id && <RetryButton orderId={order.id} />}
+              {isUnpaid(order.payment_status) && order.id && <RetryButton orderId={order.id} orderNumber={order.order_number} />}
             </div>
             <div className="rounded-xl border border-border bg-card p-6">
               <h2 className="mb-3 font-bold text-navy">Items</h2>
@@ -80,21 +81,31 @@ function OrderDetail() {
   );
 }
 
-function RetryButton({ orderId }: { orderId: string }) {
+function RetryButton({ orderId, orderNumber }: { orderId: string; orderNumber: string }) {
   const [busy, setBusy] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const onRetry = async () => {
     setBusy(true);
     try {
       const intent = await createPaymentIntent(orderId, 0);
       if (intent.pending || !intent.clientSecret) {
         toast.message("Payment not ready", { description: intent.reason ?? "Stripe setup required." });
+      } else if (!isStripeConfigured()) {
+        toast.message("Stripe publishable key missing", { description: "Set VITE_STRIPE_PUBLISHABLE_KEY to enable card entry." });
       } else {
-        toast.success("Payment session ready — Stripe Elements coming soon.");
+        setClientSecret(intent.clientSecret);
       }
     } finally {
       setBusy(false);
     }
   };
+  if (clientSecret) {
+    return (
+      <div className="mt-4">
+        <StripePaymentForm clientSecret={clientSecret} orderNumber={orderNumber} onCancel={() => setClientSecret(null)} />
+      </div>
+    );
+  }
   return (
     <button
       onClick={onRetry}

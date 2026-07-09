@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { createOrder, type Address } from "@/services/checkout";
 import { createPaymentIntent, isStripeConfigured } from "@/services/payments";
+import { StripePaymentForm } from "@/components/StripePaymentForm";
 
 export const Route = createFileRoute("/checkout")({
   component: Checkout,
@@ -27,18 +28,25 @@ function Field({ label, name, ...props }: { label: string; name: string } & Reac
   );
 }
 
+type PaymentStep = {
+  orderId: string;
+  orderNumber: string;
+  clientSecret: string;
+};
+
 function Checkout() {
   const { items, subtotal, clear } = useCart();
   const { user } = useAuth();
   const nav = useNavigate();
   const [submitting, setSubmitting] = useState(false);
+  const [paymentStep, setPaymentStep] = useState<PaymentStep | null>(null);
   const shipping = subtotal === 0 || subtotal >= 49 ? 0 : 7.99;
   const taxes = +(subtotal * 0.14975).toFixed(2);
   const total = +(subtotal + shipping + taxes).toFixed(2);
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (items.length === 0) return;
+    if (items.length === 0 || submitting || paymentStep) return;
     setSubmitting(true);
     const f = new FormData(e.currentTarget);
     const get = (k: string) => String(f.get(k) ?? "");
@@ -66,18 +74,25 @@ function Checkout() {
         total,
       });
 
-      // Prepare payment intent (Stripe placeholder)
       const intent = await createPaymentIntent(result.order_id, total);
-      if (!isStripeConfigured() || intent.pending) {
-        toast.success(
-          result.demo
-            ? "Demo order placed — Stripe setup required for live payment."
-            : "Order created — pending payment (Stripe setup required).",
-        );
-      } else {
-        toast.success("Order placed!");
+
+      // Stripe fully configured + real order → render Payment Element.
+      if (isStripeConfigured() && intent.clientSecret && !intent.pending && !result.demo) {
+        setPaymentStep({
+          orderId: result.order_id,
+          orderNumber: result.order_number,
+          clientSecret: intent.clientSecret,
+        });
+        setSubmitting(false);
+        return;
       }
 
+      // Fallback: no Stripe or demo order.
+      toast.success(
+        result.demo
+          ? "Demo order placed — Stripe setup required for live payment."
+          : "Order created — pending payment (Stripe setup required).",
+      );
       clear();
       nav({
         to: "/order-confirmation",
@@ -86,7 +101,6 @@ function Checkout() {
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Could not place order");
-    } finally {
       setSubmitting(false);
     }
   };
@@ -95,80 +109,124 @@ function Checkout() {
     <AppLayout>
       <div className="mx-auto max-w-6xl px-4 py-8">
         <h1 className="font-display text-3xl font-extrabold text-navy">Checkout</h1>
-        <form onSubmit={onSubmit} className="mt-6 grid gap-8 lg:grid-cols-[1fr_360px]">
-          <div className="space-y-6">
-            <section className="rounded-xl border border-border bg-card p-5">
-              <h2 className="mb-4 font-bold text-navy">Contact</h2>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Email" name="email" type="email" required defaultValue={user?.email ?? ""} placeholder="you@example.com" />
-                <Field label="Phone" name="phone" required placeholder="+1 514 555 0123" />
-              </div>
-              {!user && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Checking out as guest. <a className="text-electric hover:underline" href="/login">Sign in</a> to save your orders.
-                </p>
-              )}
-            </section>
 
+        {paymentStep ? (
+          <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_360px]">
             <section className="rounded-xl border border-border bg-card p-5">
-              <h2 className="mb-4 font-bold text-navy">Shipping address</h2>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="First name" name="first_name" required />
-                <Field label="Last name" name="last_name" required />
-                <Field label="Address" name="address" required className="sm:col-span-2" />
-                <Field label="City" name="city" required />
-                <Field label="Province" name="province" required defaultValue="QC" />
-                <Field label="Postal code" name="postal_code" required placeholder="H2X 1Y4" />
-                <Field label="Country" name="country" defaultValue="Canada" readOnly />
-              </div>
-            </section>
-
-            <section className="rounded-xl border border-border bg-card p-5">
-              <h2 className="mb-4 font-bold text-navy">Payment</h2>
-              <p className="mb-3 inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
-                <Lock size={12} /> {isStripeConfigured() ? "Stripe-ready · Test mode" : "Stripe setup required — orders will be created in pending-payment mode"}
+              <h2 className="mb-1 font-bold text-navy">Complete your payment</h2>
+              <p className="mb-4 text-xs text-muted-foreground">
+                Order <span className="font-semibold text-navy">{paymentStep.orderNumber}</span>
               </p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Card number" name="card" placeholder="4242 4242 4242 4242" className="sm:col-span-2" />
-                <Field label="Expiry" name="exp" placeholder="12/28" />
-                <Field label="CVC" name="cvc" placeholder="123" />
-              </div>
+              <StripePaymentForm
+                clientSecret={paymentStep.clientSecret}
+                orderNumber={paymentStep.orderNumber}
+                onCancel={() => {
+                  clear();
+                  nav({
+                    to: "/order-confirmation",
+                    search: { order: paymentStep.orderNumber, demo: 0 } as never,
+                  });
+                }}
+              />
             </section>
+            <OrderSummary items={items} subtotal={subtotal} shipping={shipping} taxes={taxes} total={total} />
           </div>
+        ) : (
+          <form onSubmit={onSubmit} className="mt-6 grid gap-8 lg:grid-cols-[1fr_360px]">
+            <div className="space-y-6">
+              <section className="rounded-xl border border-border bg-card p-5">
+                <h2 className="mb-4 font-bold text-navy">Contact</h2>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Email" name="email" type="email" required defaultValue={user?.email ?? ""} placeholder="you@example.com" />
+                  <Field label="Phone" name="phone" required placeholder="+1 514 555 0123" />
+                </div>
+                {!user && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Checking out as guest. <a className="text-electric hover:underline" href="/login">Sign in</a> to save your orders.
+                  </p>
+                )}
+              </section>
 
-          <aside className="space-y-3 rounded-xl border border-border bg-card p-5 shadow-card lg:sticky lg:top-28 lg:self-start">
-            <h3 className="font-bold text-navy">Order summary</h3>
-            <ul className="max-h-72 space-y-2 overflow-y-auto text-sm">
-              {items.map((it) => (
-                <li key={it.productId} className="flex gap-3">
-                  <img src={it.image} alt="" className="h-12 w-12 rounded object-cover" />
-                  <div className="flex-1 text-xs">
-                    <p className="line-clamp-2 font-medium text-navy">{it.title}</p>
-                    <p className="text-muted-foreground">Qty {it.qty}</p>
-                  </div>
-                  <span className="text-sm font-semibold">{formatCAD(it.price * it.qty)}</span>
-                </li>
-              ))}
-            </ul>
-            <dl className="space-y-1.5 border-y border-border py-3 text-sm">
-              <div className="flex justify-between"><dt>Subtotal</dt><dd>{formatCAD(subtotal)}</dd></div>
-              <div className="flex justify-between"><dt>Shipping</dt><dd>{shipping === 0 ? "Free" : formatCAD(shipping)}</dd></div>
-              <div className="flex justify-between"><dt>Tax (QC)</dt><dd>{formatCAD(taxes)}</dd></div>
-            </dl>
-            <div className="flex items-baseline justify-between">
-              <span className="font-bold text-navy">Total</span>
-              <span className="text-xl font-extrabold text-navy">{formatCAD(total)}</span>
+              <section className="rounded-xl border border-border bg-card p-5">
+                <h2 className="mb-4 font-bold text-navy">Shipping address</h2>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="First name" name="first_name" required />
+                  <Field label="Last name" name="last_name" required />
+                  <Field label="Address" name="address" required className="sm:col-span-2" />
+                  <Field label="City" name="city" required />
+                  <Field label="Province" name="province" required defaultValue="QC" />
+                  <Field label="Postal code" name="postal_code" required placeholder="H2X 1Y4" />
+                  <Field label="Country" name="country" defaultValue="Canada" readOnly />
+                </div>
+              </section>
+
+              <section className="rounded-xl border border-border bg-card p-5">
+                <h2 className="mb-2 font-bold text-navy">Payment</h2>
+                <p className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+                  <Lock size={12} />{" "}
+                  {isStripeConfigured()
+                    ? "You'll enter your card securely in the next step."
+                    : "Stripe setup required — orders will be created in pending-payment mode"}
+                </p>
+              </section>
             </div>
-            <button
-              type="submit"
-              disabled={submitting || items.length === 0}
-              className="w-full rounded-md bg-electric px-4 py-3 text-sm font-bold text-electric-foreground shadow-glow hover:opacity-90 disabled:opacity-60"
-            >
-              {submitting ? "Processing…" : `Pay ${formatCAD(total)}`}
-            </button>
-          </aside>
-        </form>
+
+            <OrderSummary items={items} subtotal={subtotal} shipping={shipping} taxes={taxes} total={total}>
+              <button
+                type="submit"
+                disabled={submitting || items.length === 0}
+                className="w-full rounded-md bg-electric px-4 py-3 text-sm font-bold text-electric-foreground shadow-glow hover:opacity-90 disabled:opacity-60"
+              >
+                {submitting ? "Processing…" : isStripeConfigured() ? `Continue to payment · ${formatCAD(total)}` : `Place order · ${formatCAD(total)}`}
+              </button>
+            </OrderSummary>
+          </form>
+        )}
       </div>
     </AppLayout>
+  );
+}
+
+function OrderSummary({
+  items,
+  subtotal,
+  shipping,
+  taxes,
+  total,
+  children,
+}: {
+  items: ReturnType<typeof useCart>["items"];
+  subtotal: number;
+  shipping: number;
+  taxes: number;
+  total: number;
+  children?: React.ReactNode;
+}) {
+  return (
+    <aside className="space-y-3 rounded-xl border border-border bg-card p-5 shadow-card lg:sticky lg:top-28 lg:self-start">
+      <h3 className="font-bold text-navy">Order summary</h3>
+      <ul className="max-h-72 space-y-2 overflow-y-auto text-sm">
+        {items.map((it) => (
+          <li key={it.productId} className="flex gap-3">
+            <img src={it.image} alt="" className="h-12 w-12 rounded object-cover" />
+            <div className="flex-1 text-xs">
+              <p className="line-clamp-2 font-medium text-navy">{it.title}</p>
+              <p className="text-muted-foreground">Qty {it.qty}</p>
+            </div>
+            <span className="text-sm font-semibold">{formatCAD(it.price * it.qty)}</span>
+          </li>
+        ))}
+      </ul>
+      <dl className="space-y-1.5 border-y border-border py-3 text-sm">
+        <div className="flex justify-between"><dt>Subtotal</dt><dd>{formatCAD(subtotal)}</dd></div>
+        <div className="flex justify-between"><dt>Shipping</dt><dd>{shipping === 0 ? "Free" : formatCAD(shipping)}</dd></div>
+        <div className="flex justify-between"><dt>Tax (QC)</dt><dd>{formatCAD(taxes)}</dd></div>
+      </dl>
+      <div className="flex items-baseline justify-between">
+        <span className="font-bold text-navy">Total</span>
+        <span className="text-xl font-extrabold text-navy">{formatCAD(total)}</span>
+      </div>
+      {children}
+    </aside>
   );
 }
