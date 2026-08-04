@@ -623,7 +623,10 @@ export type Database = {
           status: Database["public"]["Enums"]["vendor_status"]
           store_name: string
           stripe_connect_account_id: string | null
+          stripe_connect_last_checked_at: string | null
+          stripe_connect_status: string
           stripe_customer_id: string | null
+          stripe_details_submitted: boolean
           stripe_subscription_id: string | null
           subscription_plan: string | null
           subscription_status: string
@@ -653,7 +656,10 @@ export type Database = {
           status?: Database["public"]["Enums"]["vendor_status"]
           store_name: string
           stripe_connect_account_id?: string | null
+          stripe_connect_last_checked_at?: string | null
+          stripe_connect_status?: string
           stripe_customer_id?: string | null
+          stripe_details_submitted?: boolean
           stripe_subscription_id?: string | null
           subscription_plan?: string | null
           subscription_status?: string
@@ -683,7 +689,10 @@ export type Database = {
           status?: Database["public"]["Enums"]["vendor_status"]
           store_name?: string
           stripe_connect_account_id?: string | null
+          stripe_connect_last_checked_at?: string | null
+          stripe_connect_status?: string
           stripe_customer_id?: string | null
+          stripe_details_submitted?: boolean
           stripe_subscription_id?: string | null
           subscription_plan?: string | null
           subscription_status?: string
