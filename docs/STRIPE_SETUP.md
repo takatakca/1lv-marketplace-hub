@@ -115,3 +115,44 @@ Any future expiry, any CVC.
 - Webhook verifies `Stripe-Signature` with timing-safe comparison and rejects unsigned or replayed events.
 - Vendor subscription checkout requires an authenticated session and enforces `vendor.user_id = auth.uid()` via RLS before creating the session.
 - `stripe_event_log` prevents double-processing of retried webhook deliveries.
+
+## 11. Stripe Connect Express onboarding
+
+Vendors connect a payout account from `/vendor/payouts`. All Stripe calls run
+server-side in `src/lib/stripe-connect.functions.ts`.
+
+### Platform requirements
+- Enable **Connect** in Stripe → Connect → Get started, platform profile completed.
+- Platform account country: **Canada**; connected accounts are created with
+  `country=CA`, `default_currency=cad`, `type=express`.
+- Requested capabilities: `card_payments`, `transfers`.
+
+### Server functions
+| Function | Purpose |
+|---|---|
+| `createStripeConnectAccount` | Creates or reuses the vendor's Express account. Requires auth, vendor ownership, and `vendors.status = 'active'`. |
+| `createStripeConnectAccountLink` | Returns a hosted onboarding URL only. |
+| `refreshStripeConnectStatus` | Re-reads the account and syncs capability flags. |
+
+### Redirect URLs
+- Refresh: `/vendor/payouts?connect=refresh`
+- Return: `/vendor/payouts?connect=success`
+
+### Vendor fields synced
+`stripe_connect_account_id`, `charges_enabled`, `payouts_enabled`,
+`stripe_details_submitted`, `stripe_connect_status`
+(`not_connected` | `onboarding` | `restricted` | `enabled`),
+`stripe_connect_last_checked_at`. These are private — never exposed on the
+public storefront views, and admin sees a readiness badge, not the account ID.
+
+### Testing (test mode)
+1. Set `STRIPE_SECRET_KEY=sk_test_...`.
+2. Approve a vendor (`status = active`) and click **Connect payout account**.
+3. Complete the Stripe test onboarding form (use the "skip / use test data" prompts).
+4. Return to `/vendor/payouts?connect=success` and click **Refresh Stripe status**.
+
+### Remaining before live transfers
+- Transfer scheduling (`transfer_data` / separate `transfers` per vendor order).
+- Refunds and dispute handling against connected accounts.
+- Payout reconciliation against `vendor_orders`.
+- Accepting Stripe's Canadian platform/regulatory obligations.
