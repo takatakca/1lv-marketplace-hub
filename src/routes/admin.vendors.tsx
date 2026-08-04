@@ -51,7 +51,10 @@ function Page() {
         status: (["active", "active", "pending", "active", "suspended", "active"][i % 6]) as string,
         subscription_status: (["active", "active", "none", "past_due", "active", "trialing"][i % 6]) as string,
         subscription_plan: ["Growth", "Scale", "Starter", "Growth", "Scale", "Growth"][i % 6],
-        stripe_customer_id: null, stripe_subscription_id: null, stripe_connect_account_id: null,
+        stripe_customer_id: null, stripe_subscription_id: null,
+        stripe_connect_account_id: i % 2 === 0 ? "demo" : null,
+        stripe_details_submitted: i % 2 === 0, stripe_connect_status: i % 2 === 0 ? "enabled" : "not_connected",
+        stripe_connect_last_checked_at: null,
         payouts_enabled: i % 2 === 0, charges_enabled: i % 2 === 0,
         commission_rate: 0.1, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       }))
@@ -96,7 +99,13 @@ function Page() {
             ? "destructive"
             : "muted",
       ),
-      payout: v.payouts_enabled ? badge("ready", "success") : badge("not connected", "muted"),
+      payout: (() => {
+        const st = (v.stripe_connect_status as string | undefined) ?? (v.stripe_connect_account_id ? "onboarding" : "not_connected");
+        if (v.payouts_enabled && v.charges_enabled) return badge("Ready", "success");
+        if (st === "restricted") return badge("Restricted", "destructive");
+        if (st === "onboarding" || v.stripe_connect_account_id) return badge("Onboarding", "deal");
+        return badge("Not connected", "muted");
+      })(),
       missing: missing.length ? badge(`${missing.length} missing`, "deal") : badge("complete", "success"),
       links: (
         <div className="flex gap-2 text-xs">

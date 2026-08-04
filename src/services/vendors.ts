@@ -26,6 +26,9 @@ export type VendorRecord = {
   stripe_connect_account_id: string | null;
   payouts_enabled: boolean;
   charges_enabled: boolean;
+  stripe_details_submitted?: boolean;
+  stripe_connect_status?: string;
+  stripe_connect_last_checked_at?: string | null;
   commission_rate: number;
   created_at: string;
   updated_at: string;
