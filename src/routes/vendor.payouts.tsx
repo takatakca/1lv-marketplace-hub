@@ -50,6 +50,7 @@ function Page() {
   const [vendor, setVendor] = useState<VendorRecord | null>(null);
   const [stats, setStats] = useState<VendorStats | null>(null);
   const [periods, setPeriods] = useState<PayoutPeriod[] | null>(null);
+  const [payouts, setPayouts] = useState<PayoutRecord[]>([]);
   const [loading, setLoading] = useState(!demo);
   const [connectStatus, setConnectStatus] = useState<ConnectStatus>("not_connected");
   const [connectBusy, setConnectBusy] = useState(false);
@@ -63,8 +64,12 @@ function Page() {
         const v = await getMyVendor(user!.id);
         setVendor(v);
         if (v) {
-          const [s, p] = await Promise.all([getVendorStats(v.id), getPayoutPeriods(v.id)]);
-          setStats(s); setPeriods(p);
+          const [s, p, po] = await Promise.all([
+            getVendorStats(v.id),
+            getPayoutPeriods(v.id),
+            listVendorPayouts(v.id),
+          ]);
+          setStats(s); setPeriods(p); setPayouts(po);
           setConnectStatus((v.stripe_connect_status as ConnectStatus | undefined) ?? "not_connected");
         }
       } finally { setLoading(false); }
