@@ -156,3 +156,68 @@ public storefront views, and admin sees a readiness badge, not the account ID.
 - Refunds and dispute handling against connected accounts.
 - Payout reconciliation against `vendor_orders`.
 - Accepting Stripe's Canadian platform/regulatory obligations.
+
+## 12. Payout engine (manual release)
+
+Automatic transfers are **off**. Payouts are generated, reviewed, approved and
+released one at a time by an admin.
+
+### Data model
+| Table | Purpose |
+|---|---|
+| `payouts` | One row per vendor per period: gross, commission, refunds, dispute holds, net, status, transfer id, approver, timestamps. |
+| `payout_items` | Vendor orders included in a payout. `vendor_order_id` is **unique** — a vendor order can never be paid twice. |
+| `payout_adjustments` | Negative carry-forward amounts (refund on an already-paid payout, dispute clawback). Applied to the next generated payout. |
+| `payout_settings` | `hold_days` (default 7) and `auto_transfers_enabled` (false). |
+
+`vendor_orders` gained `delivered_at` (stamped by trigger), `refund_amount`
+and `dispute_hold_amount`.
+
+### Eligibility
+A vendor order enters a payout only when **all** are true:
+- `vendor_orders.status = 'delivered'`
+- `delivered_at <= now() - hold_days`
+- parent `orders.payment_status = 'paid'`
+- `vendors.payouts_enabled = true`
+- `dispute_hold_amount = 0`
+- not already present in `payout_items`
+
+### Flow
+1. Admin opens `/admin/payouts`, picks a period, clicks **Generate payouts**
+   (`generateVendorPayouts`). Rows are created as `pending_review`. No Stripe call.
+2. Admin **approves**, **holds** or **cancels** (`setPayoutStatus`). Paid or
+   in-flight payouts cannot be changed.
+3. Admin clicks **Send transfer** (`processApprovedPayout`). It refuses unless the
+   payout is `approved`, `net_amount > 0`, has no `stripe_transfer_id`, and the
+   vendor has `payouts_enabled` plus a Connect account. Status moves
+   `processing` → `paid` (with `stripe_transfer_id`, `paid_at`) or
+   `failed` + `failure_reason`.
+4. With no `STRIPE_SECRET_KEY`, the function returns **setup-required** and
+   leaves the payout untouched.
+
+### Reconciliation
+`/admin/payouts` labels each row: reconciled, awaiting review, paid but no
+transfer reference, duplicate transfer reference, transfer failed, paid but
+missing paid date, or net amount zero/negative. Labels only — nothing is mutated.
+
+### Refunds & disputes (prepared, not implemented)
+- A refund on a vendor order sets `vendor_orders.refund_amount`; it is deducted
+  from that vendor order's net in the next payout.
+- A dispute sets `dispute_hold_amount`, which makes the vendor order ineligible
+  until the hold is cleared.
+- If the payout was **already paid**, insert a negative row into
+  `payout_adjustments` — it is summed into the next generated payout for that
+  vendor and stamped with `applied_payout_id`.
+
+### Security
+- Vendors can read only their own payouts, items and adjustments (RLS).
+- Customers have no access at all.
+- All mutations run in admin-only server functions that verify `has_role(admin)`
+  before touching the service-role client.
+- Stripe secret keys and Connect account ids are never returned to the client.
+
+### Before automatic weekly payouts
+- Refund and dispute handling implemented end to end.
+- Scheduler (pg_cron → `/api/public/*` route) with per-run locking.
+- Transfer failure retry/alerting policy.
+- Live reconciliation against the Stripe transfers API (currently local-state only).
