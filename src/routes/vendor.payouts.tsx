@@ -163,13 +163,53 @@ function Page() {
 
       <div className="mt-8 rounded-xl border border-border bg-card p-5">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-navy">Payout history (weekly)</h2>
+          <h2 className="text-lg font-bold text-navy">
+            {payouts.length > 0 ? "Payout history" : "Payout history (estimated weekly)"}
+          </h2>
           <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-            <Info size={12} /> Stripe transfers not connected yet.
+            <Info size={12} />{" "}
+            {payouts.length > 0 ? "Transfers are released manually by 1LV.CA." : "No payout records issued yet."}
           </span>
         </div>
         {loading ? (
           <div className="text-sm text-muted-foreground">Loading…</div>
+        ) : payouts.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-muted-foreground">
+                <tr className="border-b border-border">
+                  <th className="py-2 text-left font-medium">Period</th>
+                  <th className="py-2 text-right font-medium">Gross</th>
+                  <th className="py-2 text-right font-medium">Commission</th>
+                  <th className="py-2 text-right font-medium">Refunds</th>
+                  <th className="py-2 text-right font-medium">Holds</th>
+                  <th className="py-2 text-right font-medium">Net</th>
+                  <th className="py-2 text-right font-medium">Paid</th>
+                  <th className="py-2 text-right font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payouts.map((p) => (
+                  <tr key={p.id} className="border-b border-border/50">
+                    <td className="py-2 font-medium text-navy">{p.period_start} → {p.period_end}</td>
+                    <td className="py-2 text-right">{formatCAD(Number(p.gross_amount))}</td>
+                    <td className="py-2 text-right text-muted-foreground">{formatCAD(Number(p.commission_amount))}</td>
+                    <td className="py-2 text-right text-muted-foreground">{formatCAD(Number(p.refund_amount))}</td>
+                    <td className="py-2 text-right text-muted-foreground">{formatCAD(Number(p.dispute_hold_amount))}</td>
+                    <td className="py-2 text-right font-semibold text-navy">{formatCAD(Number(p.net_amount))}</td>
+                    <td className="py-2 text-right text-muted-foreground">
+                      {p.paid_at ? new Date(p.paid_at).toLocaleDateString() : "—"}
+                    </td>
+                    <td className="py-2 text-right">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${payoutStatusClass(p.status)}`}>
+                        {payoutStatusLabel(p.status)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -200,9 +240,13 @@ function Page() {
                 ))}
               </tbody>
             </table>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Estimates only — based on delivered orders. Official payout records appear here once issued.
+            </p>
           </div>
         )}
       </div>
+
 
       <div className="mt-8 rounded-xl border border-border bg-card p-5">
         <h2 className="mb-1 text-lg font-bold text-navy">Stripe Connect (Express)</h2>
