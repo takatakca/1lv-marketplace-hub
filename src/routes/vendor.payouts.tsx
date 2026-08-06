@@ -16,6 +16,12 @@ import {
   connectLabel,
   type ConnectStatus,
 } from "@/services/connect";
+import {
+  listVendorPayouts,
+  payoutStatusClass,
+  payoutStatusLabel,
+  type PayoutRecord,
+} from "@/services/payouts";
 
 function buildDemoPeriods(): PayoutPeriod[] {
   const out: PayoutPeriod[] = [];
