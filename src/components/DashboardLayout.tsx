@@ -8,6 +8,7 @@ import {
   Settings,
   Upload,
   Crown,
+  Wallet,
   type LucideIcon,
   ArrowLeft,
 } from "lucide-react";
@@ -36,6 +37,7 @@ const adminItems: Item[] = [
   { to: "/admin/categories", icon: Package, label: "Categories" },
   { to: "/admin/subscriptions", icon: Crown, label: "Subscriptions" },
   { to: "/admin/commissions", icon: DollarSign, label: "Commissions" },
+  { to: "/admin/payouts", icon: Wallet, label: "Payouts" },
   { to: "/admin/coupons", icon: DollarSign, label: "Coupons" },
   { to: "/admin/disputes", icon: BarChart3, label: "Disputes" },
   { to: "/admin/integrations", icon: Settings, label: "Integrations" },

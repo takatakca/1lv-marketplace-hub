@@ -197,6 +197,225 @@ export type Database = {
         }
         Relationships: []
       }
+      payout_adjustments: {
+        Row: {
+          amount: number
+          applied_payout_id: string | null
+          created_at: string
+          id: string
+          kind: string
+          note: string | null
+          payout_id: string | null
+          vendor_id: string
+          vendor_order_id: string | null
+        }
+        Insert: {
+          amount: number
+          applied_payout_id?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          note?: string | null
+          payout_id?: string | null
+          vendor_id: string
+          vendor_order_id?: string | null
+        }
+        Update: {
+          amount?: number
+          applied_payout_id?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          note?: string | null
+          payout_id?: string | null
+          vendor_id?: string
+          vendor_order_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payout_adjustments_applied_payout_id_fkey"
+            columns: ["applied_payout_id"]
+            isOneToOne: false
+            referencedRelation: "payouts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payout_adjustments_payout_id_fkey"
+            columns: ["payout_id"]
+            isOneToOne: false
+            referencedRelation: "payouts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payout_adjustments_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "public_vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payout_adjustments_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payout_adjustments_vendor_order_id_fkey"
+            columns: ["vendor_order_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payout_items: {
+        Row: {
+          commission_amount: number
+          created_at: string
+          gross_amount: number
+          id: string
+          net_amount: number
+          payout_id: string
+          refund_amount: number
+          vendor_order_id: string
+        }
+        Insert: {
+          commission_amount?: number
+          created_at?: string
+          gross_amount?: number
+          id?: string
+          net_amount?: number
+          payout_id: string
+          refund_amount?: number
+          vendor_order_id: string
+        }
+        Update: {
+          commission_amount?: number
+          created_at?: string
+          gross_amount?: number
+          id?: string
+          net_amount?: number
+          payout_id?: string
+          refund_amount?: number
+          vendor_order_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payout_items_payout_id_fkey"
+            columns: ["payout_id"]
+            isOneToOne: false
+            referencedRelation: "payouts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payout_items_vendor_order_id_fkey"
+            columns: ["vendor_order_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payout_settings: {
+        Row: {
+          auto_transfers_enabled: boolean
+          hold_days: number
+          id: boolean
+          updated_at: string
+        }
+        Insert: {
+          auto_transfers_enabled?: boolean
+          hold_days?: number
+          id?: boolean
+          updated_at?: string
+        }
+        Update: {
+          auto_transfers_enabled?: boolean
+          hold_days?: number
+          id?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      payouts: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          commission_amount: number
+          created_at: string
+          currency: string
+          dispute_hold_amount: number
+          failure_reason: string | null
+          gross_amount: number
+          id: string
+          net_amount: number
+          paid_at: string | null
+          period_end: string
+          period_start: string
+          refund_amount: number
+          status: Database["public"]["Enums"]["payout_status"]
+          stripe_transfer_id: string | null
+          updated_at: string
+          vendor_id: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          commission_amount?: number
+          created_at?: string
+          currency?: string
+          dispute_hold_amount?: number
+          failure_reason?: string | null
+          gross_amount?: number
+          id?: string
+          net_amount?: number
+          paid_at?: string | null
+          period_end: string
+          period_start: string
+          refund_amount?: number
+          status?: Database["public"]["Enums"]["payout_status"]
+          stripe_transfer_id?: string | null
+          updated_at?: string
+          vendor_id: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          commission_amount?: number
+          created_at?: string
+          currency?: string
+          dispute_hold_amount?: number
+          failure_reason?: string | null
+          gross_amount?: number
+          id?: string
+          net_amount?: number
+          paid_at?: string | null
+          period_end?: string
+          period_start?: string
+          refund_amount?: number
+          status?: Database["public"]["Enums"]["payout_status"]
+          stripe_transfer_id?: string | null
+          updated_at?: string
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payouts_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "public_vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payouts_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_import_job_rows: {
         Row: {
           created_at: string
@@ -540,8 +759,11 @@ export type Database = {
           carrier: string | null
           commission_amount: number
           created_at: string
+          delivered_at: string | null
+          dispute_hold_amount: number
           id: string
           order_id: string
+          refund_amount: number
           status: Database["public"]["Enums"]["vendor_order_status"]
           subtotal: number
           tracking_number: string | null
@@ -553,8 +775,11 @@ export type Database = {
           carrier?: string | null
           commission_amount?: number
           created_at?: string
+          delivered_at?: string | null
+          dispute_hold_amount?: number
           id?: string
           order_id: string
+          refund_amount?: number
           status?: Database["public"]["Enums"]["vendor_order_status"]
           subtotal?: number
           tracking_number?: string | null
@@ -566,8 +791,11 @@ export type Database = {
           carrier?: string | null
           commission_amount?: number
           created_at?: string
+          delivered_at?: string | null
+          dispute_hold_amount?: number
           id?: string
           order_id?: string
+          refund_amount?: number
           status?: Database["public"]["Enums"]["vendor_order_status"]
           subtotal?: number
           tracking_number?: string | null
@@ -860,6 +1088,15 @@ export type Database = {
         | "failed"
         | "processing"
         | "partially_refunded"
+      payout_status:
+        | "draft"
+        | "pending_review"
+        | "approved"
+        | "processing"
+        | "paid"
+        | "failed"
+        | "held"
+        | "cancelled"
       product_status:
         | "draft"
         | "pending_review"
@@ -1024,6 +1261,16 @@ export const Constants = {
         "failed",
         "processing",
         "partially_refunded",
+      ],
+      payout_status: [
+        "draft",
+        "pending_review",
+        "approved",
+        "processing",
+        "paid",
+        "failed",
+        "held",
+        "cancelled",
       ],
       product_status: [
         "draft",
