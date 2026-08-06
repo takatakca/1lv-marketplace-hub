@@ -8,6 +8,7 @@ import {
   Settings,
   Upload,
   Crown,
+  Wallet,
   type LucideIcon,
   ArrowLeft,
 } from "lucide-react";
