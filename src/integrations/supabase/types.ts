@@ -50,6 +50,171 @@ export type Database = {
         }
         Relationships: []
       }
+      dispute_messages: {
+        Row: {
+          attachment_url: string | null
+          created_at: string
+          dispute_id: string
+          id: string
+          internal_only: boolean
+          message: string
+          sender_role: string
+          sender_user_id: string | null
+        }
+        Insert: {
+          attachment_url?: string | null
+          created_at?: string
+          dispute_id: string
+          id?: string
+          internal_only?: boolean
+          message: string
+          sender_role?: string
+          sender_user_id?: string | null
+        }
+        Update: {
+          attachment_url?: string | null
+          created_at?: string
+          dispute_id?: string
+          id?: string
+          internal_only?: boolean
+          message?: string
+          sender_role?: string
+          sender_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dispute_messages_dispute_id_fkey"
+            columns: ["dispute_id"]
+            isOneToOne: false
+            referencedRelation: "disputes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      disputes: {
+        Row: {
+          approved_refund_amount: number
+          created_at: string
+          customer_id: string | null
+          description: string | null
+          id: string
+          order_id: string
+          reason: string
+          requested_refund_amount: number
+          resolution_note: string | null
+          resolved_at: string | null
+          status: Database["public"]["Enums"]["dispute_status"]
+          updated_at: string
+          vendor_id: string
+          vendor_order_id: string | null
+        }
+        Insert: {
+          approved_refund_amount?: number
+          created_at?: string
+          customer_id?: string | null
+          description?: string | null
+          id?: string
+          order_id: string
+          reason: string
+          requested_refund_amount?: number
+          resolution_note?: string | null
+          resolved_at?: string | null
+          status?: Database["public"]["Enums"]["dispute_status"]
+          updated_at?: string
+          vendor_id: string
+          vendor_order_id?: string | null
+        }
+        Update: {
+          approved_refund_amount?: number
+          created_at?: string
+          customer_id?: string | null
+          description?: string | null
+          id?: string
+          order_id?: string
+          reason?: string
+          requested_refund_amount?: number
+          resolution_note?: string | null
+          resolved_at?: string | null
+          status?: Database["public"]["Enums"]["dispute_status"]
+          updated_at?: string
+          vendor_id?: string
+          vendor_order_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "disputes_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "disputes_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "public_vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "disputes_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "disputes_vendor_order_id_fkey"
+            columns: ["vendor_order_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          dispute_id: string | null
+          id: string
+          kind: string
+          link: string | null
+          read_at: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          dispute_id?: string | null
+          id?: string
+          kind: string
+          link?: string | null
+          read_at?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          dispute_id?: string | null
+          id?: string
+          kind?: string
+          link?: string | null
+          read_at?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_dispute_id_fkey"
+            columns: ["dispute_id"]
+            isOneToOne: false
+            referencedRelation: "disputes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           carrier: string | null
@@ -658,6 +823,85 @@ export type Database = {
         }
         Relationships: []
       }
+      refund_records: {
+        Row: {
+          amount: number
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          created_by: string | null
+          currency: string
+          dispute_id: string | null
+          failure_reason: string | null
+          id: string
+          order_id: string
+          processed_at: string | null
+          reason: string | null
+          status: Database["public"]["Enums"]["refund_status"]
+          stripe_refund_id: string | null
+          updated_at: string
+          vendor_order_id: string | null
+        }
+        Insert: {
+          amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          dispute_id?: string | null
+          failure_reason?: string | null
+          id?: string
+          order_id: string
+          processed_at?: string | null
+          reason?: string | null
+          status?: Database["public"]["Enums"]["refund_status"]
+          stripe_refund_id?: string | null
+          updated_at?: string
+          vendor_order_id?: string | null
+        }
+        Update: {
+          amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          dispute_id?: string | null
+          failure_reason?: string | null
+          id?: string
+          order_id?: string
+          processed_at?: string | null
+          reason?: string | null
+          status?: Database["public"]["Enums"]["refund_status"]
+          stripe_refund_id?: string | null
+          updated_at?: string
+          vendor_order_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "refund_records_dispute_id_fkey"
+            columns: ["dispute_id"]
+            isOneToOne: false
+            referencedRelation: "disputes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refund_records_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refund_records_vendor_order_id_fkey"
+            columns: ["vendor_order_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stripe_event_log: {
         Row: {
           id: string
@@ -1050,6 +1294,10 @@ export type Database = {
       }
     }
     Functions: {
+      can_access_dispute: {
+        Args: { _dispute_id: string; _user_id: string }
+        Returns: boolean
+      }
       get_vendor_commission_rates: {
         Args: { _vendor_ids: string[] }
         Returns: {
@@ -1065,9 +1313,22 @@ export type Database = {
         Returns: boolean
       }
       lookup_guest_order: { Args: { _order_number: string }; Returns: Json }
+      owns_vendor: {
+        Args: { _user_id: string; _vendor_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "vendor" | "customer"
+      dispute_status:
+        | "open"
+        | "under_review"
+        | "waiting_customer"
+        | "waiting_vendor"
+        | "resolved_customer"
+        | "resolved_vendor"
+        | "rejected"
+        | "cancelled"
       fulfillment_status:
         | "pending"
         | "processing"
@@ -1103,6 +1364,13 @@ export type Database = {
         | "active"
         | "rejected"
         | "archived"
+      refund_status:
+        | "requested"
+        | "approved"
+        | "processing"
+        | "refunded"
+        | "failed"
+        | "cancelled"
       vendor_order_status:
         | "pending"
         | "accepted"
@@ -1239,6 +1507,16 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "vendor", "customer"],
+      dispute_status: [
+        "open",
+        "under_review",
+        "waiting_customer",
+        "waiting_vendor",
+        "resolved_customer",
+        "resolved_vendor",
+        "rejected",
+        "cancelled",
+      ],
       fulfillment_status: [
         "pending",
         "processing",
@@ -1278,6 +1556,14 @@ export const Constants = {
         "active",
         "rejected",
         "archived",
+      ],
+      refund_status: [
+        "requested",
+        "approved",
+        "processing",
+        "refunded",
+        "failed",
+        "cancelled",
       ],
       vendor_order_status: [
         "pending",

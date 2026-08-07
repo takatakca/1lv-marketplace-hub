@@ -23,6 +23,7 @@ const vendorItems: Item[] = [
   { to: "/vendor/orders", icon: ShoppingBag, label: "Orders" },
   { to: "/vendor/payouts", icon: DollarSign, label: "Payouts" },
   { to: "/vendor/analytics", icon: BarChart3, label: "Analytics" },
+  { to: "/vendor/disputes", icon: BarChart3, label: "Disputes" },
   { to: "/vendor/imports", icon: Upload, label: "Imports" },
   { to: "/vendor/subscription", icon: Crown, label: "Subscription" },
   { to: "/vendor/settings", icon: Settings, label: "Settings" },

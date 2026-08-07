@@ -6,6 +6,7 @@ import { getOrderByNumber } from "@/services/checkout";
 import { createPaymentIntent, isStripeConfigured } from "@/services/payments";
 import { PaymentBadge, isUnpaid } from "@/components/PaymentBadge";
 import { StripePaymentForm } from "@/components/StripePaymentForm";
+import { ReportProblem } from "@/components/ReportProblem";
 import { formatCAD } from "@/lib/data";
 
 export const Route = createFileRoute("/orders/$id")({ component: OrderDetail });
@@ -62,7 +63,9 @@ function OrderDetail() {
                 ))}
               </ul>
             </div>
+            {order.id && <ReportProblem orderId={order.id} paymentStatus={order.payment_status} />}
           </div>
+
         ) : (
           <div className="mt-6 rounded-xl border border-border bg-card p-6">
             <p className="text-sm text-muted-foreground">

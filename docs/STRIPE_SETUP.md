@@ -221,3 +221,32 @@ missing paid date, or net amount zero/negative. Labels only — nothing is mutat
 - Scheduler (pg_cron → `/api/public/*` route) with per-run locking.
 - Transfer failure retry/alerting policy.
 - Live reconciliation against the Stripe transfers API (currently local-state only).
+
+## 13. Disputes & refunds
+
+**Lifecycle:** `open → under_review → waiting_customer / waiting_vendor → resolved_customer | resolved_vendor | rejected | cancelled`.
+
+- Customers open a dispute from their order detail page (paid orders only, one open dispute per vendor split).
+- Vendors reply and add evidence at `/vendor/disputes`; they can never issue refunds and never see internal admin notes (enforced by RLS, not the UI).
+- Admins review at `/admin/disputes`: status changes, internal notes, holds, refund approval and processing.
+
+**Payout holds**
+- Opening a dispute sets `vendor_orders.dispute_hold_amount`; the payout generator skips any vendor_order with a non-zero hold.
+- If the vendor_order already sits in a payout that is not paid, that payout flips to `held`.
+- Resolving for the vendor, or rejecting the dispute, releases the hold and returns the payout to `pending_review`.
+
+**Refunds**
+- Approving a refund creates a `refund_records` row with status `approved`. Nothing hits Stripe yet.
+- `processApprovedRefund(refundId)` (admin only) creates the Stripe refund from the parent order's PaymentIntent/charge. Refunds are capped at the order's remaining refundable amount, and a record with a `stripe_refund_id` can never be processed twice.
+- Order payment status becomes `partially_refunded` or `refunded` once money actually moves.
+- Without `STRIPE_SECRET_KEY`, processing returns `setup-required` and the record stays safely `approved`.
+
+**Negative adjustments after payout**
+- If the vendor_order was already paid out, refund approval writes a negative row into `payout_adjustments`, which the next generated payout subtracts automatically.
+
+**Notifications** are written to the `notifications` table (dispute opened/replied/resolved, refund approved/processed/failed). No email delivery yet.
+
+**Remaining before automatic weekly payouts**
+- pg_cron scheduler with per-run locking
+- transfer failure retry + alerting policy
+- live reconciliation against the Stripe transfers API

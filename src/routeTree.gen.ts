@@ -45,6 +45,7 @@ import { Route as VendorPayoutsRouteImport } from './routes/vendor.payouts'
 import { Route as VendorOrdersRouteImport } from './routes/vendor.orders'
 import { Route as VendorOnboardingRouteImport } from './routes/vendor.onboarding'
 import { Route as VendorImportsRouteImport } from './routes/vendor.imports'
+import { Route as VendorDisputesRouteImport } from './routes/vendor.disputes'
 import { Route as VendorAnalyticsRouteImport } from './routes/vendor.analytics'
 import { Route as StoreSlugRouteImport } from './routes/store.$slug'
 import { Route as ProductSlugRouteImport } from './routes/product.$slug'
@@ -64,8 +65,10 @@ import { Route as AdminCommissionsRouteImport } from './routes/admin.commissions
 import { Route as AdminCategoriesRouteImport } from './routes/admin.categories'
 import { Route as VendorProductsIndexRouteImport } from './routes/vendor.products.index'
 import { Route as VendorOrdersIndexRouteImport } from './routes/vendor.orders.index'
+import { Route as VendorDisputesIndexRouteImport } from './routes/vendor.disputes.index'
 import { Route as VendorProductsNewRouteImport } from './routes/vendor.products.new'
 import { Route as VendorOrdersIdRouteImport } from './routes/vendor.orders.$id'
+import { Route as VendorDisputesIdRouteImport } from './routes/vendor.disputes.$id'
 import { Route as VendorProductsIdEditRouteImport } from './routes/vendor.products.$id.edit'
 import { Route as ApiPublicWebhooksStripeRouteImport } from './routes/api/public/webhooks.stripe'
 
@@ -249,6 +252,11 @@ const VendorImportsRoute = VendorImportsRouteImport.update({
   path: '/imports',
   getParentRoute: () => VendorRoute,
 } as any)
+const VendorDisputesRoute = VendorDisputesRouteImport.update({
+  id: '/disputes',
+  path: '/disputes',
+  getParentRoute: () => VendorRoute,
+} as any)
 const VendorAnalyticsRoute = VendorAnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
@@ -344,6 +352,11 @@ const VendorOrdersIndexRoute = VendorOrdersIndexRouteImport.update({
   path: '/',
   getParentRoute: () => VendorOrdersRoute,
 } as any)
+const VendorDisputesIndexRoute = VendorDisputesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => VendorDisputesRoute,
+} as any)
 const VendorProductsNewRoute = VendorProductsNewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -353,6 +366,11 @@ const VendorOrdersIdRoute = VendorOrdersIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => VendorOrdersRoute,
+} as any)
+const VendorDisputesIdRoute = VendorDisputesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => VendorDisputesRoute,
 } as any)
 const VendorProductsIdEditRoute = VendorProductsIdEditRouteImport.update({
   id: '/$id/edit',
@@ -410,6 +428,7 @@ export interface FileRoutesByFullPath {
   '/product/$slug': typeof ProductSlugRoute
   '/store/$slug': typeof StoreSlugRoute
   '/vendor/analytics': typeof VendorAnalyticsRoute
+  '/vendor/disputes': typeof VendorDisputesRouteWithChildren
   '/vendor/imports': typeof VendorImportsRoute
   '/vendor/onboarding': typeof VendorOnboardingRoute
   '/vendor/orders': typeof VendorOrdersRouteWithChildren
@@ -419,8 +438,10 @@ export interface FileRoutesByFullPath {
   '/vendor/subscription': typeof VendorSubscriptionRoute
   '/admin/': typeof AdminIndexRoute
   '/vendor/': typeof VendorIndexRoute
+  '/vendor/disputes/$id': typeof VendorDisputesIdRoute
   '/vendor/orders/$id': typeof VendorOrdersIdRoute
   '/vendor/products/new': typeof VendorProductsNewRoute
+  '/vendor/disputes/': typeof VendorDisputesIndexRoute
   '/vendor/orders/': typeof VendorOrdersIndexRoute
   '/vendor/products/': typeof VendorProductsIndexRoute
   '/api/public/webhooks/stripe': typeof ApiPublicWebhooksStripeRoute
@@ -476,8 +497,10 @@ export interface FileRoutesByTo {
   '/vendor/subscription': typeof VendorSubscriptionRoute
   '/admin': typeof AdminIndexRoute
   '/vendor': typeof VendorIndexRoute
+  '/vendor/disputes/$id': typeof VendorDisputesIdRoute
   '/vendor/orders/$id': typeof VendorOrdersIdRoute
   '/vendor/products/new': typeof VendorProductsNewRoute
+  '/vendor/disputes': typeof VendorDisputesIndexRoute
   '/vendor/orders': typeof VendorOrdersIndexRoute
   '/vendor/products': typeof VendorProductsIndexRoute
   '/api/public/webhooks/stripe': typeof ApiPublicWebhooksStripeRoute
@@ -529,6 +552,7 @@ export interface FileRoutesById {
   '/product/$slug': typeof ProductSlugRoute
   '/store/$slug': typeof StoreSlugRoute
   '/vendor/analytics': typeof VendorAnalyticsRoute
+  '/vendor/disputes': typeof VendorDisputesRouteWithChildren
   '/vendor/imports': typeof VendorImportsRoute
   '/vendor/onboarding': typeof VendorOnboardingRoute
   '/vendor/orders': typeof VendorOrdersRouteWithChildren
@@ -538,8 +562,10 @@ export interface FileRoutesById {
   '/vendor/subscription': typeof VendorSubscriptionRoute
   '/admin/': typeof AdminIndexRoute
   '/vendor/': typeof VendorIndexRoute
+  '/vendor/disputes/$id': typeof VendorDisputesIdRoute
   '/vendor/orders/$id': typeof VendorOrdersIdRoute
   '/vendor/products/new': typeof VendorProductsNewRoute
+  '/vendor/disputes/': typeof VendorDisputesIndexRoute
   '/vendor/orders/': typeof VendorOrdersIndexRoute
   '/vendor/products/': typeof VendorProductsIndexRoute
   '/api/public/webhooks/stripe': typeof ApiPublicWebhooksStripeRoute
@@ -592,6 +618,7 @@ export interface FileRouteTypes {
     | '/product/$slug'
     | '/store/$slug'
     | '/vendor/analytics'
+    | '/vendor/disputes'
     | '/vendor/imports'
     | '/vendor/onboarding'
     | '/vendor/orders'
@@ -601,8 +628,10 @@ export interface FileRouteTypes {
     | '/vendor/subscription'
     | '/admin/'
     | '/vendor/'
+    | '/vendor/disputes/$id'
     | '/vendor/orders/$id'
     | '/vendor/products/new'
+    | '/vendor/disputes/'
     | '/vendor/orders/'
     | '/vendor/products/'
     | '/api/public/webhooks/stripe'
@@ -658,8 +687,10 @@ export interface FileRouteTypes {
     | '/vendor/subscription'
     | '/admin'
     | '/vendor'
+    | '/vendor/disputes/$id'
     | '/vendor/orders/$id'
     | '/vendor/products/new'
+    | '/vendor/disputes'
     | '/vendor/orders'
     | '/vendor/products'
     | '/api/public/webhooks/stripe'
@@ -710,6 +741,7 @@ export interface FileRouteTypes {
     | '/product/$slug'
     | '/store/$slug'
     | '/vendor/analytics'
+    | '/vendor/disputes'
     | '/vendor/imports'
     | '/vendor/onboarding'
     | '/vendor/orders'
@@ -719,8 +751,10 @@ export interface FileRouteTypes {
     | '/vendor/subscription'
     | '/admin/'
     | '/vendor/'
+    | '/vendor/disputes/$id'
     | '/vendor/orders/$id'
     | '/vendor/products/new'
+    | '/vendor/disputes/'
     | '/vendor/orders/'
     | '/vendor/products/'
     | '/api/public/webhooks/stripe'
@@ -1015,6 +1049,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VendorImportsRouteImport
       parentRoute: typeof VendorRoute
     }
+    '/vendor/disputes': {
+      id: '/vendor/disputes'
+      path: '/disputes'
+      fullPath: '/vendor/disputes'
+      preLoaderRoute: typeof VendorDisputesRouteImport
+      parentRoute: typeof VendorRoute
+    }
     '/vendor/analytics': {
       id: '/vendor/analytics'
       path: '/analytics'
@@ -1148,6 +1189,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VendorOrdersIndexRouteImport
       parentRoute: typeof VendorOrdersRoute
     }
+    '/vendor/disputes/': {
+      id: '/vendor/disputes/'
+      path: '/'
+      fullPath: '/vendor/disputes/'
+      preLoaderRoute: typeof VendorDisputesIndexRouteImport
+      parentRoute: typeof VendorDisputesRoute
+    }
     '/vendor/products/new': {
       id: '/vendor/products/new'
       path: '/new'
@@ -1161,6 +1209,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/vendor/orders/$id'
       preLoaderRoute: typeof VendorOrdersIdRouteImport
       parentRoute: typeof VendorOrdersRoute
+    }
+    '/vendor/disputes/$id': {
+      id: '/vendor/disputes/$id'
+      path: '/$id'
+      fullPath: '/vendor/disputes/$id'
+      preLoaderRoute: typeof VendorDisputesIdRouteImport
+      parentRoute: typeof VendorDisputesRoute
     }
     '/vendor/products/$id/edit': {
       id: '/vendor/products/$id/edit'
@@ -1224,6 +1279,20 @@ const OrdersRouteChildren: OrdersRouteChildren = {
 const OrdersRouteWithChildren =
   OrdersRoute._addFileChildren(OrdersRouteChildren)
 
+interface VendorDisputesRouteChildren {
+  VendorDisputesIdRoute: typeof VendorDisputesIdRoute
+  VendorDisputesIndexRoute: typeof VendorDisputesIndexRoute
+}
+
+const VendorDisputesRouteChildren: VendorDisputesRouteChildren = {
+  VendorDisputesIdRoute: VendorDisputesIdRoute,
+  VendorDisputesIndexRoute: VendorDisputesIndexRoute,
+}
+
+const VendorDisputesRouteWithChildren = VendorDisputesRoute._addFileChildren(
+  VendorDisputesRouteChildren,
+)
+
 interface VendorOrdersRouteChildren {
   VendorOrdersIdRoute: typeof VendorOrdersIdRoute
   VendorOrdersIndexRoute: typeof VendorOrdersIndexRoute
@@ -1256,6 +1325,7 @@ const VendorProductsRouteWithChildren = VendorProductsRoute._addFileChildren(
 
 interface VendorRouteChildren {
   VendorAnalyticsRoute: typeof VendorAnalyticsRoute
+  VendorDisputesRoute: typeof VendorDisputesRouteWithChildren
   VendorImportsRoute: typeof VendorImportsRoute
   VendorOnboardingRoute: typeof VendorOnboardingRoute
   VendorOrdersRoute: typeof VendorOrdersRouteWithChildren
@@ -1268,6 +1338,7 @@ interface VendorRouteChildren {
 
 const VendorRouteChildren: VendorRouteChildren = {
   VendorAnalyticsRoute: VendorAnalyticsRoute,
+  VendorDisputesRoute: VendorDisputesRouteWithChildren,
   VendorImportsRoute: VendorImportsRoute,
   VendorOnboardingRoute: VendorOnboardingRoute,
   VendorOrdersRoute: VendorOrdersRouteWithChildren,
