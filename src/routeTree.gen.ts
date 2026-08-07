@@ -68,6 +68,7 @@ import { Route as VendorOrdersIndexRouteImport } from './routes/vendor.orders.in
 import { Route as VendorDisputesIndexRouteImport } from './routes/vendor.disputes.index'
 import { Route as VendorProductsNewRouteImport } from './routes/vendor.products.new'
 import { Route as VendorOrdersIdRouteImport } from './routes/vendor.orders.$id'
+import { Route as VendorDisputesIdRouteImport } from './routes/vendor.disputes.$id'
 import { Route as VendorProductsIdEditRouteImport } from './routes/vendor.products.$id.edit'
 import { Route as ApiPublicWebhooksStripeRouteImport } from './routes/api/public/webhooks.stripe'
 
@@ -366,6 +367,11 @@ const VendorOrdersIdRoute = VendorOrdersIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => VendorOrdersRoute,
 } as any)
+const VendorDisputesIdRoute = VendorDisputesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => VendorDisputesRoute,
+} as any)
 const VendorProductsIdEditRoute = VendorProductsIdEditRouteImport.update({
   id: '/$id/edit',
   path: '/$id/edit',
@@ -432,6 +438,7 @@ export interface FileRoutesByFullPath {
   '/vendor/subscription': typeof VendorSubscriptionRoute
   '/admin/': typeof AdminIndexRoute
   '/vendor/': typeof VendorIndexRoute
+  '/vendor/disputes/$id': typeof VendorDisputesIdRoute
   '/vendor/orders/$id': typeof VendorOrdersIdRoute
   '/vendor/products/new': typeof VendorProductsNewRoute
   '/vendor/disputes/': typeof VendorDisputesIndexRoute
@@ -490,6 +497,7 @@ export interface FileRoutesByTo {
   '/vendor/subscription': typeof VendorSubscriptionRoute
   '/admin': typeof AdminIndexRoute
   '/vendor': typeof VendorIndexRoute
+  '/vendor/disputes/$id': typeof VendorDisputesIdRoute
   '/vendor/orders/$id': typeof VendorOrdersIdRoute
   '/vendor/products/new': typeof VendorProductsNewRoute
   '/vendor/disputes': typeof VendorDisputesIndexRoute
@@ -554,6 +562,7 @@ export interface FileRoutesById {
   '/vendor/subscription': typeof VendorSubscriptionRoute
   '/admin/': typeof AdminIndexRoute
   '/vendor/': typeof VendorIndexRoute
+  '/vendor/disputes/$id': typeof VendorDisputesIdRoute
   '/vendor/orders/$id': typeof VendorOrdersIdRoute
   '/vendor/products/new': typeof VendorProductsNewRoute
   '/vendor/disputes/': typeof VendorDisputesIndexRoute
@@ -619,6 +628,7 @@ export interface FileRouteTypes {
     | '/vendor/subscription'
     | '/admin/'
     | '/vendor/'
+    | '/vendor/disputes/$id'
     | '/vendor/orders/$id'
     | '/vendor/products/new'
     | '/vendor/disputes/'
@@ -677,6 +687,7 @@ export interface FileRouteTypes {
     | '/vendor/subscription'
     | '/admin'
     | '/vendor'
+    | '/vendor/disputes/$id'
     | '/vendor/orders/$id'
     | '/vendor/products/new'
     | '/vendor/disputes'
@@ -740,6 +751,7 @@ export interface FileRouteTypes {
     | '/vendor/subscription'
     | '/admin/'
     | '/vendor/'
+    | '/vendor/disputes/$id'
     | '/vendor/orders/$id'
     | '/vendor/products/new'
     | '/vendor/disputes/'
@@ -1198,6 +1210,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VendorOrdersIdRouteImport
       parentRoute: typeof VendorOrdersRoute
     }
+    '/vendor/disputes/$id': {
+      id: '/vendor/disputes/$id'
+      path: '/$id'
+      fullPath: '/vendor/disputes/$id'
+      preLoaderRoute: typeof VendorDisputesIdRouteImport
+      parentRoute: typeof VendorDisputesRoute
+    }
     '/vendor/products/$id/edit': {
       id: '/vendor/products/$id/edit'
       path: '/$id/edit'
@@ -1261,10 +1280,12 @@ const OrdersRouteWithChildren =
   OrdersRoute._addFileChildren(OrdersRouteChildren)
 
 interface VendorDisputesRouteChildren {
+  VendorDisputesIdRoute: typeof VendorDisputesIdRoute
   VendorDisputesIndexRoute: typeof VendorDisputesIndexRoute
 }
 
 const VendorDisputesRouteChildren: VendorDisputesRouteChildren = {
+  VendorDisputesIdRoute: VendorDisputesIdRoute,
   VendorDisputesIndexRoute: VendorDisputesIndexRoute,
 }
 
