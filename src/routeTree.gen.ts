@@ -45,6 +45,7 @@ import { Route as VendorPayoutsRouteImport } from './routes/vendor.payouts'
 import { Route as VendorOrdersRouteImport } from './routes/vendor.orders'
 import { Route as VendorOnboardingRouteImport } from './routes/vendor.onboarding'
 import { Route as VendorImportsRouteImport } from './routes/vendor.imports'
+import { Route as VendorDisputesRouteImport } from './routes/vendor.disputes'
 import { Route as VendorAnalyticsRouteImport } from './routes/vendor.analytics'
 import { Route as StoreSlugRouteImport } from './routes/store.$slug'
 import { Route as ProductSlugRouteImport } from './routes/product.$slug'
@@ -249,6 +250,11 @@ const VendorImportsRoute = VendorImportsRouteImport.update({
   path: '/imports',
   getParentRoute: () => VendorRoute,
 } as any)
+const VendorDisputesRoute = VendorDisputesRouteImport.update({
+  id: '/disputes',
+  path: '/disputes',
+  getParentRoute: () => VendorRoute,
+} as any)
 const VendorAnalyticsRoute = VendorAnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
@@ -410,6 +416,7 @@ export interface FileRoutesByFullPath {
   '/product/$slug': typeof ProductSlugRoute
   '/store/$slug': typeof StoreSlugRoute
   '/vendor/analytics': typeof VendorAnalyticsRoute
+  '/vendor/disputes': typeof VendorDisputesRoute
   '/vendor/imports': typeof VendorImportsRoute
   '/vendor/onboarding': typeof VendorOnboardingRoute
   '/vendor/orders': typeof VendorOrdersRouteWithChildren
@@ -469,6 +476,7 @@ export interface FileRoutesByTo {
   '/product/$slug': typeof ProductSlugRoute
   '/store/$slug': typeof StoreSlugRoute
   '/vendor/analytics': typeof VendorAnalyticsRoute
+  '/vendor/disputes': typeof VendorDisputesRoute
   '/vendor/imports': typeof VendorImportsRoute
   '/vendor/onboarding': typeof VendorOnboardingRoute
   '/vendor/payouts': typeof VendorPayoutsRoute
@@ -529,6 +537,7 @@ export interface FileRoutesById {
   '/product/$slug': typeof ProductSlugRoute
   '/store/$slug': typeof StoreSlugRoute
   '/vendor/analytics': typeof VendorAnalyticsRoute
+  '/vendor/disputes': typeof VendorDisputesRoute
   '/vendor/imports': typeof VendorImportsRoute
   '/vendor/onboarding': typeof VendorOnboardingRoute
   '/vendor/orders': typeof VendorOrdersRouteWithChildren
@@ -592,6 +601,7 @@ export interface FileRouteTypes {
     | '/product/$slug'
     | '/store/$slug'
     | '/vendor/analytics'
+    | '/vendor/disputes'
     | '/vendor/imports'
     | '/vendor/onboarding'
     | '/vendor/orders'
@@ -651,6 +661,7 @@ export interface FileRouteTypes {
     | '/product/$slug'
     | '/store/$slug'
     | '/vendor/analytics'
+    | '/vendor/disputes'
     | '/vendor/imports'
     | '/vendor/onboarding'
     | '/vendor/payouts'
@@ -710,6 +721,7 @@ export interface FileRouteTypes {
     | '/product/$slug'
     | '/store/$slug'
     | '/vendor/analytics'
+    | '/vendor/disputes'
     | '/vendor/imports'
     | '/vendor/onboarding'
     | '/vendor/orders'
@@ -1015,6 +1027,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VendorImportsRouteImport
       parentRoute: typeof VendorRoute
     }
+    '/vendor/disputes': {
+      id: '/vendor/disputes'
+      path: '/disputes'
+      fullPath: '/vendor/disputes'
+      preLoaderRoute: typeof VendorDisputesRouteImport
+      parentRoute: typeof VendorRoute
+    }
     '/vendor/analytics': {
       id: '/vendor/analytics'
       path: '/analytics'
@@ -1256,6 +1275,7 @@ const VendorProductsRouteWithChildren = VendorProductsRoute._addFileChildren(
 
 interface VendorRouteChildren {
   VendorAnalyticsRoute: typeof VendorAnalyticsRoute
+  VendorDisputesRoute: typeof VendorDisputesRoute
   VendorImportsRoute: typeof VendorImportsRoute
   VendorOnboardingRoute: typeof VendorOnboardingRoute
   VendorOrdersRoute: typeof VendorOrdersRouteWithChildren
@@ -1268,6 +1288,7 @@ interface VendorRouteChildren {
 
 const VendorRouteChildren: VendorRouteChildren = {
   VendorAnalyticsRoute: VendorAnalyticsRoute,
+  VendorDisputesRoute: VendorDisputesRoute,
   VendorImportsRoute: VendorImportsRoute,
   VendorOnboardingRoute: VendorOnboardingRoute,
   VendorOrdersRoute: VendorOrdersRouteWithChildren,
@@ -1317,13 +1338,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
