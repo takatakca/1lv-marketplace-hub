@@ -62,7 +62,9 @@ function OrderDetail() {
                 ))}
               </ul>
             </div>
+            {order.id && <ReportProblem orderId={order.id} paymentStatus={order.payment_status} />}
           </div>
+
         ) : (
           <div className="mt-6 rounded-xl border border-border bg-card p-6">
             <p className="text-sm text-muted-foreground">
