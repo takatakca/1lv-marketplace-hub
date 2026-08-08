@@ -1,38 +1,85 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { z } from "zod";
-import { useState, useMemo } from "react";
-import { Filter, Search as SearchIcon, SlidersHorizontal, X } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Filter, Search as SearchIcon, SlidersHorizontal, X, Sparkles } from "lucide-react";
+import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { AppLayout } from "@/components/AppLayout";
+import { AISearchBar } from "@/components/AISearchBar";
 import { ProductGrid } from "@/components/ProductGrid";
 import { EmptyState } from "@/components/EmptyState";
-import { products, vendors } from "@/lib/data";
+import { products, vendors, categories } from "@/lib/data";
+import { QUICK_CHIPS } from "@/services/ai-search";
 
-const searchSchema = z.object({ q: z.string().optional() });
+const searchSchema = z.object({
+  q: fallback(z.string(), "").default(""),
+  raw: z.string().optional(),
+  category: fallback(z.string(), "").default(""),
+  minPrice: z.number().optional(),
+  maxPrice: z.number().optional(),
+  freeShipping: fallback(z.boolean(), false).default(false),
+  canadian: fallback(z.boolean(), false).default(false),
+  rating: fallback(z.number(), 0).default(0),
+  sale: fallback(z.boolean(), false).default(false),
+  sort: fallback(z.string(), "relevance").default("relevance"),
+});
 
 export const Route = createFileRoute("/search")({
-  validateSearch: searchSchema,
+  validateSearch: zodValidator(searchSchema),
   component: SearchPage,
-  head: () => ({ meta: [{ title: "Search — 1LV.CA" }] }),
+  head: () => ({
+    meta: [
+      { title: "Search products — 1LV.CA Marketplace" },
+      { name: "description", content: "Search 1LV.CA with smart filters and voice search: price, free shipping, Canadian sellers, ratings and deals." },
+      { property: "og:title", content: "Search products — 1LV.CA" },
+      { property: "og:description", content: "Smart, voice-enabled product search across Canadian and global vendors." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
 });
 
 type Sort = "relevance" | "price-asc" | "price-desc" | "rating" | "sold";
+const SORTS: Sort[] = ["relevance", "price-asc", "price-desc", "rating", "sold"];
+const PRICE_CEILING = 2000;
 
 function SearchPage() {
-  const { q } = Route.useSearch();
-  const term = (q ?? "").trim().toLowerCase();
+  const sp = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const term = (sp.q ?? "").trim().toLowerCase();
 
-  const [sort, setSort] = useState<Sort>("relevance");
-  const [maxPrice, setMaxPrice] = useState<number>(2000);
-  const [freeShip, setFreeShip] = useState(false);
-  const [minRating, setMinRating] = useState(0);
-  const [caOnly, setCaOnly] = useState(false);
-  const [saleOnly, setSaleOnly] = useState(false);
+  const safeSort: Sort = SORTS.includes(sp.sort as Sort) ? (sp.sort as Sort) : "relevance";
+  const smartCategory = categories.some((c) => c.slug === sp.category) ? sp.category : "";
+
+  const [sort, setSort] = useState<Sort>(safeSort);
+  const [maxPrice, setMaxPrice] = useState<number>(
+    sp.maxPrice !== undefined ? Math.max(10, Math.min(PRICE_CEILING, sp.maxPrice)) : PRICE_CEILING,
+  );
+  const [minPrice, setMinPrice] = useState<number>(sp.minPrice !== undefined ? Math.max(0, sp.minPrice) : 0);
+  const [freeShip, setFreeShip] = useState(sp.freeShipping);
+  const [minRating, setMinRating] = useState(Math.max(0, Math.min(5, sp.rating)));
+  const [caOnly, setCaOnly] = useState(sp.canadian);
+  const [saleOnly, setSaleOnly] = useState(sp.sale);
+  const [category, setCategory] = useState(smartCategory);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Re-sync when the URL changes (new search submitted from the header).
+  useEffect(() => {
+    setSort(safeSort);
+    setMaxPrice(sp.maxPrice !== undefined ? Math.max(10, Math.min(PRICE_CEILING, sp.maxPrice)) : PRICE_CEILING);
+    setMinPrice(sp.minPrice !== undefined ? Math.max(0, sp.minPrice) : 0);
+    setFreeShip(sp.freeShipping);
+    setMinRating(Math.max(0, Math.min(5, sp.rating)));
+    setCaOnly(sp.canadian);
+    setSaleOnly(sp.sale);
+    setCategory(smartCategory);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sp.q, sp.raw, sp.category, sp.minPrice, sp.maxPrice, sp.freeShipping, sp.canadian, sp.rating, sp.sale, sp.sort]);
 
   const results = useMemo(() => {
     let r = term
       ? products.filter((p) => p.title.toLowerCase().includes(term) || p.category.includes(term))
       : products;
+    if (category) r = r.filter((p) => p.category === category);
     if (freeShip) r = r.filter((p) => p.shipping === "free" || p.shipping === "fast");
     if (minRating > 0) r = r.filter((p) => p.rating >= minRating);
     if (saleOnly) r = r.filter((p) => p.compareAt && p.compareAt > p.price);
@@ -40,7 +87,7 @@ function SearchPage() {
       const caVendors = new Set(vendors.filter((v) => v.country === "CA").map((v) => v.slug));
       r = r.filter((p) => caVendors.has(p.vendorSlug));
     }
-    r = r.filter((p) => p.price <= maxPrice);
+    r = r.filter((p) => p.price <= maxPrice && p.price >= minPrice);
 
     switch (sort) {
       case "price-asc": r = [...r].sort((a, b) => a.price - b.price); break;
@@ -49,20 +96,62 @@ function SearchPage() {
       case "sold": r = [...r].sort((a, b) => b.sold - a.sold); break;
     }
     return r;
-  }, [term, sort, maxPrice, freeShip, minRating, caOnly, saleOnly]);
+  }, [term, sort, maxPrice, minPrice, freeShip, minRating, caOnly, saleOnly, category]);
+
+  const smartBits = [
+    sp.q ? sp.q : null,
+    smartCategory ? `in ${categories.find((c) => c.slug === smartCategory)?.name}` : null,
+    sp.minPrice !== undefined && sp.maxPrice !== undefined
+      ? `between $${sp.minPrice} and $${sp.maxPrice}`
+      : sp.maxPrice !== undefined
+        ? `under $${sp.maxPrice}`
+        : sp.minPrice !== undefined
+          ? `over $${sp.minPrice}`
+          : null,
+    sp.freeShipping ? "with free shipping" : null,
+    sp.canadian ? "from Canadian sellers" : null,
+    sp.rating ? `rated ${sp.rating}+ stars` : null,
+    sp.sale ? "on sale" : null,
+  ].filter(Boolean);
+
+  const hasSmart =
+    sp.maxPrice !== undefined ||
+    sp.minPrice !== undefined ||
+    sp.freeShipping ||
+    sp.canadian ||
+    sp.sale ||
+    sp.rating > 0 ||
+    !!smartCategory;
+
+  const clearSmart = () =>
+    navigate({ search: { q: sp.q, sort: "relevance", category: "", freeShipping: false, canadian: false, sale: false, rating: 0 } as any });
 
   const FilterPanel = () => (
     <div className="space-y-5 text-sm">
+      <div>
+        <p className="mb-2 font-semibold text-navy">Category</p>
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className="w-full rounded-md border border-border bg-white px-2 py-1.5 text-xs text-navy outline-none focus:border-electric"
+        >
+          <option value="">All categories</option>
+          {categories.map((c) => (
+            <option key={c.slug} value={c.slug}>{c.name}</option>
+          ))}
+        </select>
+      </div>
       <div>
         <p className="mb-2 font-semibold text-navy">Max price: ${maxPrice}</p>
         <input
           type="range"
           min={10}
-          max={2000}
+          max={PRICE_CEILING}
           step={10}
           value={maxPrice}
           onChange={(e) => setMaxPrice(Number(e.target.value))}
           className="w-full"
+          aria-label="Maximum price"
         />
       </div>
       <div className="space-y-2">
@@ -101,9 +190,36 @@ function SearchPage() {
   return (
     <AppLayout>
       <div className="mx-auto max-w-7xl px-4 py-6">
+        <div className="sticky top-16 z-30 -mx-4 mb-4 bg-background/95 px-4 py-2 backdrop-blur md:static md:mx-0 md:bg-transparent md:px-0 md:py-0">
+          <AISearchBar initialQuery={sp.raw ?? sp.q} compact />
+        </div>
+
         <h1 className="font-display text-2xl font-extrabold text-navy">
-          {term ? <>Results for "<span className="text-electric">{q}</span>"</> : "Browse all products"}
+          {sp.q ? <>Results for "<span className="text-electric">{sp.q}</span>"</> : "Browse all products"}
         </h1>
+
+        {hasSmart && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-electric/30 bg-electric/5 px-3 py-2 text-xs text-navy">
+            <Sparkles size={14} className="text-electric" />
+            <span>Showing {smartBits.join(" ")}</span>
+            <button onClick={clearSmart} className="ml-auto font-semibold text-electric hover:underline">
+              Clear smart filters
+            </button>
+          </div>
+        )}
+
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {QUICK_CHIPS.map((chip) => (
+            <Link
+              key={chip.label}
+              to="/search"
+              search={chip.search as any}
+              className="rounded-full border border-border bg-white px-2.5 py-1 text-xs text-navy hover:border-electric hover:text-electric"
+            >
+              {chip.label}
+            </Link>
+          ))}
+        </div>
 
         <div className="mt-3 flex items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">{results.length} products</p>
@@ -134,9 +250,9 @@ function SearchPage() {
         <div className="mt-6 grid gap-6 lg:grid-cols-[240px_1fr]">
           <aside className="hidden lg:block">
             <div className="sticky top-28 rounded-xl border border-border bg-card p-4">
-              <h3 className="mb-3 flex items-center gap-1.5 text-sm font-bold uppercase tracking-wider text-muted-foreground">
+              <h2 className="mb-3 flex items-center gap-1.5 text-sm font-bold uppercase tracking-wider text-muted-foreground">
                 <Filter size={14} /> Filters
-              </h3>
+              </h2>
               <FilterPanel />
             </div>
           </aside>
