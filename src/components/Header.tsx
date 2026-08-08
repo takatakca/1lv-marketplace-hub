@@ -1,9 +1,10 @@
-import { Link, useNavigate } from "@tanstack/react-router";
-import { Search, ShoppingCart, User, Heart, Menu, X, ChevronDown } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { Link } from "@tanstack/react-router";
+import { ShoppingCart, User, Heart, Menu, X, ChevronDown } from "lucide-react";
+import { useState } from "react";
 import { Logo } from "./Logo";
 import { LanguageToggle } from "./LanguageToggle";
 import { CategoryMegaMenu } from "./CategoryMegaMenu";
+import { AISearchBar } from "./AISearchBar";
 import { useCart } from "@/hooks/use-cart";
 import { useAuth } from "@/hooks/use-auth";
 import { canAccessAdmin, canAccessVendor } from "@/lib/roles";
@@ -12,17 +13,11 @@ import { categories } from "@/lib/data";
 export function Header() {
   const [megaOpen, setMegaOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [q, setQ] = useState("");
-  const navigate = useNavigate();
   const { count } = useCart();
   const { user, roles, signOut } = useAuth();
   const showVendor = canAccessVendor(roles);
   const showAdmin = canAccessAdmin(roles);
 
-  const onSearch = (e: FormEvent) => {
-    e.preventDefault();
-    navigate({ to: "/search", search: { q } });
-  };
 
   return (
     <>
@@ -56,20 +51,10 @@ export function Header() {
 
           <Logo />
 
-          <form onSubmit={onSearch} className="ml-2 hidden flex-1 md:flex">
-            <div className="flex w-full overflow-hidden rounded-lg border border-border focus-within:border-electric focus-within:shadow-glow">
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                type="search"
-                placeholder="Search 1M+ products from Canadian and global vendors…"
-                className="flex-1 bg-transparent px-4 py-2 text-sm outline-none placeholder:text-muted-foreground"
-              />
-              <button className="flex items-center gap-2 bg-electric px-5 text-sm font-semibold text-electric-foreground hover:opacity-90">
-                <Search size={16} /> Search
-              </button>
-            </div>
-          </form>
+          <div className="ml-2 hidden flex-1 md:block">
+            <AISearchBar />
+          </div>
+
 
           <div className="ml-auto flex items-center gap-1">
             {user ? (
@@ -112,20 +97,10 @@ export function Header() {
         </div>
 
         {/* Mobile search */}
-        <form onSubmit={onSearch} className="px-4 pb-3 md:hidden">
-          <div className="flex overflow-hidden rounded-lg border border-border">
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              type="search"
-              placeholder="Search products…"
-              className="flex-1 bg-transparent px-3 py-2 text-sm outline-none"
-            />
-            <button className="bg-electric px-4 text-electric-foreground" aria-label="Search">
-              <Search size={16} />
-            </button>
-          </div>
-        </form>
+        <div className="px-4 pb-3 md:hidden">
+          <AISearchBar compact />
+        </div>
+
 
         {/* Category bar */}
         <div className="relative hidden border-t border-border md:block" onMouseLeave={() => setMegaOpen(false)}>
