@@ -52,16 +52,20 @@ function Page() {
   const [vendorNames, setVendorNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(!demo);
   const [busy, setBusy] = useState(false);
-  const [holdDays, setHoldDays] = useState(7);
+  const [settings, setSettings] = useState<PayoutSettings | null>(null);
+  const [runs, setRuns] = useState<SchedulerRun[]>([]);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"all" | PayoutStatus>("all");
   const [period, setPeriod] = useState(defaultPeriod());
   const [detail, setDetail] = useState<PayoutRecord | null>(null);
   const [items, setItems] = useState<PayoutItemRecord[] | null>(null);
 
+  const holdDays = settings?.holdDays ?? 7;
+
   const load = async () => {
     const rows = await listAllPayouts();
     setPayouts(rows);
+    setRuns(await listSchedulerRuns(8));
     const ids = Array.from(new Set(rows.map((r) => r.vendor_id)));
     if (ids.length) {
       const { data } = await supabase.from("vendors").select("id, store_name").in("id", ids);
@@ -75,14 +79,15 @@ function Page() {
     if (demo) return;
     (async () => {
       try {
-        const [, settings] = await Promise.all([load(), getPayoutSettings()]);
-        setHoldDays(settings.holdDays);
+        const [, s] = await Promise.all([load(), getPayoutSettings()]);
+        setSettings(s);
       } finally {
         setLoading(false);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demo]);
+
 
   const reconciled = useMemo(() => reconcilePayouts(payouts), [payouts]);
 
