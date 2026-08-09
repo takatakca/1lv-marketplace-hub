@@ -250,3 +250,85 @@ missing paid date, or net amount zero/negative. Labels only — nothing is mutat
 - pg_cron scheduler with per-run locking
 - transfer failure retry + alerting policy
 - live reconciliation against the Stripe transfers API
+
+## 14. Payout scheduler, retries & live reconciliation
+
+### Settings (`payout_settings`, single row)
+| Field | Default | Meaning |
+|---|---|---|
+| `hold_days` | 7 | Delivered vendor orders wait this long before becoming eligible |
+| `payout_frequency` | `weekly` | Scheduling cadence |
+| `payout_day` | 1 | Day of week (0=Sunday) the external scheduler should fire |
+| `payout_hour_utc` | 7 | Hour (UTC) the external scheduler should fire |
+| `auto_generate_payouts` | true | Scheduler may create `pending_review` payouts |
+| `auto_process_transfers` | **false** | Scheduler may send Stripe transfers — keep OFF |
+| `retry_failed_transfers` | false | Reserved for automated retry sweeps |
+| `max_transfer_attempts` | 3 | Hard cap on transfer attempts per payout |
+
+### Locking
+`scheduler_locks` holds one row per named job. The payout job uses
+`weekly_vendor_payout_generation`, takes a 30-minute lease, and always releases it.
+A concurrent run exits immediately as `skipped_locked` and records that run.
+Even if a lock were bypassed, `payout_items.vendor_order_id` is unique, so a
+vendor order can never be paid twice.
+
+### Run history
+`payout_scheduler_runs` records `started_at`, `completed_at`, `status`
+(`running | completed | partial | failed | skipped_locked`), period, created /
+processed / failed counts, `error_message` and `metadata`. Admin-readable only;
+the last eight runs are shown on `/admin/payouts`.
+
+### Server functions (`src/lib/payout-scheduler.functions.ts`, all admin-only)
+| Function | Purpose |
+|---|---|
+| `runWeeklyPayoutScheduler` | Locks, computes the last complete week, generates payouts. Sends transfers only if `auto_process_transfers` is true, and only for already-approved payouts. |
+| `retryFailedPayout` | Retries one failed transfer. Refuses if not `failed`, if a `stripe_transfer_id` exists, or if the attempt cap is reached. Stripe idempotency key `payout_<id>_<attempt>`. |
+| `reconcileStripePayout` | Reads the Stripe transfer and classifies: `matched`, `missing_transfer`, `amount_mismatch`, `currency_mismatch`, `destination_mismatch`, `failed`, `unknown`. |
+| `reconcileRecentPayouts` | Same check across recent paid/processing/failed payouts (1–180 days, max 200). |
+
+Retry backoff placeholder: 1h → 6h → 24h → 72h, stored in `payouts.next_retry_at`;
+`transfer_attempt_count` and `last_transfer_attempt_at` track history. Retries stop
+at `max_transfer_attempts` — nothing retries forever.
+
+### Alerting
+Admin rows are written into `notifications` for: payout generation failed,
+transfer failed, retries exhausted, and reconciliation mismatch. No email or SMS
+delivery yet.
+
+### Deployment options
+
+**A. pg_cron (if enabled)** — weekly, Monday 07:00 UTC:
+
+```sql
+select cron.schedule(
+  'weekly-vendor-payout-generation',
+  '0 7 * * 1',
+  $$ select net.http_post(
+       url := 'https://project--deec4249-153f-4f4a-8a40-79e457dc6c83.lovable.app/api/public/hooks/payout-scheduler',
+       headers := '{"Content-Type":"application/json","apikey":"YOUR_ANON_KEY"}'::jsonb,
+       body := '{}'::jsonb
+     ); $$
+);
+```
+
+**B. External secured cron** — any scheduler (GitHub Actions, Cloud Scheduler)
+calling the same URL on the same cadence.
+
+The HTTP scheduler endpoint is **intentionally not deployed yet**. Until a
+dedicated scheduler secret is configured, the job is triggered only by an
+authenticated admin from `/admin/payouts` → **Run scheduler now**. Do not expose
+the endpoint without header authentication.
+
+### Security
+- Scheduler, retry and reconciliation all verify `has_role(admin)` before the
+  service-role client is loaded. Vendors and customers cannot call them.
+- Vendors see only status (`processing`, `paid`, `held`, `failed`) — never Stripe
+  errors, transfer ids or connected-account ids.
+- Destination mismatches are reported without revealing either account id.
+- Automatic transfers remain OFF; manual approval is still the gate.
+
+### Before enabling automatic weekly transfers
+- Run several manual weekly cycles with clean reconciliation.
+- Deploy the authenticated scheduler endpoint plus its secret.
+- Define the transfer-failure alerting/escalation policy (email/SMS).
+- Then flip `auto_process_transfers` to true.
