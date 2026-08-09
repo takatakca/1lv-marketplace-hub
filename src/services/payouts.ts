@@ -27,7 +27,14 @@ export type PayoutRecord = {
   approved_at: string | null;
   paid_at: string | null;
   created_at: string;
+  transfer_attempt_count?: number | null;
+  last_transfer_attempt_at?: string | null;
+  next_retry_at?: string | null;
+  reconciliation_status?: string | null;
+  reconciliation_note?: string | null;
+  reconciled_at?: string | null;
 };
+
 
 export type PayoutItemRecord = {
   id: string;
@@ -117,14 +124,34 @@ export async function listPayoutItems(payoutId: string): Promise<PayoutItemRecor
   return (data ?? []) as unknown as PayoutItemRecord[];
 }
 
-export async function getPayoutSettings(): Promise<{ holdDays: number; autoTransfers: boolean }> {
-  const { data } = await supabase
-    .from("payout_settings" as never)
-    .select("hold_days, auto_transfers_enabled")
-    .maybeSingle();
-  const row = data as unknown as { hold_days?: number; auto_transfers_enabled?: boolean } | null;
-  return { holdDays: Number(row?.hold_days ?? 7), autoTransfers: Boolean(row?.auto_transfers_enabled) };
+export type PayoutSettings = {
+  holdDays: number;
+  autoTransfers: boolean;
+  frequency: string;
+  payoutDay: number;
+  payoutHourUtc: number;
+  autoGenerate: boolean;
+  autoProcessTransfers: boolean;
+  retryFailedTransfers: boolean;
+  maxTransferAttempts: number;
+};
+
+export async function getPayoutSettings(): Promise<PayoutSettings> {
+  const { data } = await supabase.from("payout_settings" as never).select("*").maybeSingle();
+  const row = (data ?? {}) as unknown as Record<string, unknown>;
+  return {
+    holdDays: Number(row.hold_days ?? 7),
+    autoTransfers: Boolean(row.auto_transfers_enabled),
+    frequency: String(row.payout_frequency ?? "weekly"),
+    payoutDay: Number(row.payout_day ?? 1),
+    payoutHourUtc: Number(row.payout_hour_utc ?? 7),
+    autoGenerate: row.auto_generate_payouts !== false,
+    autoProcessTransfers: row.auto_process_transfers === true,
+    retryFailedTransfers: row.retry_failed_transfers === true,
+    maxTransferAttempts: Number(row.max_transfer_attempts ?? 3),
+  };
 }
+
 
 // ---------------- Admin actions (server functions) ----------------
 
@@ -224,4 +251,108 @@ export function reconcilePayouts(payouts: PayoutRecord[]): ReconciliationRow[] {
     const meta = FLAG_META[flag];
     return { payout, flag, label: meta.label, severity: meta.severity };
   });
+}
+
+// ---------------- Scheduler, retry & live reconciliation ----------------
+
+import {
+  runWeeklyPayoutScheduler as runSchedulerFn,
+  retryFailedPayout as retryFn,
+  reconcileStripePayout as reconcileOneFn,
+  reconcileRecentPayouts as reconcileManyFn,
+  type SchedulerRunResult,
+  type RetryResult,
+  type ReconcileOneResult,
+  type ReconcileSummary,
+} from "@/lib/payout-scheduler.functions";
+
+export type { SchedulerRunResult, RetryResult, ReconcileOneResult, ReconcileSummary };
+
+export type SchedulerRun = {
+  id: string;
+  started_at: string;
+  completed_at: string | null;
+  status: "running" | "completed" | "partial" | "failed" | "skipped_locked";
+  trigger_source: string;
+  period_start: string | null;
+  period_end: string | null;
+  payouts_created: number;
+  payouts_processed: number;
+  payouts_failed: number;
+  error_message: string | null;
+};
+
+export async function listSchedulerRuns(limit = 10): Promise<SchedulerRun[]> {
+  const { data } = await supabase
+    .from("payout_scheduler_runs" as never)
+    .select("*")
+    .order("started_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as unknown as SchedulerRun[];
+}
+
+export function schedulerRunLabel(status: SchedulerRun["status"]): string {
+  switch (status) {
+    case "completed":
+      return "Completed";
+    case "partial":
+      return "Completed with failures";
+    case "failed":
+      return "Failed";
+    case "skipped_locked":
+      return "Skipped (already running)";
+    default:
+      return "Running";
+  }
+}
+
+export async function runPayoutScheduler(period?: { start: string; end: string }): Promise<SchedulerRunResult> {
+  try {
+    return await runSchedulerFn({
+      data: period ? { periodStart: period.start, periodEnd: period.end } : {},
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      status: "failed",
+      created: 0,
+      processed: 0,
+      failed: 0,
+      reason: err instanceof Error ? err.message : "Scheduler run failed",
+    };
+  }
+}
+
+export async function retryPayout(payoutId: string): Promise<RetryResult> {
+  try {
+    return await retryFn({ data: { payoutId } });
+  } catch (err) {
+    return { ok: false, status: "failed", reason: err instanceof Error ? err.message : "Retry failed" };
+  }
+}
+
+export async function reconcileOnePayout(payoutId: string): Promise<ReconcileOneResult> {
+  try {
+    return await reconcileOneFn({ data: { payoutId } });
+  } catch (err) {
+    return {
+      payoutId,
+      classification: "unknown",
+      note: err instanceof Error ? err.message : "Reconciliation failed",
+      checkedAt: new Date().toISOString(),
+    };
+  }
+}
+
+export async function reconcileRecent(days = 30): Promise<ReconcileSummary> {
+  try {
+    return await reconcileManyFn({ data: { days } });
+  } catch (err) {
+    return {
+      ok: false,
+      checked: 0,
+      counts: {},
+      reason: err instanceof Error ? err.message : "Reconciliation failed",
+    };
+  }
 }

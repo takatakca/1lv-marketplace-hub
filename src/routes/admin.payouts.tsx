@@ -18,12 +18,21 @@ import {
   payoutStatusLabel,
   payoutStatusClass,
   getPayoutSettings,
+  listSchedulerRuns,
+  schedulerRunLabel,
+  runPayoutScheduler,
+  retryPayout,
+  reconcileOnePayout,
+  reconcileRecent,
   PAYOUT_STATUSES,
   type PayoutRecord,
   type PayoutItemRecord,
   type PayoutStatus,
+  type PayoutSettings,
+  type SchedulerRun,
 } from "@/services/payouts";
 import { supabase } from "@/integrations/supabase/client";
+
 
 function isoDate(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -43,16 +52,20 @@ function Page() {
   const [vendorNames, setVendorNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(!demo);
   const [busy, setBusy] = useState(false);
-  const [holdDays, setHoldDays] = useState(7);
+  const [settings, setSettings] = useState<PayoutSettings | null>(null);
+  const [runs, setRuns] = useState<SchedulerRun[]>([]);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"all" | PayoutStatus>("all");
   const [period, setPeriod] = useState(defaultPeriod());
   const [detail, setDetail] = useState<PayoutRecord | null>(null);
   const [items, setItems] = useState<PayoutItemRecord[] | null>(null);
 
+  const holdDays = settings?.holdDays ?? 7;
+
   const load = async () => {
     const rows = await listAllPayouts();
     setPayouts(rows);
+    setRuns(await listSchedulerRuns(8));
     const ids = Array.from(new Set(rows.map((r) => r.vendor_id)));
     if (ids.length) {
       const { data } = await supabase.from("vendors").select("id, store_name").in("id", ids);
@@ -66,14 +79,15 @@ function Page() {
     if (demo) return;
     (async () => {
       try {
-        const [, settings] = await Promise.all([load(), getPayoutSettings()]);
-        setHoldDays(settings.holdDays);
+        const [, s] = await Promise.all([load(), getPayoutSettings()]);
+        setSettings(s);
       } finally {
         setLoading(false);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demo]);
+
 
   const reconciled = useMemo(() => reconcilePayouts(payouts), [payouts]);
 
@@ -147,11 +161,74 @@ function Page() {
     }
   };
 
+  const handleRunScheduler = async () => {
+    if (guard()) return;
+    setBusy(true);
+    try {
+      const r = await runPayoutScheduler();
+      if (r.status === "skipped_locked") toast.info("A scheduler run is already in progress.");
+      else if (!r.ok) toast.error(r.reason ?? "Scheduler run failed");
+      else toast.success(`Scheduler finished — ${r.created} payout(s) created, ${r.failed} failed transfer(s).`);
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRetry = async (id: string) => {
+    if (guard()) return;
+    setBusy(true);
+    try {
+      const r = await retryPayout(id);
+      if (r.ok) toast.success("Transfer retried successfully");
+      else if (r.setupRequired) toast.info(r.reason ?? "Stripe setup required");
+      else toast.error(r.reason ?? "Retry refused");
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleReconcileOne = async (id: string) => {
+    if (guard()) return;
+    setBusy(true);
+    try {
+      const r = await reconcileOnePayout(id);
+      if (r.classification === "matched") toast.success("Reconciled — matches Stripe");
+      else toast.warning(`${r.classification.replace(/_/g, " ")} — ${r.note}`);
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleReconcileAll = async () => {
+    if (guard()) return;
+    setBusy(true);
+    try {
+      const r = await reconcileRecent(30);
+      if (!r.ok) toast.error(r.reason ?? "Reconciliation failed");
+      else if (r.setupRequired) toast.info("Stripe is not configured — nothing could be verified.");
+      else {
+        const summary = Object.entries(r.counts)
+          .map(([k, v]) => `${v} ${k.replace(/_/g, " ")}`)
+          .join(", ");
+        toast.success(r.checked === 0 ? "No recent payouts to reconcile." : `Checked ${r.checked}: ${summary}`);
+      }
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const openDetail = async (p: PayoutRecord) => {
     setDetail(p);
     setItems(null);
     setItems(await listPayoutItems(p.id));
   };
+
+  const lastRun = runs[0] ?? null;
+
 
   return (
     <div>
@@ -170,6 +247,82 @@ function Page() {
         <StatCard label="Paid" value={formatCAD(totals.paid)} icon={Wallet} accent="success" />
         <StatCard label="Reconciliation flags" value={String(totals.flagged)} icon={AlertTriangle} accent="deal" />
       </div>
+
+      <div className="mt-6 rounded-xl border border-border bg-card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-navy">Weekly scheduler</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {settings
+                ? `${settings.frequency} · runs at ${String(settings.payoutHourUtc).padStart(2, "0")}:00 UTC · ${settings.holdDays}-day hold`
+                : "Loading settings…"}
+              {" · "}
+              <span className={settings?.autoProcessTransfers ? "font-semibold text-deal" : "font-semibold text-success"}>
+                automatic transfers {settings?.autoProcessTransfers ? "ON" : "OFF"}
+              </span>
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button" onClick={handleRunScheduler} disabled={busy}
+              className="rounded-md bg-navy px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {busy ? "Working…" : "Run scheduler now"}
+            </button>
+            <button
+              type="button" onClick={handleReconcileAll} disabled={busy}
+              className="rounded-md border border-border px-3 py-2 text-sm font-semibold text-navy disabled:opacity-60"
+            >
+              Reconcile last 30 days
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3 text-xs">
+          <p className="font-semibold text-navy">
+            Last run:{" "}
+            {lastRun
+              ? `${schedulerRunLabel(lastRun.status)} · ${new Date(lastRun.started_at).toLocaleString()}`
+              : "never"}
+          </p>
+          {lastRun?.error_message && <p className="mt-1 text-destructive">{lastRun.error_message}</p>}
+        </div>
+
+        {runs.length > 0 && (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-left text-[11px]">
+              <thead className="text-muted-foreground">
+                <tr className="border-b border-border">
+                  <th className="py-1">Started</th>
+                  <th className="py-1">Period</th>
+                  <th className="py-1">Status</th>
+                  <th className="py-1 text-right">Created</th>
+                  <th className="py-1 text-right">Transferred</th>
+                  <th className="py-1 text-right">Failed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {runs.map((r) => (
+                  <tr key={r.id} className="border-b border-border/50">
+                    <td className="py-1 text-muted-foreground">{new Date(r.started_at).toLocaleString()}</td>
+                    <td className="py-1 text-muted-foreground">
+                      {r.period_start ? `${r.period_start} → ${r.period_end}` : "—"}
+                    </td>
+                    <td className={`py-1 ${r.status === "failed" ? "text-destructive" : r.status === "completed" ? "text-success" : "text-deal"}`}>
+                      {schedulerRunLabel(r.status)}
+                    </td>
+                    <td className="py-1 text-right">{r.payouts_created}</td>
+                    <td className="py-1 text-right">{r.payouts_processed}</td>
+                    <td className="py-1 text-right">{r.payouts_failed}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+
 
       <div className="mt-6 rounded-xl border border-border bg-card p-5">
         <h2 className="text-sm font-bold text-navy">Generate payouts</h2>
@@ -267,9 +420,20 @@ function Page() {
                       {payoutStatusLabel(p.status)}
                     </span>
                     {p.failure_reason && <p className="mt-1 text-[10px] text-destructive">{p.failure_reason}</p>}
+                    {Number(p.transfer_attempt_count ?? 0) > 0 && (
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        {p.transfer_attempt_count} transfer attempt{Number(p.transfer_attempt_count) === 1 ? "" : "s"}
+                      </p>
+                    )}
                   </td>
                   <td className={`px-3 py-2 ${severity === "error" ? "text-destructive" : severity === "warn" ? "text-deal" : "text-success"}`}>
                     {label}
+                    {p.reconciliation_status && (
+                      <p className={`mt-1 text-[10px] ${p.reconciliation_status === "matched" ? "text-success" : "text-destructive"}`}>
+                        Stripe: {p.reconciliation_status.replace(/_/g, " ")}
+                        {p.reconciliation_note ? ` — ${p.reconciliation_note}` : ""}
+                      </p>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap justify-end gap-1">
@@ -286,9 +450,18 @@ function Page() {
                           className="rounded bg-navy px-2 py-1 font-semibold text-white disabled:opacity-50">Send transfer</button>
                       )}
                       {p.status === "failed" && (
+                        <button type="button" disabled={busy} onClick={() => void handleRetry(p.id)}
+                          className="rounded border border-electric/40 px-2 py-1 font-semibold text-electric disabled:opacity-50">Retry transfer</button>
+                      )}
+                      {(p.status === "paid" || p.status === "failed" || p.status === "processing") && (
+                        <button type="button" disabled={busy} onClick={() => void handleReconcileOne(p.id)}
+                          className="rounded border border-border px-2 py-1 font-semibold text-navy disabled:opacity-50">Reconcile</button>
+                      )}
+                      {p.status === "failed" && (
                         <button type="button" disabled={busy} onClick={() => void handleAction(p.id, "reopen")}
                           className="rounded border border-border px-2 py-1 font-semibold text-navy disabled:opacity-50">Reopen</button>
                       )}
+
                       {p.status !== "paid" && p.status !== "cancelled" && (
                         <button type="button" disabled={busy} onClick={() => void handleAction(p.id, "cancel")}
                           className="rounded border border-border px-2 py-1 font-semibold text-muted-foreground disabled:opacity-50">Cancel</button>
