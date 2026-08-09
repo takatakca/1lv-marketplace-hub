@@ -526,3 +526,14 @@ export async function reconcileOne(db: Db, payoutId: string): Promise<ReconResul
 
   return finish("matched", "Local payout matches the Stripe transfer.");
 }
+
+// ---------------- authorisation ----------------
+
+/** Throws unless the caller holds the admin role (checked through the RLS-scoped client). */
+export async function assertAdmin(context: { supabase: any; userId: string }) {
+  const { data, error } = await context.supabase.rpc("has_role", {
+    _user_id: context.userId,
+    _role: "admin",
+  });
+  if (error || data !== true) throw new Error("Forbidden");
+}
