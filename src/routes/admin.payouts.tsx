@@ -161,11 +161,74 @@ function Page() {
     }
   };
 
+  const handleRunScheduler = async () => {
+    if (guard()) return;
+    setBusy(true);
+    try {
+      const r = await runPayoutScheduler();
+      if (r.status === "skipped_locked") toast.info("A scheduler run is already in progress.");
+      else if (!r.ok) toast.error(r.reason ?? "Scheduler run failed");
+      else toast.success(`Scheduler finished — ${r.created} payout(s) created, ${r.failed} failed transfer(s).`);
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRetry = async (id: string) => {
+    if (guard()) return;
+    setBusy(true);
+    try {
+      const r = await retryPayout(id);
+      if (r.ok) toast.success("Transfer retried successfully");
+      else if (r.setupRequired) toast.info(r.reason ?? "Stripe setup required");
+      else toast.error(r.reason ?? "Retry refused");
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleReconcileOne = async (id: string) => {
+    if (guard()) return;
+    setBusy(true);
+    try {
+      const r = await reconcileOnePayout(id);
+      if (r.classification === "matched") toast.success("Reconciled — matches Stripe");
+      else toast.warning(`${r.classification.replace(/_/g, " ")} — ${r.note}`);
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleReconcileAll = async () => {
+    if (guard()) return;
+    setBusy(true);
+    try {
+      const r = await reconcileRecent(30);
+      if (!r.ok) toast.error(r.reason ?? "Reconciliation failed");
+      else if (r.setupRequired) toast.info("Stripe is not configured — nothing could be verified.");
+      else {
+        const summary = Object.entries(r.counts)
+          .map(([k, v]) => `${v} ${k.replace(/_/g, " ")}`)
+          .join(", ");
+        toast.success(r.checked === 0 ? "No recent payouts to reconcile." : `Checked ${r.checked}: ${summary}`);
+      }
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const openDetail = async (p: PayoutRecord) => {
     setDetail(p);
     setItems(null);
     setItems(await listPayoutItems(p.id));
   };
+
+  const lastRun = runs[0] ?? null;
+
 
   return (
     <div>
