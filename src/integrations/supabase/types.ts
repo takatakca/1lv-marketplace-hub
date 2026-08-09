@@ -482,23 +482,92 @@ export type Database = {
           },
         ]
       }
+      payout_scheduler_runs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          metadata: Json
+          payouts_created: number
+          payouts_failed: number
+          payouts_processed: number
+          period_end: string | null
+          period_start: string | null
+          started_at: string
+          status: string
+          trigger_source: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          metadata?: Json
+          payouts_created?: number
+          payouts_failed?: number
+          payouts_processed?: number
+          period_end?: string | null
+          period_start?: string | null
+          started_at?: string
+          status?: string
+          trigger_source?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          metadata?: Json
+          payouts_created?: number
+          payouts_failed?: number
+          payouts_processed?: number
+          period_end?: string | null
+          period_start?: string | null
+          started_at?: string
+          status?: string
+          trigger_source?: string
+        }
+        Relationships: []
+      }
       payout_settings: {
         Row: {
+          auto_generate_payouts: boolean
+          auto_process_transfers: boolean
           auto_transfers_enabled: boolean
           hold_days: number
           id: boolean
+          max_transfer_attempts: number
+          payout_day: number
+          payout_frequency: string
+          payout_hour_utc: number
+          retry_failed_transfers: boolean
           updated_at: string
         }
         Insert: {
+          auto_generate_payouts?: boolean
+          auto_process_transfers?: boolean
           auto_transfers_enabled?: boolean
           hold_days?: number
           id?: boolean
+          max_transfer_attempts?: number
+          payout_day?: number
+          payout_frequency?: string
+          payout_hour_utc?: number
+          retry_failed_transfers?: boolean
           updated_at?: string
         }
         Update: {
+          auto_generate_payouts?: boolean
+          auto_process_transfers?: boolean
           auto_transfers_enabled?: boolean
           hold_days?: number
           id?: boolean
+          max_transfer_attempts?: number
+          payout_day?: number
+          payout_frequency?: string
+          payout_hour_utc?: number
+          retry_failed_transfers?: boolean
           updated_at?: string
         }
         Relationships: []
@@ -514,13 +583,19 @@ export type Database = {
           failure_reason: string | null
           gross_amount: number
           id: string
+          last_transfer_attempt_at: string | null
           net_amount: number
+          next_retry_at: string | null
           paid_at: string | null
           period_end: string
           period_start: string
+          reconciled_at: string | null
+          reconciliation_note: string | null
+          reconciliation_status: string | null
           refund_amount: number
           status: Database["public"]["Enums"]["payout_status"]
           stripe_transfer_id: string | null
+          transfer_attempt_count: number
           updated_at: string
           vendor_id: string
         }
@@ -534,13 +609,19 @@ export type Database = {
           failure_reason?: string | null
           gross_amount?: number
           id?: string
+          last_transfer_attempt_at?: string | null
           net_amount?: number
+          next_retry_at?: string | null
           paid_at?: string | null
           period_end: string
           period_start: string
+          reconciled_at?: string | null
+          reconciliation_note?: string | null
+          reconciliation_status?: string | null
           refund_amount?: number
           status?: Database["public"]["Enums"]["payout_status"]
           stripe_transfer_id?: string | null
+          transfer_attempt_count?: number
           updated_at?: string
           vendor_id: string
         }
@@ -554,13 +635,19 @@ export type Database = {
           failure_reason?: string | null
           gross_amount?: number
           id?: string
+          last_transfer_attempt_at?: string | null
           net_amount?: number
+          next_retry_at?: string | null
           paid_at?: string | null
           period_end?: string
           period_start?: string
+          reconciled_at?: string | null
+          reconciliation_note?: string | null
+          reconciliation_status?: string | null
           refund_amount?: number
           status?: Database["public"]["Enums"]["payout_status"]
           stripe_transfer_id?: string | null
+          transfer_attempt_count?: number
           updated_at?: string
           vendor_id?: string
         }
@@ -901,6 +988,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      scheduler_locks: {
+        Row: {
+          expires_at: string
+          lock_name: string
+          locked_at: string
+          locked_by: string | null
+        }
+        Insert: {
+          expires_at?: string
+          lock_name: string
+          locked_at?: string
+          locked_by?: string | null
+        }
+        Update: {
+          expires_at?: string
+          lock_name?: string
+          locked_at?: string
+          locked_by?: string | null
+        }
+        Relationships: []
       }
       stripe_event_log: {
         Row: {
