@@ -420,9 +420,20 @@ function Page() {
                       {payoutStatusLabel(p.status)}
                     </span>
                     {p.failure_reason && <p className="mt-1 text-[10px] text-destructive">{p.failure_reason}</p>}
+                    {Number(p.transfer_attempt_count ?? 0) > 0 && (
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        {p.transfer_attempt_count} transfer attempt{Number(p.transfer_attempt_count) === 1 ? "" : "s"}
+                      </p>
+                    )}
                   </td>
                   <td className={`px-3 py-2 ${severity === "error" ? "text-destructive" : severity === "warn" ? "text-deal" : "text-success"}`}>
                     {label}
+                    {p.reconciliation_status && (
+                      <p className={`mt-1 text-[10px] ${p.reconciliation_status === "matched" ? "text-success" : "text-destructive"}`}>
+                        Stripe: {p.reconciliation_status.replace(/_/g, " ")}
+                        {p.reconciliation_note ? ` — ${p.reconciliation_note}` : ""}
+                      </p>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap justify-end gap-1">
@@ -439,9 +450,18 @@ function Page() {
                           className="rounded bg-navy px-2 py-1 font-semibold text-white disabled:opacity-50">Send transfer</button>
                       )}
                       {p.status === "failed" && (
+                        <button type="button" disabled={busy} onClick={() => void handleRetry(p.id)}
+                          className="rounded border border-electric/40 px-2 py-1 font-semibold text-electric disabled:opacity-50">Retry transfer</button>
+                      )}
+                      {(p.status === "paid" || p.status === "failed" || p.status === "processing") && (
+                        <button type="button" disabled={busy} onClick={() => void handleReconcileOne(p.id)}
+                          className="rounded border border-border px-2 py-1 font-semibold text-navy disabled:opacity-50">Reconcile</button>
+                      )}
+                      {p.status === "failed" && (
                         <button type="button" disabled={busy} onClick={() => void handleAction(p.id, "reopen")}
                           className="rounded border border-border px-2 py-1 font-semibold text-navy disabled:opacity-50">Reopen</button>
                       )}
+
                       {p.status !== "paid" && p.status !== "cancelled" && (
                         <button type="button" disabled={busy} onClick={() => void handleAction(p.id, "cancel")}
                           className="rounded border border-border px-2 py-1 font-semibold text-muted-foreground disabled:opacity-50">Cancel</button>
