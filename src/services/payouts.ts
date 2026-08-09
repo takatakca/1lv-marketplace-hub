@@ -27,7 +27,14 @@ export type PayoutRecord = {
   approved_at: string | null;
   paid_at: string | null;
   created_at: string;
+  transfer_attempt_count?: number | null;
+  last_transfer_attempt_at?: string | null;
+  next_retry_at?: string | null;
+  reconciliation_status?: string | null;
+  reconciliation_note?: string | null;
+  reconciled_at?: string | null;
 };
+
 
 export type PayoutItemRecord = {
   id: string;
