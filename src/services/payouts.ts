@@ -124,14 +124,34 @@ export async function listPayoutItems(payoutId: string): Promise<PayoutItemRecor
   return (data ?? []) as unknown as PayoutItemRecord[];
 }
 
-export async function getPayoutSettings(): Promise<{ holdDays: number; autoTransfers: boolean }> {
-  const { data } = await supabase
-    .from("payout_settings" as never)
-    .select("hold_days, auto_transfers_enabled")
-    .maybeSingle();
-  const row = data as unknown as { hold_days?: number; auto_transfers_enabled?: boolean } | null;
-  return { holdDays: Number(row?.hold_days ?? 7), autoTransfers: Boolean(row?.auto_transfers_enabled) };
+export type PayoutSettings = {
+  holdDays: number;
+  autoTransfers: boolean;
+  frequency: string;
+  payoutDay: number;
+  payoutHourUtc: number;
+  autoGenerate: boolean;
+  autoProcessTransfers: boolean;
+  retryFailedTransfers: boolean;
+  maxTransferAttempts: number;
+};
+
+export async function getPayoutSettings(): Promise<PayoutSettings> {
+  const { data } = await supabase.from("payout_settings" as never).select("*").maybeSingle();
+  const row = (data ?? {}) as unknown as Record<string, unknown>;
+  return {
+    holdDays: Number(row.hold_days ?? 7),
+    autoTransfers: Boolean(row.auto_transfers_enabled),
+    frequency: String(row.payout_frequency ?? "weekly"),
+    payoutDay: Number(row.payout_day ?? 1),
+    payoutHourUtc: Number(row.payout_hour_utc ?? 7),
+    autoGenerate: row.auto_generate_payouts !== false,
+    autoProcessTransfers: row.auto_process_transfers === true,
+    retryFailedTransfers: row.retry_failed_transfers === true,
+    maxTransferAttempts: Number(row.max_transfer_attempts ?? 3),
+  };
 }
+
 
 // ---------------- Admin actions (server functions) ----------------
 
