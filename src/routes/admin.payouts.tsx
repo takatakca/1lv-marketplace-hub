@@ -249,6 +249,82 @@ function Page() {
       </div>
 
       <div className="mt-6 rounded-xl border border-border bg-card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-navy">Weekly scheduler</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {settings
+                ? `${settings.frequency} · runs at ${String(settings.payoutHourUtc).padStart(2, "0")}:00 UTC · ${settings.holdDays}-day hold`
+                : "Loading settings…"}
+              {" · "}
+              <span className={settings?.autoProcessTransfers ? "font-semibold text-deal" : "font-semibold text-success"}>
+                automatic transfers {settings?.autoProcessTransfers ? "ON" : "OFF"}
+              </span>
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button" onClick={handleRunScheduler} disabled={busy}
+              className="rounded-md bg-navy px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {busy ? "Working…" : "Run scheduler now"}
+            </button>
+            <button
+              type="button" onClick={handleReconcileAll} disabled={busy}
+              className="rounded-md border border-border px-3 py-2 text-sm font-semibold text-navy disabled:opacity-60"
+            >
+              Reconcile last 30 days
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3 text-xs">
+          <p className="font-semibold text-navy">
+            Last run:{" "}
+            {lastRun
+              ? `${schedulerRunLabel(lastRun.status)} · ${new Date(lastRun.started_at).toLocaleString()}`
+              : "never"}
+          </p>
+          {lastRun?.error_message && <p className="mt-1 text-destructive">{lastRun.error_message}</p>}
+        </div>
+
+        {runs.length > 0 && (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-left text-[11px]">
+              <thead className="text-muted-foreground">
+                <tr className="border-b border-border">
+                  <th className="py-1">Started</th>
+                  <th className="py-1">Period</th>
+                  <th className="py-1">Status</th>
+                  <th className="py-1 text-right">Created</th>
+                  <th className="py-1 text-right">Transferred</th>
+                  <th className="py-1 text-right">Failed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {runs.map((r) => (
+                  <tr key={r.id} className="border-b border-border/50">
+                    <td className="py-1 text-muted-foreground">{new Date(r.started_at).toLocaleString()}</td>
+                    <td className="py-1 text-muted-foreground">
+                      {r.period_start ? `${r.period_start} → ${r.period_end}` : "—"}
+                    </td>
+                    <td className={`py-1 ${r.status === "failed" ? "text-destructive" : r.status === "completed" ? "text-success" : "text-deal"}`}>
+                      {schedulerRunLabel(r.status)}
+                    </td>
+                    <td className="py-1 text-right">{r.payouts_created}</td>
+                    <td className="py-1 text-right">{r.payouts_processed}</td>
+                    <td className="py-1 text-right">{r.payouts_failed}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+
+
+      <div className="mt-6 rounded-xl border border-border bg-card p-5">
         <h2 className="text-sm font-bold text-navy">Generate payouts</h2>
         <p className="mt-1 text-xs text-muted-foreground">
           Includes delivered vendor orders on paid orders, past the {holdDays}-day hold, with payouts enabled and no
