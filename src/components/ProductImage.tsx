@@ -42,6 +42,7 @@ export function ProductImage({ src, alt, className = "", zoom = true, eager = fa
     <>
       {!loaded && <div className="absolute inset-0 skeleton-shimmer" aria-hidden />}
       <img
+        ref={ref}
         src={src}
         alt={alt}
         loading={eager ? "eager" : "lazy"}
