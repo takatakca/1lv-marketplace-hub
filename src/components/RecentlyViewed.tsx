@@ -1,6 +1,6 @@
 import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 import { products } from "@/lib/data";
-import { ProductGrid } from "./ProductGrid";
+import { ProductRail, SectionHead } from "./ProductRail";
 
 export function RecentlyViewed({ excludeId }: { excludeId?: string }) {
   const { ids } = useRecentlyViewed();
