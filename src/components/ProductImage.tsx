@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImageOff } from "lucide-react";
 
 type Props = {
@@ -17,6 +17,17 @@ type Props = {
 export function ProductImage({ src, alt, className = "", zoom = true, eager = false }: Props) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  const ref = useRef<HTMLImageElement>(null);
+
+  // Images already complete before hydration never fire onLoad.
+  useEffect(() => {
+    const el = ref.current;
+    if (el?.complete) {
+      if (el.naturalWidth === 0) setFailed(true);
+      else setLoaded(true);
+    }
+  }, [src]);
+
 
   if (!src || failed) {
     return (
