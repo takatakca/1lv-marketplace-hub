@@ -10,9 +10,12 @@ export function RecentlyViewed({ excludeId }: { excludeId?: string }) {
     .slice(0, 6);
   if (items.length === 0) return null;
   return (
-    <section className="mx-auto max-w-7xl px-4 py-8">
-      <h2 className="mb-4 font-display text-xl font-extrabold text-navy">Recently viewed</h2>
-      <ProductGrid products={items} cols={6} />
+    <section className="surface-2 border-y border-border">
+      <div className="mx-auto max-w-7xl px-4 py-7">
+        <SectionHead eyebrow="Pick up where you left off" title="Recently viewed" />
+        <ProductRail products={items} />
+      </div>
     </section>
+
   );
 }
