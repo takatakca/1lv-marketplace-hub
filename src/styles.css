@@ -111,7 +111,18 @@
   --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06);
   --shadow-elevated: 0 10px 30px -12px rgb(15 23 42 / 0.18);
   --shadow-glow: 0 0 0 4px color-mix(in oklab, var(--electric) 18%, transparent);
+
+  /* Marketplace surface system */
+  --surface-1: oklch(1 0 0);                    /* cards */
+  --surface-2: oklch(0.985 0.003 250);          /* page band A */
+  --surface-3: oklch(0.965 0.008 250);          /* page band B */
+  --surface-ink: oklch(0.20 0.06 260);          /* dark band */
+  --shadow-merch: 0 1px 1px rgb(15 23 42 / 0.04), 0 2px 6px -2px rgb(15 23 42 / 0.08);
+  --shadow-merch-hover: 0 2px 4px rgb(15 23 42 / 0.05), 0 14px 28px -14px rgb(15 23 42 / 0.28);
+  --radius-card: 0.75rem;
+  --radius-btn: 0.5rem;
 }
+
 
 .dark {
   --background: oklch(0.16 0.04 260);
@@ -161,4 +172,68 @@
   .text-balance { text-wrap: balance; }
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { scrollbar-width: none; }
+}
+
+@layer utilities {
+  /* Merchandising surfaces */
+  .surface-1 { background-color: var(--surface-1); }
+  .surface-2 { background-color: var(--surface-2); }
+  .surface-3 { background-color: var(--surface-3); }
+  .shadow-merch { box-shadow: var(--shadow-merch); }
+  .shadow-merch-hover { box-shadow: var(--shadow-merch-hover); }
+
+  /* Product card lift */
+  .merch-card {
+    background-color: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-merch);
+    transition: box-shadow 180ms ease, transform 180ms ease, border-color 180ms ease;
+  }
+  .merch-card:hover {
+    box-shadow: var(--shadow-merch-hover);
+    border-color: color-mix(in oklab, var(--electric) 35%, transparent);
+    transform: translateY(-2px);
+  }
+
+  /* Skeleton shimmer */
+  .skeleton-shimmer {
+    background-image: linear-gradient(
+      90deg,
+      color-mix(in oklab, var(--muted) 100%, transparent) 0%,
+      color-mix(in oklab, var(--muted) 55%, white) 50%,
+      color-mix(in oklab, var(--muted) 100%, transparent) 100%
+    );
+    background-size: 200% 100%;
+    animation: merch-shimmer 1.3s linear infinite;
+  }
+  @keyframes merch-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  .fade-up { animation: merch-fade-up 320ms ease-out both; }
+  @keyframes merch-fade-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  .deal-pulse { animation: merch-pulse 2.4s ease-in-out infinite; }
+  @keyframes merch-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.72; }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .merch-card,
+  .merch-card:hover,
+  .skeleton-shimmer,
+  .fade-up,
+  .deal-pulse,
+  .group img {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
 }
