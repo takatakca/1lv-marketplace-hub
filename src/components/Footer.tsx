@@ -19,7 +19,7 @@ export function Footer() {
           </div>
         </div>
         {[
-          { title: "Shop", links: [["Categories", "/categories"], ["Flash deals", "/search"], ["New arrivals", "/search"], ["Wishlist", "/wishlist"]] },
+          { title: "Shop", links: [["Categories", "/categories"], ["Flash deals", "/deals"], ["Trending", "/trending"], ["New arrivals", "/new-arrivals"], ["Coupons", "/coupons"], ["Wishlist", "/wishlist"]] },
           { title: "Sell", links: [["Become a vendor", "/become-a-vendor"], ["Vendor pricing", "/vendor-pricing"], ["Vendor login", "/login"]] },
           { title: "Support", links: [["Help center", "/help"], ["Shipping", "/shipping"], ["Returns", "/returns"], ["Privacy", "/privacy"], ["Terms", "/terms"]] },
         ].map((col) => (
@@ -27,7 +27,7 @@ export function Footer() {
             <h4 className="mb-3 text-sm font-bold uppercase tracking-wider text-white">{col.title}</h4>
             <ul className="space-y-2 text-sm text-white/70">
               {col.links.map(([label, to]) => (
-                <li key={to}>
+                <li key={label}>
                   <Link to={to} className="hover:text-electric">{label}</Link>
                 </li>
               ))}
