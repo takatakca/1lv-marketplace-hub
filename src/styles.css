@@ -111,7 +111,18 @@
   --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06);
   --shadow-elevated: 0 10px 30px -12px rgb(15 23 42 / 0.18);
   --shadow-glow: 0 0 0 4px color-mix(in oklab, var(--electric) 18%, transparent);
+
+  /* Marketplace surface system */
+  --surface-1: oklch(1 0 0);                    /* cards */
+  --surface-2: oklch(0.985 0.003 250);          /* page band A */
+  --surface-3: oklch(0.965 0.008 250);          /* page band B */
+  --surface-ink: oklch(0.20 0.06 260);          /* dark band */
+  --shadow-merch: 0 1px 1px rgb(15 23 42 / 0.04), 0 2px 6px -2px rgb(15 23 42 / 0.08);
+  --shadow-merch-hover: 0 2px 4px rgb(15 23 42 / 0.05), 0 14px 28px -14px rgb(15 23 42 / 0.28);
+  --radius-card: 0.75rem;
+  --radius-btn: 0.5rem;
 }
+
 
 .dark {
   --background: oklch(0.16 0.04 260);
