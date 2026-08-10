@@ -42,7 +42,7 @@ export function SectionHead({
         {children}
         {action && actionTo && (
           <Link
-            to={actionTo}
+            to={actionTo as "/"}
             className="inline-flex items-center gap-1 text-xs font-bold text-electric hover:underline sm:text-sm"
           >
             {action} <ChevronRight size={15} />
