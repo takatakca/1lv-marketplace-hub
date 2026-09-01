@@ -314,6 +314,8 @@ export type Database = {
           stripe_charge_id: string | null
           stripe_payment_intent_id: string | null
           subtotal: number
+          takatak_customer_id: string | null
+          takatak_order_event_id: string | null
           tax_total: number
           total: number
           updated_at: string
@@ -335,6 +337,8 @@ export type Database = {
           stripe_charge_id?: string | null
           stripe_payment_intent_id?: string | null
           subtotal?: number
+          takatak_customer_id?: string | null
+          takatak_order_event_id?: string | null
           tax_total?: number
           total?: number
           updated_at?: string
@@ -356,6 +360,8 @@ export type Database = {
           stripe_charge_id?: string | null
           stripe_payment_intent_id?: string | null
           subtotal?: number
+          takatak_customer_id?: string | null
+          takatak_order_event_id?: string | null
           tax_total?: number
           total?: number
           updated_at?: string
@@ -888,6 +894,7 @@ export type Database = {
           display_name: string | null
           id: string
           locale: string
+          takatak_person_id: string | null
           updated_at: string
         }
         Insert: {
@@ -897,6 +904,7 @@ export type Database = {
           display_name?: string | null
           id: string
           locale?: string
+          takatak_person_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -906,6 +914,7 @@ export type Database = {
           display_name?: string | null
           id?: string
           locale?: string
+          takatak_person_id?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -1085,6 +1094,57 @@ export type Database = {
           },
         ]
       }
+      takatak_outbox: {
+        Row: {
+          aggregate_id: string
+          aggregate_type: string
+          attempt_count: number
+          created_at: string
+          delivered_at: string | null
+          event_type: string
+          id: string
+          last_error: string | null
+          next_attempt_at: string
+          payload: Json
+          remote_id: string | null
+          source_application: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          aggregate_id: string
+          aggregate_type: string
+          attempt_count?: number
+          created_at?: string
+          delivered_at?: string | null
+          event_type: string
+          id?: string
+          last_error?: string | null
+          next_attempt_at?: string
+          payload?: Json
+          remote_id?: string | null
+          source_application?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          aggregate_id?: string
+          aggregate_type?: string
+          attempt_count?: number
+          created_at?: string
+          delivered_at?: string | null
+          event_type?: string
+          id?: string
+          last_error?: string | null
+          next_attempt_at?: string
+          payload?: Json
+          remote_id?: string | null
+          source_application?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -1210,6 +1270,10 @@ export type Database = {
           stripe_subscription_id: string | null
           subscription_plan: string | null
           subscription_status: string
+          takatak_company_id: string | null
+          takatak_last_synced_at: string | null
+          takatak_merchant_id: string | null
+          takatak_sync_status: string
           updated_at: string
           user_id: string
         }
@@ -1243,6 +1307,10 @@ export type Database = {
           stripe_subscription_id?: string | null
           subscription_plan?: string | null
           subscription_status?: string
+          takatak_company_id?: string | null
+          takatak_last_synced_at?: string | null
+          takatak_merchant_id?: string | null
+          takatak_sync_status?: string
           updated_at?: string
           user_id: string
         }
@@ -1276,6 +1344,10 @@ export type Database = {
           stripe_subscription_id?: string | null
           subscription_plan?: string | null
           subscription_status?: string
+          takatak_company_id?: string | null
+          takatak_last_synced_at?: string | null
+          takatak_merchant_id?: string | null
+          takatak_sync_status?: string
           updated_at?: string
           user_id?: string
         }
