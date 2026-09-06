@@ -81,18 +81,26 @@ export async function queueCustomerEvent(
     .limit(1)
     .maybeSingle();
   const addr = (lastOrder?.shipping_address ?? null) as Record<string, string> | null;
-  await enqueue(eventType, "customer", profileId, {
-    ...mapCustomer({
-      id: profile.id,
-      display_name: profile.display_name,
-      email: lastOrder?.customer_email ?? null,
-      phone: lastOrder?.customer_phone ?? null,
-      locale: profile.locale,
-      country: profile.country,
-      province: addr?.["province"] ?? null,
-      created_at: profile.created_at,
-    }),
-  });
+  await enqueue(
+    eventType,
+    "customer",
+    profileId,
+    {
+      ...mapCustomer({
+        id: profile.id,
+        display_name: profile.display_name,
+        email: lastOrder?.customer_email ?? null,
+        phone: lastOrder?.customer_phone ?? null,
+        locale: profile.locale,
+        country: profile.country,
+        province: addr?.["province"] ?? null,
+        created_at: profile.created_at,
+      }),
+    },
+    // "created" is a one-time lifecycle event; "updated" may legitimately repeat.
+    eventType === "customer.created" ? `customer.created:${profileId}` : null,
+  );
+
 }
 
 export async function queueGuestCustomerEvent(orderId: string) {
