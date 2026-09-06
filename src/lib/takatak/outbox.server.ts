@@ -220,8 +220,11 @@ export async function queueRelationshipEvents(orderId: string) {
     }
 
     const isFirst = orderCount === null || orderCount <= 1;
+    const eventType = isFirst
+      ? ("customer.vendor.first_order" as const)
+      : ("customer.vendor.order_completed" as const);
     await enqueue(
-      isFirst ? "customer.vendor.first_order" : "customer.vendor.order_completed",
+      eventType,
       "relationship",
       `${customerRef}:${split.vendor_id}`,
       {
@@ -236,9 +239,13 @@ export async function queueRelationshipEvents(orderId: string) {
         }),
         local_order_id: order.id,
       },
+      isFirst
+        ? `customer.vendor.first_order:${customerRef}:${split.vendor_id}`
+        : `customer.vendor.order_completed:${order.id}:${split.vendor_id}`,
     );
   }
 }
+
 
 export async function queueDisputeRelationshipEvent(disputeId: string) {
   const client = await db();
