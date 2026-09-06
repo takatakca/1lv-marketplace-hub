@@ -28,21 +28,33 @@ function nextAttemptAt(attempt: number): string {
   return new Date(Date.now() + minutes * 60_000).toISOString();
 }
 
+/**
+ * Queue one event. `event_key` gives durable, DB-enforced idempotency for
+ * one-time lifecycle events (unique partial index on takatak_outbox.event_key),
+ * so webhook retries can never create duplicate master events.
+ */
 export async function enqueue(
   event_type: TakatakEventType,
   aggregate_type: AggregateType,
   aggregate_id: string,
   payload: Record<string, unknown>,
+  event_key?: string | null,
 ): Promise<void> {
   const client = await db();
-  await client.from("takatak_outbox").insert({
+  const { error } = await client.from("takatak_outbox").insert({
     event_type,
     aggregate_type,
     aggregate_id,
     source_application: "1lv",
     payload,
+    event_key: event_key ?? null,
   });
+  // 23505 = duplicate event_key → the lifecycle event is already queued/delivered.
+  if (error && (error as { code?: string }).code !== "23505") {
+    console.warn("takatak enqueue failed:", (error as { message?: string }).message);
+  }
 }
+
 
 /* ------------------------------------------------------------------ */
 /* Event builders — payloads are always rebuilt from the database,     */
@@ -69,18 +81,26 @@ export async function queueCustomerEvent(
     .limit(1)
     .maybeSingle();
   const addr = (lastOrder?.shipping_address ?? null) as Record<string, string> | null;
-  await enqueue(eventType, "customer", profileId, {
-    ...mapCustomer({
-      id: profile.id,
-      display_name: profile.display_name,
-      email: lastOrder?.customer_email ?? null,
-      phone: lastOrder?.customer_phone ?? null,
-      locale: profile.locale,
-      country: profile.country,
-      province: addr?.["province"] ?? null,
-      created_at: profile.created_at,
-    }),
-  });
+  await enqueue(
+    eventType,
+    "customer",
+    profileId,
+    {
+      ...mapCustomer({
+        id: profile.id,
+        display_name: profile.display_name,
+        email: lastOrder?.customer_email ?? null,
+        phone: lastOrder?.customer_phone ?? null,
+        locale: profile.locale,
+        country: profile.country,
+        province: addr?.["province"] ?? null,
+        created_at: profile.created_at,
+      }),
+    },
+    // "created" is a one-time lifecycle event; "updated" may legitimately repeat.
+    eventType === "customer.created" ? `customer.created:${profileId}` : null,
+  );
+
 }
 
 export async function queueGuestCustomerEvent(orderId: string) {
@@ -95,17 +115,24 @@ export async function queueGuestCustomerEvent(orderId: string) {
   const fullName = addr
     ? [addr["first_name"], addr["last_name"]].filter(Boolean).join(" ") || null
     : null;
-  await enqueue("customer.created", "customer", `guest:${order.order_number}`, {
-    ...mapGuestCustomer({
-      orderNumber: order.order_number,
-      email: order.customer_email,
-      phone: order.customer_phone,
-      fullName,
-      country: addr?.["country"] ?? null,
-      province: addr?.["province"] ?? null,
-      createdAt: order.created_at,
-    }),
-  });
+  await enqueue(
+    "customer.created",
+    "customer",
+    `guest:${order.order_number}`,
+    {
+      ...mapGuestCustomer({
+        orderNumber: order.order_number,
+        email: order.customer_email,
+        phone: order.customer_phone,
+        fullName,
+        country: addr?.["country"] ?? null,
+        province: addr?.["province"] ?? null,
+        createdAt: order.created_at,
+      }),
+    },
+    `customer.created:guest:${order.order_number}`,
+  );
+
 }
 
 export async function queueMerchantEvent(vendorId: string, eventType: TakatakEventType) {
@@ -118,7 +145,10 @@ export async function queueMerchantEvent(vendorId: string, eventType: TakatakEve
     .eq("id", vendorId)
     .maybeSingle();
   if (!vendor) return;
-  await enqueue(eventType, "merchant", vendorId, { ...mapMerchant(vendor) });
+  // One-time merchant lifecycle transitions are keyed; free-form updates are not.
+  const key =
+    eventType === "merchant.updated" ? null : `${eventType}:${vendorId}`;
+  await enqueue(eventType, "merchant", vendorId, { ...mapMerchant(vendor) }, key);
 }
 
 export async function queueOrderEvent(orderId: string, eventType: TakatakEventType) {
@@ -131,13 +161,31 @@ export async function queueOrderEvent(orderId: string, eventType: TakatakEventTy
     .eq("id", orderId)
     .maybeSingle();
   if (!order) return;
-  await enqueue(eventType, "order", orderId, { ...mapOrder(order) });
+  await enqueue(eventType, "order", orderId, { ...mapOrder(order) }, `${eventType}:${orderId}`);
 
   if (eventType === "order.created") {
     await queueRelationshipEvents(orderId);
     if (!order.customer_id) await queueGuestCustomerEvent(orderId);
   }
 }
+
+/**
+ * Queue order.fulfilled only once EVERY vendor split has been delivered.
+ * Safe to call after any vendor order status change.
+ */
+export async function queueOrderFulfilledIfComplete(orderId: string) {
+  const client = await db();
+  const { data: splits } = await client
+    .from("vendor_orders")
+    .select("status")
+    .eq("order_id", orderId);
+  const rows = (splits ?? []) as Array<{ status: string }>;
+  if (rows.length === 0) return;
+  const done = rows.every((r) => r.status === "delivered" || r.status === "cancelled");
+  if (!done) return;
+  await queueOrderEvent(orderId, "order.fulfilled");
+}
+
 
 /**
  * One relationship edge per vendor split. Metrics are scoped to THAT vendor
@@ -172,8 +220,11 @@ export async function queueRelationshipEvents(orderId: string) {
     }
 
     const isFirst = orderCount === null || orderCount <= 1;
+    const eventType = isFirst
+      ? ("customer.vendor.first_order" as const)
+      : ("customer.vendor.order_completed" as const);
     await enqueue(
-      isFirst ? "customer.vendor.first_order" : "customer.vendor.order_completed",
+      eventType,
       "relationship",
       `${customerRef}:${split.vendor_id}`,
       {
@@ -188,9 +239,13 @@ export async function queueRelationshipEvents(orderId: string) {
         }),
         local_order_id: order.id,
       },
+      isFirst
+        ? `customer.vendor.first_order:${customerRef}:${split.vendor_id}`
+        : `customer.vendor.order_completed:${order.id}:${split.vendor_id}`,
     );
   }
 }
+
 
 export async function queueDisputeRelationshipEvent(disputeId: string) {
   const client = await db();
@@ -216,8 +271,45 @@ export async function queueDisputeRelationshipEvent(disputeId: string) {
       local_dispute_id: dispute.id,
       local_order_id: dispute.order_id,
     },
+    `customer.vendor.dispute_opened:${disputeId}`,
   );
 }
+
+/** Relationship + order events for one delivered vendor split. */
+export async function queueVendorOrderDelivered(vendorOrderId: string) {
+  const client = await db();
+  const { data: vo } = await client
+    .from("vendor_orders")
+    .select("id, order_id, vendor_id, subtotal, status")
+    .eq("id", vendorOrderId)
+    .maybeSingle();
+  if (!vo || vo.status !== "delivered") return;
+  const { data: order } = await client
+    .from("orders")
+    .select("id, order_number, customer_id, created_at")
+    .eq("id", vo.order_id)
+    .maybeSingle();
+  if (!order) return;
+  const customerRef = order.customer_id ?? `guest:${order.order_number}`;
+  await enqueue(
+    "customer.vendor.order_completed",
+    "relationship",
+    `${customerRef}:${vo.vendor_id}`,
+    {
+      ...mapRelationship({
+        customerLocalReference: customerRef,
+        customerIsGuest: !order.customer_id,
+        vendorLocalReference: vo.vendor_id,
+        lastSeenAt: new Date().toISOString(),
+      }),
+      local_order_id: order.id,
+      local_vendor_order_id: vo.id,
+    },
+    `customer.vendor.order_completed:delivered:${vo.id}`,
+  );
+  await queueOrderFulfilledIfComplete(vo.order_id);
+}
+
 
 /* ------------------------------------------------------------------ */
 /* Drain                                                               */
@@ -328,4 +420,170 @@ export async function retryFailedOutbox(): Promise<number> {
     .eq("status", "failed")
     .select("id");
   return (data ?? []).length;
+}
+
+/* ------------------------------------------------------------------ */
+/* Admin console status (sanitized)                                    */
+/* ------------------------------------------------------------------ */
+
+export type SafeOutboxEvent = {
+  id: string;
+  created_at: string;
+  event_type: string;
+  aggregate_type: string;
+  aggregate_ref: string;
+  status: string;
+  attempt_count: number;
+  delivered_at: string | null;
+  error_summary: string | null;
+};
+
+export type TakatakStatus = {
+  configured: boolean;
+  api_url_configured: boolean;
+  api_key_configured: boolean;
+  pending: number;
+  processing: number;
+  delivered: number;
+  failed: number;
+  last_successful_sync: string | null;
+  last_failure: string | null;
+  synced_customers: number;
+  synced_merchants: number;
+  synced_orders: number;
+  synced_relationships: number;
+  recent: SafeOutboxEvent[];
+};
+
+/** Aggregate IDs are truncated: never leak full customer/order identifiers. */
+function safeRef(v: string): string {
+  if (!v) return "—";
+  if (v.startsWith("guest:")) return v;
+  return v.length > 12 ? `${v.slice(0, 8)}…${v.slice(-4)}` : v;
+}
+
+/** Error text is truncated and stripped of anything that looks like a token. */
+function safeError(v: string | null): string | null {
+  if (!v) return null;
+  return v
+    .replace(/(sk|pk|rk|whsec|Bearer)[_\s][A-Za-z0-9-_]+/g, "[redacted]")
+    .slice(0, 160);
+}
+
+async function countBy(client: Db, filter: (q: any) => any): Promise<number> {
+  const { count } = await filter(
+    client.from("takatak_outbox").select("id", { count: "exact", head: true }),
+  );
+  return count ?? 0;
+}
+
+export async function takatakStatus(): Promise<TakatakStatus> {
+  const client = await db();
+  const url = Boolean(process.env["TAKATAK_MASTER_API_URL"]);
+  const key = Boolean(process.env["TAKATAK_MASTER_API_KEY"]);
+
+  const [pending, processing, delivered, failed] = await Promise.all([
+    countBy(client, (q) => q.eq("status", "pending")),
+    countBy(client, (q) => q.eq("status", "processing")),
+    countBy(client, (q) => q.eq("status", "delivered")),
+    countBy(client, (q) => q.eq("status", "failed")),
+  ]);
+
+  const [customers, merchants, orders, relationships] = await Promise.all([
+    countBy(client, (q) => q.eq("status", "delivered").eq("aggregate_type", "customer")),
+    countBy(client, (q) => q.eq("status", "delivered").eq("aggregate_type", "merchant")),
+    countBy(client, (q) => q.eq("status", "delivered").eq("aggregate_type", "order")),
+    countBy(client, (q) => q.eq("status", "delivered").eq("aggregate_type", "relationship")),
+  ]);
+
+  const { data: lastOk } = await client
+    .from("takatak_outbox")
+    .select("delivered_at")
+    .eq("status", "delivered")
+    .order("delivered_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: lastBad } = await client
+    .from("takatak_outbox")
+    .select("updated_at")
+    .eq("status", "failed")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: recentRows } = await client
+    .from("takatak_outbox")
+    .select("id, created_at, event_type, aggregate_type, aggregate_id, status, attempt_count, delivered_at, last_error")
+    .order("created_at", { ascending: false })
+    .limit(30);
+
+  const recent: SafeOutboxEvent[] = ((recentRows ?? []) as Array<Record<string, any>>).map((r) => ({
+    id: r["id"] as string,
+    created_at: r["created_at"] as string,
+    event_type: r["event_type"] as string,
+    aggregate_type: r["aggregate_type"] as string,
+    aggregate_ref: safeRef(r["aggregate_id"] as string),
+    status: r["status"] as string,
+    attempt_count: Number(r["attempt_count"] ?? 0),
+    delivered_at: (r["delivered_at"] as string | null) ?? null,
+    error_summary: safeError((r["last_error"] as string | null) ?? null),
+  }));
+
+  return {
+    configured: url && key,
+    api_url_configured: url,
+    api_key_configured: key,
+    pending,
+    processing,
+    delivered,
+    failed,
+    last_successful_sync: (lastOk as { delivered_at?: string } | null)?.delivered_at ?? null,
+    last_failure: (lastBad as { updated_at?: string } | null)?.updated_at ?? null,
+    synced_customers: customers,
+    synced_merchants: merchants,
+    synced_orders: orders,
+    synced_relationships: relationships,
+    recent,
+  };
+}
+
+/** Sanitized single-event inspector for admins. Secrets never reach the payload. */
+const SECRET_HINT = /(key|secret|token|password|otp|card|cvc|authorization|apikey)/i;
+
+export function sanitizePayload(input: unknown, depth = 0): unknown {
+  if (depth > 4 || input === null || typeof input !== "object") return input;
+  if (Array.isArray(input)) return input.slice(0, 25).map((v) => sanitizePayload(v, depth + 1));
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+    if (SECRET_HINT.test(k)) {
+      out[k] = "[redacted]";
+      continue;
+    }
+    out[k] = sanitizePayload(v, depth + 1);
+  }
+  return out;
+}
+
+export async function takatakEventDetail(id: string) {
+  const client = await db();
+  const { data } = await client
+    .from("takatak_outbox")
+    .select("id, created_at, event_type, aggregate_type, aggregate_id, status, attempt_count, delivered_at, last_error, payload, event_key")
+    .eq("id", id)
+    .maybeSingle();
+  if (!data) return null;
+  const row = data as Record<string, any>;
+  return {
+    id: row["id"] as string,
+    created_at: row["created_at"] as string,
+    event_type: row["event_type"] as string,
+    aggregate_type: row["aggregate_type"] as string,
+    aggregate_ref: safeRef(row["aggregate_id"] as string),
+    status: row["status"] as string,
+    attempt_count: Number(row["attempt_count"] ?? 0),
+    delivered_at: (row["delivered_at"] as string | null) ?? null,
+    error_summary: safeError((row["last_error"] as string | null) ?? null),
+    payload: sanitizePayload(row["payload"] ?? {}) as Record<string, unknown>,
+  };
 }
