@@ -28,21 +28,33 @@ function nextAttemptAt(attempt: number): string {
   return new Date(Date.now() + minutes * 60_000).toISOString();
 }
 
+/**
+ * Queue one event. `event_key` gives durable, DB-enforced idempotency for
+ * one-time lifecycle events (unique partial index on takatak_outbox.event_key),
+ * so webhook retries can never create duplicate master events.
+ */
 export async function enqueue(
   event_type: TakatakEventType,
   aggregate_type: AggregateType,
   aggregate_id: string,
   payload: Record<string, unknown>,
+  event_key?: string | null,
 ): Promise<void> {
   const client = await db();
-  await client.from("takatak_outbox").insert({
+  const { error } = await client.from("takatak_outbox").insert({
     event_type,
     aggregate_type,
     aggregate_id,
     source_application: "1lv",
     payload,
+    event_key: event_key ?? null,
   });
+  // 23505 = duplicate event_key → the lifecycle event is already queued/delivered.
+  if (error && (error as { code?: string }).code !== "23505") {
+    console.warn("takatak enqueue failed:", (error as { message?: string }).message);
+  }
 }
+
 
 /* ------------------------------------------------------------------ */
 /* Event builders — payloads are always rebuilt from the database,     */
