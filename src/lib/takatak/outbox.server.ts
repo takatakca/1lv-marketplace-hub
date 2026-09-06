@@ -115,17 +115,24 @@ export async function queueGuestCustomerEvent(orderId: string) {
   const fullName = addr
     ? [addr["first_name"], addr["last_name"]].filter(Boolean).join(" ") || null
     : null;
-  await enqueue("customer.created", "customer", `guest:${order.order_number}`, {
-    ...mapGuestCustomer({
-      orderNumber: order.order_number,
-      email: order.customer_email,
-      phone: order.customer_phone,
-      fullName,
-      country: addr?.["country"] ?? null,
-      province: addr?.["province"] ?? null,
-      createdAt: order.created_at,
-    }),
-  });
+  await enqueue(
+    "customer.created",
+    "customer",
+    `guest:${order.order_number}`,
+    {
+      ...mapGuestCustomer({
+        orderNumber: order.order_number,
+        email: order.customer_email,
+        phone: order.customer_phone,
+        fullName,
+        country: addr?.["country"] ?? null,
+        province: addr?.["province"] ?? null,
+        createdAt: order.created_at,
+      }),
+    },
+    `customer.created:guest:${order.order_number}`,
+  );
+
 }
 
 export async function queueMerchantEvent(vendorId: string, eventType: TakatakEventType) {
