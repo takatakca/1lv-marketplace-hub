@@ -1101,6 +1101,7 @@ export type Database = {
           attempt_count: number
           created_at: string
           delivered_at: string | null
+          event_key: string | null
           event_type: string
           id: string
           last_error: string | null
@@ -1117,6 +1118,7 @@ export type Database = {
           attempt_count?: number
           created_at?: string
           delivered_at?: string | null
+          event_key?: string | null
           event_type: string
           id?: string
           last_error?: string | null
@@ -1133,6 +1135,7 @@ export type Database = {
           attempt_count?: number
           created_at?: string
           delivered_at?: string | null
+          event_key?: string | null
           event_type?: string
           id?: string
           last_error?: string | null
