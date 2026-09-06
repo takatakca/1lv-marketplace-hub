@@ -271,8 +271,45 @@ export async function queueDisputeRelationshipEvent(disputeId: string) {
       local_dispute_id: dispute.id,
       local_order_id: dispute.order_id,
     },
+    `customer.vendor.dispute_opened:${disputeId}`,
   );
 }
+
+/** Relationship + order events for one delivered vendor split. */
+export async function queueVendorOrderDelivered(vendorOrderId: string) {
+  const client = await db();
+  const { data: vo } = await client
+    .from("vendor_orders")
+    .select("id, order_id, vendor_id, subtotal, status")
+    .eq("id", vendorOrderId)
+    .maybeSingle();
+  if (!vo || vo.status !== "delivered") return;
+  const { data: order } = await client
+    .from("orders")
+    .select("id, order_number, customer_id, created_at")
+    .eq("id", vo.order_id)
+    .maybeSingle();
+  if (!order) return;
+  const customerRef = order.customer_id ?? `guest:${order.order_number}`;
+  await enqueue(
+    "customer.vendor.order_completed",
+    "relationship",
+    `${customerRef}:${vo.vendor_id}`,
+    {
+      ...mapRelationship({
+        customerLocalReference: customerRef,
+        customerIsGuest: !order.customer_id,
+        vendorLocalReference: vo.vendor_id,
+        lastSeenAt: new Date().toISOString(),
+      }),
+      local_order_id: order.id,
+      local_vendor_order_id: vo.id,
+    },
+    `customer.vendor.order_completed:delivered:${vo.id}`,
+  );
+  await queueOrderFulfilledIfComplete(vo.order_id);
+}
+
 
 /* ------------------------------------------------------------------ */
 /* Drain                                                               */
