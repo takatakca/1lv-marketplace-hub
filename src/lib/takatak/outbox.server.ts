@@ -145,7 +145,10 @@ export async function queueMerchantEvent(vendorId: string, eventType: TakatakEve
     .eq("id", vendorId)
     .maybeSingle();
   if (!vendor) return;
-  await enqueue(eventType, "merchant", vendorId, { ...mapMerchant(vendor) });
+  // One-time merchant lifecycle transitions are keyed; free-form updates are not.
+  const key =
+    eventType === "merchant.updated" ? null : `${eventType}:${vendorId}`;
+  await enqueue(eventType, "merchant", vendorId, { ...mapMerchant(vendor) }, key);
 }
 
 export async function queueOrderEvent(orderId: string, eventType: TakatakEventType) {
@@ -158,13 +161,31 @@ export async function queueOrderEvent(orderId: string, eventType: TakatakEventTy
     .eq("id", orderId)
     .maybeSingle();
   if (!order) return;
-  await enqueue(eventType, "order", orderId, { ...mapOrder(order) });
+  await enqueue(eventType, "order", orderId, { ...mapOrder(order) }, `${eventType}:${orderId}`);
 
   if (eventType === "order.created") {
     await queueRelationshipEvents(orderId);
     if (!order.customer_id) await queueGuestCustomerEvent(orderId);
   }
 }
+
+/**
+ * Queue order.fulfilled only once EVERY vendor split has been delivered.
+ * Safe to call after any vendor order status change.
+ */
+export async function queueOrderFulfilledIfComplete(orderId: string) {
+  const client = await db();
+  const { data: splits } = await client
+    .from("vendor_orders")
+    .select("status")
+    .eq("order_id", orderId);
+  const rows = (splits ?? []) as Array<{ status: string }>;
+  if (rows.length === 0) return;
+  const done = rows.every((r) => r.status === "delivered" || r.status === "cancelled");
+  if (!done) return;
+  await queueOrderEvent(orderId, "order.fulfilled");
+}
+
 
 /**
  * One relationship edge per vendor split. Metrics are scoped to THAT vendor
