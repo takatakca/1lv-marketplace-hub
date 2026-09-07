@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { signalVendorOrderDelivered } from "./takatak-sync";
 
 export type OrderRecord = {
   id: string;
@@ -83,6 +84,7 @@ export async function updateVendorOrder(
     .update(patch as never)
     .eq("id", id);
   if (error) throw error;
+  if (patch.status === "delivered") signalVendorOrderDelivered(id);
 }
 
 // ---------- Order items (still used to show per-line products) ----------
