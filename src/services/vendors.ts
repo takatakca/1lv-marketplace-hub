@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { signalMerchant } from "./takatak-sync";
 
 export type VendorRecord = {
   id: string;
@@ -71,6 +72,7 @@ export async function upsertMyVendor(userId: string, input: VendorUpsert) {
       .select()
       .single();
     if (error) throw error;
+    signalMerchant((data as VendorRecord).id, "merchant.updated");
     return data as VendorRecord;
   }
   const { data, error } = await supabase
@@ -87,6 +89,7 @@ export async function upsertMyVendor(userId: string, input: VendorUpsert) {
     .select()
     .single();
   if (error) throw error;
+  signalMerchant((data as VendorRecord).id, "merchant.application.created");
   return data as VendorRecord;
 }
 
@@ -103,6 +106,8 @@ export type VendorStatus = "pending" | "active" | "suspended" | "rejected";
 export async function setVendorStatus(id: string, status: VendorStatus) {
   const { error } = await supabase.from("vendors").update({ status: status as never }).eq("id", id);
   if (error) throw error;
+  if (status === "active") signalMerchant(id, "merchant.approved");
+  else if (status === "suspended" || status === "rejected") signalMerchant(id, "merchant.suspended");
 }
 
 export async function setVendorAssetUrl(vendorId: string, field: "logo_url" | "banner_url", path: string | null) {

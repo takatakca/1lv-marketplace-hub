@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { CartItem } from "@/hooks/use-cart";
+import { signalCustomer, signalOrderCreated } from "./takatak-sync";
 
 export type Address = {
   first_name: string;
@@ -158,6 +159,10 @@ export async function createOrder(input: CheckoutInput): Promise<CheckoutResult>
     const { error: voErr } = await supabase.from("vendor_orders" as never).insert(splits as never);
     if (voErr) console.warn("vendor_orders insert failed:", voErr.message);
   }
+
+  // TAKATAK master sync (non-blocking): order.created + relationship edges.
+  signalOrderCreated(order.id);
+  if (input.customer_id) signalCustomer("customer.updated");
 
   return { order_id: order.id, order_number: order.order_number, demo: false };
 }

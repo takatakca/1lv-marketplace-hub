@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { signalCustomer } from "@/services/takatak-sync";
 
 type Role = "customer" | "vendor" | "admin";
 
@@ -25,6 +26,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (s?.user) {
         // defer to avoid deadlocks
         setTimeout(() => fetchRoles(s.user.id), 0);
+        // Non-blocking master-CRM signal. Covers email, Google and phone OTP
+        // sign-ups; the queue de-duplicates so repeat sign-ins are harmless.
+        setTimeout(() => signalCustomer("customer.created"), 0);
       } else {
         setRoles([]);
       }
