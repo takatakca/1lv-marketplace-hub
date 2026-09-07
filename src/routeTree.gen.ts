@@ -66,6 +66,7 @@ import { Route as AdminCategoriesRouteImport } from './routes/admin.categories'
 import { Route as VendorProductsIndexRouteImport } from './routes/vendor.products.index'
 import { Route as VendorOrdersIndexRouteImport } from './routes/vendor.orders.index'
 import { Route as VendorDisputesIndexRouteImport } from './routes/vendor.disputes.index'
+import { Route as AdminIntegrationsIndexRouteImport } from './routes/admin.integrations.index'
 import { Route as VendorProductsNewRouteImport } from './routes/vendor.products.new'
 import { Route as VendorOrdersIdRouteImport } from './routes/vendor.orders.$id'
 import { Route as VendorDisputesIdRouteImport } from './routes/vendor.disputes.$id'
@@ -357,6 +358,11 @@ const VendorDisputesIndexRoute = VendorDisputesIndexRouteImport.update({
   path: '/',
   getParentRoute: () => VendorDisputesRoute,
 } as any)
+const AdminIntegrationsIndexRoute = AdminIntegrationsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminIntegrationsRoute,
+} as any)
 const VendorProductsNewRoute = VendorProductsNewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -416,7 +422,7 @@ export interface FileRoutesByFullPath {
   '/admin/coupons': typeof AdminCouponsRoute
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/disputes': typeof AdminDisputesRoute
-  '/admin/integrations': typeof AdminIntegrationsRoute
+  '/admin/integrations': typeof AdminIntegrationsRouteWithChildren
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/payouts': typeof AdminPayoutsRoute
   '/admin/products': typeof AdminProductsRoute
@@ -441,6 +447,7 @@ export interface FileRoutesByFullPath {
   '/vendor/disputes/$id': typeof VendorDisputesIdRoute
   '/vendor/orders/$id': typeof VendorOrdersIdRoute
   '/vendor/products/new': typeof VendorProductsNewRoute
+  '/admin/integrations/': typeof AdminIntegrationsIndexRoute
   '/vendor/disputes/': typeof VendorDisputesIndexRoute
   '/vendor/orders/': typeof VendorOrdersIndexRoute
   '/vendor/products/': typeof VendorProductsIndexRoute
@@ -478,7 +485,6 @@ export interface FileRoutesByTo {
   '/admin/coupons': typeof AdminCouponsRoute
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/disputes': typeof AdminDisputesRoute
-  '/admin/integrations': typeof AdminIntegrationsRoute
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/payouts': typeof AdminPayoutsRoute
   '/admin/products': typeof AdminProductsRoute
@@ -500,6 +506,7 @@ export interface FileRoutesByTo {
   '/vendor/disputes/$id': typeof VendorDisputesIdRoute
   '/vendor/orders/$id': typeof VendorOrdersIdRoute
   '/vendor/products/new': typeof VendorProductsNewRoute
+  '/admin/integrations': typeof AdminIntegrationsIndexRoute
   '/vendor/disputes': typeof VendorDisputesIndexRoute
   '/vendor/orders': typeof VendorOrdersIndexRoute
   '/vendor/products': typeof VendorProductsIndexRoute
@@ -540,7 +547,7 @@ export interface FileRoutesById {
   '/admin/coupons': typeof AdminCouponsRoute
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/disputes': typeof AdminDisputesRoute
-  '/admin/integrations': typeof AdminIntegrationsRoute
+  '/admin/integrations': typeof AdminIntegrationsRouteWithChildren
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/payouts': typeof AdminPayoutsRoute
   '/admin/products': typeof AdminProductsRoute
@@ -565,6 +572,7 @@ export interface FileRoutesById {
   '/vendor/disputes/$id': typeof VendorDisputesIdRoute
   '/vendor/orders/$id': typeof VendorOrdersIdRoute
   '/vendor/products/new': typeof VendorProductsNewRoute
+  '/admin/integrations/': typeof AdminIntegrationsIndexRoute
   '/vendor/disputes/': typeof VendorDisputesIndexRoute
   '/vendor/orders/': typeof VendorOrdersIndexRoute
   '/vendor/products/': typeof VendorProductsIndexRoute
@@ -631,6 +639,7 @@ export interface FileRouteTypes {
     | '/vendor/disputes/$id'
     | '/vendor/orders/$id'
     | '/vendor/products/new'
+    | '/admin/integrations/'
     | '/vendor/disputes/'
     | '/vendor/orders/'
     | '/vendor/products/'
@@ -668,7 +677,6 @@ export interface FileRouteTypes {
     | '/admin/coupons'
     | '/admin/customers'
     | '/admin/disputes'
-    | '/admin/integrations'
     | '/admin/orders'
     | '/admin/payouts'
     | '/admin/products'
@@ -690,6 +698,7 @@ export interface FileRouteTypes {
     | '/vendor/disputes/$id'
     | '/vendor/orders/$id'
     | '/vendor/products/new'
+    | '/admin/integrations'
     | '/vendor/disputes'
     | '/vendor/orders'
     | '/vendor/products'
@@ -754,6 +763,7 @@ export interface FileRouteTypes {
     | '/vendor/disputes/$id'
     | '/vendor/orders/$id'
     | '/vendor/products/new'
+    | '/admin/integrations/'
     | '/vendor/disputes/'
     | '/vendor/orders/'
     | '/vendor/products/'
@@ -1196,6 +1206,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VendorDisputesIndexRouteImport
       parentRoute: typeof VendorDisputesRoute
     }
+    '/admin/integrations/': {
+      id: '/admin/integrations/'
+      path: '/'
+      fullPath: '/admin/integrations/'
+      preLoaderRoute: typeof AdminIntegrationsIndexRouteImport
+      parentRoute: typeof AdminIntegrationsRoute
+    }
     '/vendor/products/new': {
       id: '/vendor/products/new'
       path: '/new'
@@ -1234,13 +1251,24 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AdminIntegrationsRouteChildren {
+  AdminIntegrationsIndexRoute: typeof AdminIntegrationsIndexRoute
+}
+
+const AdminIntegrationsRouteChildren: AdminIntegrationsRouteChildren = {
+  AdminIntegrationsIndexRoute: AdminIntegrationsIndexRoute,
+}
+
+const AdminIntegrationsRouteWithChildren =
+  AdminIntegrationsRoute._addFileChildren(AdminIntegrationsRouteChildren)
+
 interface AdminRouteChildren {
   AdminCategoriesRoute: typeof AdminCategoriesRoute
   AdminCommissionsRoute: typeof AdminCommissionsRoute
   AdminCouponsRoute: typeof AdminCouponsRoute
   AdminCustomersRoute: typeof AdminCustomersRoute
   AdminDisputesRoute: typeof AdminDisputesRoute
-  AdminIntegrationsRoute: typeof AdminIntegrationsRoute
+  AdminIntegrationsRoute: typeof AdminIntegrationsRouteWithChildren
   AdminOrdersRoute: typeof AdminOrdersRoute
   AdminPayoutsRoute: typeof AdminPayoutsRoute
   AdminProductsRoute: typeof AdminProductsRoute
@@ -1256,7 +1284,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminCouponsRoute: AdminCouponsRoute,
   AdminCustomersRoute: AdminCustomersRoute,
   AdminDisputesRoute: AdminDisputesRoute,
-  AdminIntegrationsRoute: AdminIntegrationsRoute,
+  AdminIntegrationsRoute: AdminIntegrationsRouteWithChildren,
   AdminOrdersRoute: AdminOrdersRoute,
   AdminPayoutsRoute: AdminPayoutsRoute,
   AdminProductsRoute: AdminProductsRoute,
