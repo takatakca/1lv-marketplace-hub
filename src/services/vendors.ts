@@ -89,6 +89,7 @@ export async function upsertMyVendor(userId: string, input: VendorUpsert) {
     .select()
     .single();
   if (error) throw error;
+  signalMerchant((data as VendorRecord).id, "merchant.application.created");
   return data as VendorRecord;
 }
 
