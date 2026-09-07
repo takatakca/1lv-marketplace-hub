@@ -70,6 +70,7 @@ import { Route as AdminIntegrationsIndexRouteImport } from './routes/admin.integ
 import { Route as VendorProductsNewRouteImport } from './routes/vendor.products.new'
 import { Route as VendorOrdersIdRouteImport } from './routes/vendor.orders.$id'
 import { Route as VendorDisputesIdRouteImport } from './routes/vendor.disputes.$id'
+import { Route as AdminIntegrationsTakatakRouteImport } from './routes/admin.integrations.takatak'
 import { Route as VendorProductsIdEditRouteImport } from './routes/vendor.products.$id.edit'
 import { Route as ApiPublicWebhooksStripeRouteImport } from './routes/api/public/webhooks.stripe'
 
@@ -378,6 +379,12 @@ const VendorDisputesIdRoute = VendorDisputesIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => VendorDisputesRoute,
 } as any)
+const AdminIntegrationsTakatakRoute =
+  AdminIntegrationsTakatakRouteImport.update({
+    id: '/takatak',
+    path: '/takatak',
+    getParentRoute: () => AdminIntegrationsRoute,
+  } as any)
 const VendorProductsIdEditRoute = VendorProductsIdEditRouteImport.update({
   id: '/$id/edit',
   path: '/$id/edit',
@@ -444,6 +451,7 @@ export interface FileRoutesByFullPath {
   '/vendor/subscription': typeof VendorSubscriptionRoute
   '/admin/': typeof AdminIndexRoute
   '/vendor/': typeof VendorIndexRoute
+  '/admin/integrations/takatak': typeof AdminIntegrationsTakatakRoute
   '/vendor/disputes/$id': typeof VendorDisputesIdRoute
   '/vendor/orders/$id': typeof VendorOrdersIdRoute
   '/vendor/products/new': typeof VendorProductsNewRoute
@@ -503,6 +511,7 @@ export interface FileRoutesByTo {
   '/vendor/subscription': typeof VendorSubscriptionRoute
   '/admin': typeof AdminIndexRoute
   '/vendor': typeof VendorIndexRoute
+  '/admin/integrations/takatak': typeof AdminIntegrationsTakatakRoute
   '/vendor/disputes/$id': typeof VendorDisputesIdRoute
   '/vendor/orders/$id': typeof VendorOrdersIdRoute
   '/vendor/products/new': typeof VendorProductsNewRoute
@@ -569,6 +578,7 @@ export interface FileRoutesById {
   '/vendor/subscription': typeof VendorSubscriptionRoute
   '/admin/': typeof AdminIndexRoute
   '/vendor/': typeof VendorIndexRoute
+  '/admin/integrations/takatak': typeof AdminIntegrationsTakatakRoute
   '/vendor/disputes/$id': typeof VendorDisputesIdRoute
   '/vendor/orders/$id': typeof VendorOrdersIdRoute
   '/vendor/products/new': typeof VendorProductsNewRoute
@@ -636,6 +646,7 @@ export interface FileRouteTypes {
     | '/vendor/subscription'
     | '/admin/'
     | '/vendor/'
+    | '/admin/integrations/takatak'
     | '/vendor/disputes/$id'
     | '/vendor/orders/$id'
     | '/vendor/products/new'
@@ -695,6 +706,7 @@ export interface FileRouteTypes {
     | '/vendor/subscription'
     | '/admin'
     | '/vendor'
+    | '/admin/integrations/takatak'
     | '/vendor/disputes/$id'
     | '/vendor/orders/$id'
     | '/vendor/products/new'
@@ -760,6 +772,7 @@ export interface FileRouteTypes {
     | '/vendor/subscription'
     | '/admin/'
     | '/vendor/'
+    | '/admin/integrations/takatak'
     | '/vendor/disputes/$id'
     | '/vendor/orders/$id'
     | '/vendor/products/new'
@@ -1234,6 +1247,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VendorDisputesIdRouteImport
       parentRoute: typeof VendorDisputesRoute
     }
+    '/admin/integrations/takatak': {
+      id: '/admin/integrations/takatak'
+      path: '/takatak'
+      fullPath: '/admin/integrations/takatak'
+      preLoaderRoute: typeof AdminIntegrationsTakatakRouteImport
+      parentRoute: typeof AdminIntegrationsRoute
+    }
     '/vendor/products/$id/edit': {
       id: '/vendor/products/$id/edit'
       path: '/$id/edit'
@@ -1252,10 +1272,12 @@ declare module '@tanstack/react-router' {
 }
 
 interface AdminIntegrationsRouteChildren {
+  AdminIntegrationsTakatakRoute: typeof AdminIntegrationsTakatakRoute
   AdminIntegrationsIndexRoute: typeof AdminIntegrationsIndexRoute
 }
 
 const AdminIntegrationsRouteChildren: AdminIntegrationsRouteChildren = {
+  AdminIntegrationsTakatakRoute: AdminIntegrationsTakatakRoute,
   AdminIntegrationsIndexRoute: AdminIntegrationsIndexRoute,
 }
 
