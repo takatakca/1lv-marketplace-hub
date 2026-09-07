@@ -115,6 +115,13 @@ export const openDispute = createServerFn({ method: "POST" })
       disputeId,
     });
 
+    try {
+      const { queueDisputeRelationshipEvent } = await import("./takatak/outbox.server");
+      await queueDisputeRelationshipEvent(disputeId);
+    } catch {
+      /* master sync never blocks a dispute */
+    }
+
     return { ok: true, disputeId };
   });
 
@@ -403,6 +410,13 @@ export const processApprovedRefund = createServerFn({ method: "POST" })
         .eq("id", refund.id);
 
       await refreshOrderPaymentStatus(db, refund.order_id);
+
+      try {
+        const { queueOrderEvent } = await import("./takatak/outbox.server");
+        await queueOrderEvent(refund.order_id, "order.refunded");
+      } catch {
+        /* master sync never blocks a refund */
+      }
 
       if (refund.dispute_id) {
         const { data: d } = await db

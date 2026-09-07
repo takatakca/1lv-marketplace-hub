@@ -39,6 +39,16 @@ type StripeEvent = {
   data: { object: Record<string, unknown> };
 };
 
+/** Queue a TAKATAK order event without ever failing the webhook. */
+async function takatakOrder(orderId: string, eventType: "order.paid" | "order.refunded") {
+  try {
+    const { queueOrderEvent } = await import("@/lib/takatak/outbox.server");
+    await queueOrderEvent(orderId, eventType);
+  } catch (err) {
+    console.warn("takatak order event skipped:", (err as Error).message);
+  }
+}
+
 async function handleEvent(evt: StripeEvent) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
@@ -58,6 +68,7 @@ async function handleEvent(evt: StripeEvent) {
       const orderId = meta.order_id;
       if (orderId) {
         await supabaseAdmin.from("orders").update({ payment_status: "paid", status: "processing" }).eq("id", orderId);
+        await takatakOrder(orderId, "order.paid");
       }
       break;
     }
@@ -75,6 +86,7 @@ async function handleEvent(evt: StripeEvent) {
       if (orderId) {
         const status = amountRefunded >= amount ? "refunded" : "partially_refunded";
         await supabaseAdmin.from("orders").update({ payment_status: status }).eq("id", orderId);
+        await takatakOrder(orderId, "order.refunded");
       }
       break;
     }
