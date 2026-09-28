@@ -1,66 +1,124 @@
-/*
- * 1lv.ca - MochaHost / cPanel Node.js startup file
- *
- * The project is built LOCALLY with Nitro's node-server preset.
- * The production server is generated at: ./dist/server/index.mjs
- *
- * This wrapper:
- *   1) loads .env from the application root without requiring dotenv,
- *   2) keeps cPanel/Passenger's PORT if it provides one,
- *   3) starts the already-built Nitro/TanStack server.
- */
-
+const http = require("http");
 const fs = require("fs");
 const path = require("path");
-const { pathToFileURL } = require("url");
+const { URL } = require("url");
 
-function loadLocalEnv() {
-  const envFile = path.join(__dirname, ".env");
-  if (!fs.existsSync(envFile)) return;
+const CLIENT_DIR = path.join(__dirname, "dist", "client");
+const INDEX_FILE = path.join(CLIENT_DIR, "index.html");
 
-  const lines = fs.readFileSync(envFile, "utf8").split(/\r?\n/);
+if (!fs.existsSync(INDEX_FILE)) {
+  console.error("[1lv.ca] FATAL: index.html not found:");
+  console.error(INDEX_FILE);
+  process.exit(1);
+}
 
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
+const MIME = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+  ".map": "application/json",
+  ".txt": "text/plain; charset=utf-8"
+};
 
-    const equals = line.indexOf("=");
-    if (equals <= 0) continue;
-
-    const key = line.slice(0, equals).trim();
-    let value = line.slice(equals + 1).trim();
-
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
+function sendFile(filePath, req, res) {
+  fs.stat(filePath, (err, stat) => {
+    if (err || !stat.isFile()) {
+      res.writeHead(404, {
+        "Content-Type": "text/plain; charset=utf-8"
+      });
+      res.end("Not Found");
+      return;
     }
 
-    if (process.env[key] === undefined) {
-      process.env[key] = value;
+    const ext = path.extname(filePath).toLowerCase();
+
+    const headers = {
+      "Content-Type": MIME[ext] || "application/octet-stream",
+      "Content-Length": stat.size
+    };
+
+    if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+      headers["Cache-Control"] =
+        "public, max-age=31536000, immutable";
+    } else {
+      headers["Cache-Control"] = "no-cache";
     }
+
+    res.writeHead(200, headers);
+
+    if (req.method === "HEAD") {
+      res.end();
+      return;
+    }
+
+    fs.createReadStream(filePath).pipe(res);
+  });
+}
+
+const server = http.createServer((req, res) => {
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    res.writeHead(405, {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Allow": "GET, HEAD"
+    });
+    res.end("Method Not Allowed");
+    return;
   }
-}
 
-loadLocalEnv();
+  let pathname;
 
-if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
-if (!process.env.HOST) process.env.HOST = "0.0.0.0";
-if (!process.env.PORT) process.env.PORT = "3000";
+  try {
+    pathname = decodeURIComponent(
+      new URL(req.url, "http://localhost").pathname
+    );
+  } catch {
+    res.writeHead(400, {
+      "Content-Type": "text/plain; charset=utf-8"
+    });
+    res.end("Bad Request");
+    return;
+  }
 
-const entry = path.join(__dirname, "dist", "server", "index.mjs");
+  const relativePath = pathname.replace(/^\/+/, "");
+  const clientRoot = path.resolve(CLIENT_DIR);
+  const requested = path.resolve(CLIENT_DIR, relativePath);
 
-if (!fs.existsSync(entry)) {
-  console.error("[1lv.ca] Missing production server: " + entry);
-  console.error("[1lv.ca] Build locally with: npm run build");
-  process.exit(1);
-}
+  if (
+    requested !== clientRoot &&
+    !requested.startsWith(clientRoot + path.sep)
+  ) {
+    res.writeHead(403, {
+      "Content-Type": "text/plain; charset=utf-8"
+    });
+    res.end("Forbidden");
+    return;
+  }
 
-console.log("[1lv.ca] Starting pre-built production server...");
-console.log("[1lv.ca] NODE_ENV=" + process.env.NODE_ENV + " PORT=" + process.env.PORT);
+  fs.stat(requested, (err, stat) => {
+    if (!err && stat.isFile()) {
+      sendFile(requested, req, res);
+      return;
+    }
 
-import(pathToFileURL(entry).href).catch((error) => {
-  console.error("[1lv.ca] Failed to start production server:", error);
-  process.exit(1);
+    sendFile(INDEX_FILE, req, res);
+  });
+});
+
+const PORT = Number(process.env.PORT || 3000);
+
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`[1lv.ca] Running on port ${PORT}`);
+  console.log(`[1lv.ca] Serving ${CLIENT_DIR}`);
 });
