@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@v4
 
       # ------------------------------------------------------------
-      # 2. Use exactly the same Node major as MochaHost
+      # 2. Use same Node major as MochaHost
       # ------------------------------------------------------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -42,7 +42,8 @@ jobs:
           cache: npm
 
       # ------------------------------------------------------------
-      # 3. Install dependencies on GitHub - NOT on MochaHost
+      # 3. Install dependencies on GitHub
+      # NEVER install/build on MochaHost
       # ------------------------------------------------------------
       - name: Install dependencies
         shell: bash
@@ -56,8 +57,7 @@ jobs:
           fi
 
       # ------------------------------------------------------------
-      # 4. Build Vite application on GitHub
-      # Supabase frontend variables are injected at BUILD TIME
+      # 4. Build website on GitHub
       # ------------------------------------------------------------
       - name: Build website on GitHub
         shell: bash
@@ -83,7 +83,7 @@ jobs:
           npm run build
 
       # ------------------------------------------------------------
-      # 5. Basic verification
+      # 5. Verify build
       # ------------------------------------------------------------
       - name: Verify production build
         shell: bash
@@ -110,7 +110,7 @@ jobs:
           npm prune --omit=dev
 
       # ------------------------------------------------------------
-      # 7. Create clean production release
+      # 7. Create production release directory
       # ------------------------------------------------------------
       - name: Create release directory
         shell: bash
@@ -120,7 +120,6 @@ jobs:
           rm -rf .release
           mkdir -p .release
 
-          # Frontend production build
           if [ -d "dist" ]; then
             cp -a dist .release/
           fi
@@ -129,31 +128,26 @@ jobs:
             cp -a .output .release/
           fi
 
-          # Main server
           cp server.cjs .release/
 
-          # All local runtime server modules
           for file in server-*.cjs; do
             if [ -f "$file" ]; then
               cp "$file" .release/
             fi
           done
 
-          # Package metadata
           cp package.json .release/
 
-          if [ -f "package-lock.json" ]; then
+          if [ -f package-lock.json ]; then
             cp package-lock.json .release/
           fi
 
-          # Linux production dependencies
           cp -a node_modules .release/
 
-          # Record Git revision
           printf '%s\n' "$GITHUB_SHA" > .release/REVISION
 
       # ------------------------------------------------------------
-      # 8. Create ONE compressed production archive
+      # 8. Create compressed production archive
       # ------------------------------------------------------------
       - name: Create deployment archive
         shell: bash
@@ -162,13 +156,11 @@ jobs:
 
           tar -czf "1lv-${GITHUB_SHA}.tar.gz" -C .release .
 
-          echo "Created:"
+          echo "Created production archive:"
           ls -lh "1lv-${GITHUB_SHA}.tar.gz"
 
       # ------------------------------------------------------------
-      # 9. Keep an artifact on GitHub
-      #
-      # Useful for first manual deployment and emergency recovery.
+      # 9. Keep recovery artifact on GitHub
       # ------------------------------------------------------------
       - name: Save Linux production artifact
         uses: actions/upload-artifact@v4
@@ -179,16 +171,14 @@ jobs:
           if-no-files-found: error
 
       # ------------------------------------------------------------
-      # Everything below this point is skipped during package_only.
-      #
-      # Push deployments also remain disabled until
-      # AUTO_DEPLOY_ENABLED=true.
+      # Determine whether this run should deploy
       # ------------------------------------------------------------
-
       - name: Determine whether deployment is enabled
         id: deployment
         shell: bash
         run: |
+          set -euo pipefail
+
           SHOULD_DEPLOY="false"
 
           if [ "${{ github.event_name }}" = "push" ] && \
@@ -202,9 +192,10 @@ jobs:
           fi
 
           echo "enabled=$SHOULD_DEPLOY" >> "$GITHUB_OUTPUT"
+          echo "Deployment enabled: $SHOULD_DEPLOY"
 
       # ------------------------------------------------------------
-      # 10. Configure secure SSH
+      # 10. Configure SSH
       # ------------------------------------------------------------
       - name: Configure SSH
         if: steps.deployment.outputs.enabled == 'true'
@@ -224,8 +215,14 @@ jobs:
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
+          echo "SSH configuration prepared."
+
       # ------------------------------------------------------------
-      # 11. Create lightweight deployment directories remotely
+      # 11. Test SSH and prepare MochaHost directories
+      #
+      # IMPORTANT:
+      # MochaHost closes non-TTY remote command sessions.
+      # We confirmed -tt works successfully.
       # ------------------------------------------------------------
       - name: Prepare MochaHost directories
         if: steps.deployment.outputs.enabled == 'true'
@@ -238,11 +235,41 @@ jobs:
         run: |
           set -euo pipefail
 
-          ssh -p "$PORT" "$USER@$HOST" \
-            "mkdir -p '$APP_ROOT/incoming' '$APP_ROOT/releases' '$APP_ROOT/tmp' '$APP_ROOT/shared'"
+          for attempt in 1 2 3 4 5; do
+            echo "MochaHost SSH attempt ${attempt}/5"
+
+            if ssh -tt \
+              -o BatchMode=yes \
+              -o IdentitiesOnly=yes \
+              -o ConnectTimeout=30 \
+              -o ConnectionAttempts=3 \
+              -o ServerAliveInterval=15 \
+              -o ServerAliveCountMax=4 \
+              -o TCPKeepAlive=no \
+              -o StrictHostKeyChecking=yes \
+              -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+              -p "$PORT" \
+              "$USER@$HOST" \
+              "mkdir -p '$APP_ROOT/incoming' '$APP_ROOT/releases' '$APP_ROOT/tmp' '$APP_ROOT/shared' && echo MOCHAHOST_READY"
+            then
+              echo "MochaHost SSH command session works."
+              exit 0
+            fi
+
+            if [ "$attempt" -eq 5 ]; then
+              echo "ERROR: MochaHost SSH failed after 5 attempts."
+              exit 1
+            fi
+
+            echo "SSH session failed. Retrying..."
+            sleep $((attempt * 5))
+          done
 
       # ------------------------------------------------------------
       # 12. Upload ONE archive
+      #
+      # Do NOT add -tt to SCP.
+      # Modern SCP uses the SSH/SFTP transport.
       # ------------------------------------------------------------
       - name: Upload release to MochaHost
         if: steps.deployment.outputs.enabled == 'true'
@@ -255,13 +282,26 @@ jobs:
         run: |
           set -euo pipefail
 
+          echo "Uploading 1lv-${GITHUB_SHA}.tar.gz..."
+
           scp \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o ConnectTimeout=30 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=4 \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
             -P "$PORT" \
             "1lv-${GITHUB_SHA}.tar.gz" \
             "$USER@$HOST:$APP_ROOT/incoming/1lv-${GITHUB_SHA}.tar.gz"
 
+          echo "Release archive uploaded."
+
       # ------------------------------------------------------------
-      # 13. Activate the new version
+      # 13. Activate new release
+      #
+      # -tt REQUIRED for MochaHost command sessions
       # ------------------------------------------------------------
       - name: Activate release
         id: activate
@@ -275,9 +315,19 @@ jobs:
         run: |
           set -euo pipefail
 
-          ssh -p "$PORT" "$USER@$HOST" \
+          ssh -tt \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o ConnectTimeout=30 \
+            -o ConnectionAttempts=3 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=4 \
+            -o TCPKeepAlive=no \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -p "$PORT" \
+            "$USER@$HOST" \
             "bash -s -- '$APP_ROOT' '$GITHUB_SHA'" <<'REMOTE'
-
           set -Eeuo pipefail
 
           APP_ROOT="$1"
@@ -288,51 +338,70 @@ jobs:
 
           echo "Preparing release: $SHA"
 
-          test -f "$ARCHIVE"
+          if [ ! -f "$ARCHIVE" ]; then
+            echo "ERROR: Deployment archive does not exist:"
+            echo "$ARCHIVE"
+            exit 1
+          fi
 
           rm -rf "$RELEASE"
           mkdir -p "$RELEASE"
 
           tar -xzf "$ARCHIVE" -C "$RELEASE"
 
-          # Validate release before making it live
+          echo "Validating release..."
+
           test -f "$RELEASE/server.cjs"
           test -f "$RELEASE/package.json"
           test -d "$RELEASE/node_modules"
 
           if [ ! -d "$RELEASE/dist" ] && \
              [ ! -d "$RELEASE/.output" ]; then
-            echo "Release has no frontend build."
+            echo "ERROR: Release has no frontend production build."
             exit 1
           fi
 
-          # Save previous live revision
           if [ -s "$APP_ROOT/CURRENT" ]; then
-            OLD="$(cat "$APP_ROOT/CURRENT")"
+            OLD="$(tr -d '\r\n' < "$APP_ROOT/CURRENT")"
 
-            if [ -d "$APP_ROOT/releases/$OLD" ]; then
+            if [ -n "$OLD" ] && [ -d "$APP_ROOT/releases/$OLD" ]; then
               printf '%s\n' "$OLD" > "$APP_ROOT/PREVIOUS.new"
               mv -f "$APP_ROOT/PREVIOUS.new" "$APP_ROOT/PREVIOUS"
+
+              echo "Previous release saved: $OLD"
             fi
           fi
 
-          # Atomic switch to new release
           printf '%s\n' "$SHA" > "$APP_ROOT/CURRENT.new"
           mv -f "$APP_ROOT/CURRENT.new" "$APP_ROOT/CURRENT"
 
-          # Restart Passenger
+          echo "CURRENT switched to: $SHA"
+
           mkdir -p "$APP_ROOT/tmp"
+
           touch "$APP_ROOT/tmp/restart.txt"
 
-          # Archive is no longer necessary
+          echo "Passenger restart requested."
+
           rm -f "$ARCHIVE"
 
-          echo "Release activated: $SHA"
+          echo "Release activated successfully: $SHA"
 
+          exit 0
           REMOTE
 
       # ------------------------------------------------------------
-      # 14. Verify the public website
+      # Give Passenger a short opportunity to reload
+      # ------------------------------------------------------------
+      - name: Allow Passenger restart
+        if: steps.deployment.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          echo "Passenger restart requested."
+          sleep 8
+
+      # ------------------------------------------------------------
+      # 14. Verify public production website
       # ------------------------------------------------------------
       - name: Production health check
         id: health
@@ -350,7 +419,7 @@ jobs:
           fi
 
           for attempt in 1 2 3 4 5 6 7 8 9 10; do
-            echo "Health check attempt $attempt"
+            echo "Health check attempt $attempt/10"
 
             if curl \
               --fail \
@@ -358,20 +427,24 @@ jobs:
               --show-error \
               --location \
               --max-time 20 \
-              "$SITE_URL" > /dev/null; then
-
-              echo "Production is healthy."
+              "$SITE_URL" > /dev/null
+            then
+              echo "Production is healthy:"
+              echo "$SITE_URL"
               exit 0
             fi
 
+            echo "Health check failed. Retrying..."
             sleep 5
           done
 
-          echo "Production health check failed."
+          echo "ERROR: Production health check failed."
           exit 1
 
       # ------------------------------------------------------------
-      # 15. AUTOMATIC ROLLBACK
+      # 15. Automatic rollback
+      #
+      # -tt REQUIRED for MochaHost command sessions
       # ------------------------------------------------------------
       - name: Roll back failed release
         if: >
@@ -386,38 +459,57 @@ jobs:
         run: |
           set -euo pipefail
 
-          ssh -p "$PORT" "$USER@$HOST" \
+          ssh -tt \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o ConnectTimeout=30 \
+            -o ConnectionAttempts=3 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=4 \
+            -o TCPKeepAlive=no \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -p "$PORT" \
+            "$USER@$HOST" \
             "bash -s -- '$APP_ROOT'" <<'REMOTE'
-
           set -Eeuo pipefail
 
           APP_ROOT="$1"
 
           if [ ! -s "$APP_ROOT/PREVIOUS" ]; then
-            echo "No previous release is available."
+            echo "ERROR: No previous release is available."
             exit 1
           fi
 
-          PREVIOUS="$(cat "$APP_ROOT/PREVIOUS")"
+          PREVIOUS="$(tr -d '\r\n' < "$APP_ROOT/PREVIOUS")"
+
+          if [ -z "$PREVIOUS" ]; then
+            echo "ERROR: PREVIOUS is empty."
+            exit 1
+          fi
 
           if [ ! -d "$APP_ROOT/releases/$PREVIOUS" ]; then
-            echo "Previous release directory is missing."
+            echo "ERROR: Previous release directory is missing:"
+            echo "$APP_ROOT/releases/$PREVIOUS"
             exit 1
           fi
 
-          echo "Rolling back to $PREVIOUS"
+          echo "Rolling back to: $PREVIOUS"
 
           printf '%s\n' "$PREVIOUS" > "$APP_ROOT/CURRENT.new"
           mv -f "$APP_ROOT/CURRENT.new" "$APP_ROOT/CURRENT"
 
+          mkdir -p "$APP_ROOT/tmp"
           touch "$APP_ROOT/tmp/restart.txt"
 
           echo "Rollback complete."
+          echo "Passenger restart requested."
 
+          exit 0
           REMOTE
 
       # ------------------------------------------------------------
-      # 16. Mark GitHub deployment failed after rollback
+      # 16. Mark deployment failed after rollback
       # ------------------------------------------------------------
       - name: Fail workflow after rollback
         if: >
@@ -425,5 +517,6 @@ jobs:
           steps.health.outcome == 'failure'
         shell: bash
         run: |
-          echo "Deployment failed health check and was rolled back."
+          echo "Deployment failed its health check."
+          echo "The previous working release was restored."
           exit 1
