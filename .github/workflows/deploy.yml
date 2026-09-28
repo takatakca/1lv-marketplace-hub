@@ -57,11 +57,29 @@ jobs:
 
       # ------------------------------------------------------------
       # 4. Build Vite application on GitHub
+      # Supabase frontend variables are injected at BUILD TIME
       # ------------------------------------------------------------
-      - name: Build application
+      - name: Build website on GitHub
         shell: bash
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
         run: |
           set -euo pipefail
+
+          if [ -z "$VITE_SUPABASE_URL" ]; then
+            echo "ERROR: VITE_SUPABASE_URL is missing"
+            exit 1
+          fi
+
+          if [ -z "$VITE_SUPABASE_PUBLISHABLE_KEY" ]; then
+            echo "ERROR: VITE_SUPABASE_PUBLISHABLE_KEY is missing"
+            exit 1
+          fi
+
+          echo "Supabase frontend environment variables are available."
+          echo "Building 1lv.ca..."
+
           npm run build
 
       # ------------------------------------------------------------
@@ -78,6 +96,8 @@ jobs:
             echo "ERROR: Neither dist nor .output exists."
             exit 1
           fi
+
+          echo "Production build verified."
 
       # ------------------------------------------------------------
       # 6. Remove development packages
@@ -205,7 +225,7 @@ jobs:
           chmod 600 ~/.ssh/known_hosts
 
       # ------------------------------------------------------------
-      # 11. Create only lightweight deployment directories remotely
+      # 11. Create lightweight deployment directories remotely
       # ------------------------------------------------------------
       - name: Prepare MochaHost directories
         if: steps.deployment.outputs.enabled == 'true'
@@ -257,6 +277,7 @@ jobs:
 
           ssh -p "$PORT" "$USER@$HOST" \
             "bash -s -- '$APP_ROOT' '$GITHUB_SHA'" <<'REMOTE'
+
           set -Eeuo pipefail
 
           APP_ROOT="$1"
@@ -307,6 +328,7 @@ jobs:
           rm -f "$ARCHIVE"
 
           echo "Release activated: $SHA"
+
           REMOTE
 
       # ------------------------------------------------------------
@@ -321,6 +343,11 @@ jobs:
           SITE_URL: ${{ vars.PRODUCTION_URL }}
         run: |
           set -euo pipefail
+
+          if [ -z "$SITE_URL" ]; then
+            echo "ERROR: PRODUCTION_URL repository variable is missing."
+            exit 1
+          fi
 
           for attempt in 1 2 3 4 5 6 7 8 9 10; do
             echo "Health check attempt $attempt"
@@ -361,6 +388,7 @@ jobs:
 
           ssh -p "$PORT" "$USER@$HOST" \
             "bash -s -- '$APP_ROOT'" <<'REMOTE'
+
           set -Eeuo pipefail
 
           APP_ROOT="$1"
@@ -385,6 +413,7 @@ jobs:
           touch "$APP_ROOT/tmp/restart.txt"
 
           echo "Rollback complete."
+
           REMOTE
 
       # ------------------------------------------------------------
