@@ -1,0 +1,400 @@
+name: Deploy 1lv.ca
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+    inputs:
+      package_only:
+        description: "Build Linux production package without deploying"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 1lv-production
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy 1lv.ca
+    runs-on: ubuntu-latest
+
+    steps:
+      # ------------------------------------------------------------
+      # 1. Checkout source
+      # ------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------
+      # 2. Use exactly the same Node major as MochaHost
+      # ------------------------------------------------------------
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ vars.NODE_VERSION }}
+          cache: npm
+
+      # ------------------------------------------------------------
+      # 3. Install dependencies on GitHub - NOT on MochaHost
+      # ------------------------------------------------------------
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      # ------------------------------------------------------------
+      # 4. Build Vite application on GitHub
+      # ------------------------------------------------------------
+      - name: Build application
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run build
+
+      # ------------------------------------------------------------
+      # 5. Basic verification
+      # ------------------------------------------------------------
+      - name: Verify production build
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          node --check server.cjs
+
+          if [ ! -d "dist" ] && [ ! -d ".output" ]; then
+            echo "ERROR: Neither dist nor .output exists."
+            exit 1
+          fi
+
+      # ------------------------------------------------------------
+      # 6. Remove development packages
+      # ------------------------------------------------------------
+      - name: Prepare production dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          npm prune --omit=dev
+
+      # ------------------------------------------------------------
+      # 7. Create clean production release
+      # ------------------------------------------------------------
+      - name: Create release directory
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf .release
+          mkdir -p .release
+
+          # Frontend production build
+          if [ -d "dist" ]; then
+            cp -a dist .release/
+          fi
+
+          if [ -d ".output" ]; then
+            cp -a .output .release/
+          fi
+
+          # Main server
+          cp server.cjs .release/
+
+          # All local runtime server modules
+          for file in server-*.cjs; do
+            if [ -f "$file" ]; then
+              cp "$file" .release/
+            fi
+          done
+
+          # Package metadata
+          cp package.json .release/
+
+          if [ -f "package-lock.json" ]; then
+            cp package-lock.json .release/
+          fi
+
+          # Linux production dependencies
+          cp -a node_modules .release/
+
+          # Record Git revision
+          printf '%s\n' "$GITHUB_SHA" > .release/REVISION
+
+      # ------------------------------------------------------------
+      # 8. Create ONE compressed production archive
+      # ------------------------------------------------------------
+      - name: Create deployment archive
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tar -czf "1lv-${GITHUB_SHA}.tar.gz" -C .release .
+
+          echo "Created:"
+          ls -lh "1lv-${GITHUB_SHA}.tar.gz"
+
+      # ------------------------------------------------------------
+      # 9. Keep an artifact on GitHub
+      #
+      # Useful for first manual deployment and emergency recovery.
+      # ------------------------------------------------------------
+      - name: Save Linux production artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 1lv-production-${{ github.sha }}
+          path: 1lv-${{ github.sha }}.tar.gz
+          retention-days: 14
+          if-no-files-found: error
+
+      # ------------------------------------------------------------
+      # Everything below this point is skipped during package_only.
+      #
+      # Push deployments also remain disabled until
+      # AUTO_DEPLOY_ENABLED=true.
+      # ------------------------------------------------------------
+
+      - name: Determine whether deployment is enabled
+        id: deployment
+        shell: bash
+        run: |
+          SHOULD_DEPLOY="false"
+
+          if [ "${{ github.event_name }}" = "push" ] && \
+             [ "${{ vars.AUTO_DEPLOY_ENABLED }}" = "true" ]; then
+            SHOULD_DEPLOY="true"
+          fi
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && \
+             [ "${{ inputs.package_only }}" = "false" ]; then
+            SHOULD_DEPLOY="true"
+          fi
+
+          echo "enabled=$SHOULD_DEPLOY" >> "$GITHUB_OUTPUT"
+
+      # ------------------------------------------------------------
+      # 10. Configure secure SSH
+      # ------------------------------------------------------------
+      - name: Configure SSH
+        if: steps.deployment.outputs.enabled == 'true'
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.MOCHAHOST_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.MOCHAHOST_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      # ------------------------------------------------------------
+      # 11. Create only lightweight deployment directories remotely
+      # ------------------------------------------------------------
+      - name: Prepare MochaHost directories
+        if: steps.deployment.outputs.enabled == 'true'
+        shell: bash
+        env:
+          HOST: ${{ secrets.MOCHAHOST_HOST }}
+          PORT: ${{ secrets.MOCHAHOST_SSH_PORT }}
+          USER: ${{ secrets.MOCHAHOST_USER }}
+          APP_ROOT: ${{ secrets.MOCHAHOST_APP_ROOT }}
+        run: |
+          set -euo pipefail
+
+          ssh -p "$PORT" "$USER@$HOST" \
+            "mkdir -p '$APP_ROOT/incoming' '$APP_ROOT/releases' '$APP_ROOT/tmp' '$APP_ROOT/shared'"
+
+      # ------------------------------------------------------------
+      # 12. Upload ONE archive
+      # ------------------------------------------------------------
+      - name: Upload release to MochaHost
+        if: steps.deployment.outputs.enabled == 'true'
+        shell: bash
+        env:
+          HOST: ${{ secrets.MOCHAHOST_HOST }}
+          PORT: ${{ secrets.MOCHAHOST_SSH_PORT }}
+          USER: ${{ secrets.MOCHAHOST_USER }}
+          APP_ROOT: ${{ secrets.MOCHAHOST_APP_ROOT }}
+        run: |
+          set -euo pipefail
+
+          scp \
+            -P "$PORT" \
+            "1lv-${GITHUB_SHA}.tar.gz" \
+            "$USER@$HOST:$APP_ROOT/incoming/1lv-${GITHUB_SHA}.tar.gz"
+
+      # ------------------------------------------------------------
+      # 13. Activate the new version
+      # ------------------------------------------------------------
+      - name: Activate release
+        id: activate
+        if: steps.deployment.outputs.enabled == 'true'
+        shell: bash
+        env:
+          HOST: ${{ secrets.MOCHAHOST_HOST }}
+          PORT: ${{ secrets.MOCHAHOST_SSH_PORT }}
+          USER: ${{ secrets.MOCHAHOST_USER }}
+          APP_ROOT: ${{ secrets.MOCHAHOST_APP_ROOT }}
+        run: |
+          set -euo pipefail
+
+          ssh -p "$PORT" "$USER@$HOST" \
+            "bash -s -- '$APP_ROOT' '$GITHUB_SHA'" <<'REMOTE'
+          set -Eeuo pipefail
+
+          APP_ROOT="$1"
+          SHA="$2"
+
+          ARCHIVE="$APP_ROOT/incoming/1lv-$SHA.tar.gz"
+          RELEASE="$APP_ROOT/releases/$SHA"
+
+          echo "Preparing release: $SHA"
+
+          test -f "$ARCHIVE"
+
+          rm -rf "$RELEASE"
+          mkdir -p "$RELEASE"
+
+          tar -xzf "$ARCHIVE" -C "$RELEASE"
+
+          # Validate release before making it live
+          test -f "$RELEASE/server.cjs"
+          test -f "$RELEASE/package.json"
+          test -d "$RELEASE/node_modules"
+
+          if [ ! -d "$RELEASE/dist" ] && \
+             [ ! -d "$RELEASE/.output" ]; then
+            echo "Release has no frontend build."
+            exit 1
+          fi
+
+          # Save previous live revision
+          if [ -s "$APP_ROOT/CURRENT" ]; then
+            OLD="$(cat "$APP_ROOT/CURRENT")"
+
+            if [ -d "$APP_ROOT/releases/$OLD" ]; then
+              printf '%s\n' "$OLD" > "$APP_ROOT/PREVIOUS.new"
+              mv -f "$APP_ROOT/PREVIOUS.new" "$APP_ROOT/PREVIOUS"
+            fi
+          fi
+
+          # Atomic switch to new release
+          printf '%s\n' "$SHA" > "$APP_ROOT/CURRENT.new"
+          mv -f "$APP_ROOT/CURRENT.new" "$APP_ROOT/CURRENT"
+
+          # Restart Passenger
+          mkdir -p "$APP_ROOT/tmp"
+          touch "$APP_ROOT/tmp/restart.txt"
+
+          # Archive is no longer necessary
+          rm -f "$ARCHIVE"
+
+          echo "Release activated: $SHA"
+          REMOTE
+
+      # ------------------------------------------------------------
+      # 14. Verify the public website
+      # ------------------------------------------------------------
+      - name: Production health check
+        id: health
+        if: steps.deployment.outputs.enabled == 'true'
+        continue-on-error: true
+        shell: bash
+        env:
+          SITE_URL: ${{ vars.PRODUCTION_URL }}
+        run: |
+          set -euo pipefail
+
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            echo "Health check attempt $attempt"
+
+            if curl \
+              --fail \
+              --silent \
+              --show-error \
+              --location \
+              --max-time 20 \
+              "$SITE_URL" > /dev/null; then
+
+              echo "Production is healthy."
+              exit 0
+            fi
+
+            sleep 5
+          done
+
+          echo "Production health check failed."
+          exit 1
+
+      # ------------------------------------------------------------
+      # 15. AUTOMATIC ROLLBACK
+      # ------------------------------------------------------------
+      - name: Roll back failed release
+        if: >
+          steps.deployment.outputs.enabled == 'true' &&
+          steps.health.outcome == 'failure'
+        shell: bash
+        env:
+          HOST: ${{ secrets.MOCHAHOST_HOST }}
+          PORT: ${{ secrets.MOCHAHOST_SSH_PORT }}
+          USER: ${{ secrets.MOCHAHOST_USER }}
+          APP_ROOT: ${{ secrets.MOCHAHOST_APP_ROOT }}
+        run: |
+          set -euo pipefail
+
+          ssh -p "$PORT" "$USER@$HOST" \
+            "bash -s -- '$APP_ROOT'" <<'REMOTE'
+          set -Eeuo pipefail
+
+          APP_ROOT="$1"
+
+          if [ ! -s "$APP_ROOT/PREVIOUS" ]; then
+            echo "No previous release is available."
+            exit 1
+          fi
+
+          PREVIOUS="$(cat "$APP_ROOT/PREVIOUS")"
+
+          if [ ! -d "$APP_ROOT/releases/$PREVIOUS" ]; then
+            echo "Previous release directory is missing."
+            exit 1
+          fi
+
+          echo "Rolling back to $PREVIOUS"
+
+          printf '%s\n' "$PREVIOUS" > "$APP_ROOT/CURRENT.new"
+          mv -f "$APP_ROOT/CURRENT.new" "$APP_ROOT/CURRENT"
+
+          touch "$APP_ROOT/tmp/restart.txt"
+
+          echo "Rollback complete."
+          REMOTE
+
+      # ------------------------------------------------------------
+      # 16. Mark GitHub deployment failed after rollback
+      # ------------------------------------------------------------
+      - name: Fail workflow after rollback
+        if: >
+          steps.deployment.outputs.enabled == 'true' &&
+          steps.health.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "Deployment failed health check and was rolled back."
+          exit 1
