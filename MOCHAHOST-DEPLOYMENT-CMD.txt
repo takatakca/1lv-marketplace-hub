@@ -1,0 +1,56 @@
+1LV.CA - LOCAL WINDOWS CMD BUILD AND MOCHAHOST DEPLOYMENT
+========================================================
+
+LOCAL FOLDER:
+E:\Installation\1lv-local
+
+IMPORTANT:
+All npm installation and npm run build work happens on the Windows PC.
+Do NOT run npm run build or npm start on MochaHost.
+
+LOCAL CMD COMMANDS
+------------------
+cd /d E:\Installation\1lv-local
+node -v
+npm -v
+
+if exist node_modules rmdir /s /q node_modules
+if exist dist rmdir /s /q dist
+if exist package-lock.json del /f /q package-lock.json
+
+npm cache verify
+npm install --legacy-peer-deps
+npm run build
+
+Verify these exist:
+dir dist
+dir dist\client
+dir dist\server
+dir dist\server\index.mjs
+
+Create the deployment archive from the project root:
+tar -czf 1lv-mochahost-deploy.tar.gz dist app.js server.cjs .env package.json
+
+The generated file will be:
+E:\Installation\1lv-local\1lv-mochahost-deploy.tar.gz
+
+UPLOAD ONLY THAT TAR.GZ TO THE MOCHAHOST APPLICATION ROOT AND EXTRACT IT.
+
+Expected server files after extraction:
+.env
+package.json
+app.js
+server.cjs
+dist\client\...
+dist\server\index.mjs
+
+In cPanel -> Setup Node.js App use:
+Node.js version: 20.x or 22.x (use the newest supported version compatible with the app)
+Application mode: Production
+Application root: 1lv_app
+Application URL: https://1lv.ca/
+Application startup file: app.js
+
+Do not click Run NPM Install for this pre-built deployment unless later troubleshooting proves a dependency was externalized.
+Do not run npm run build on the server.
+Restart the Node.js application from cPanel after extraction.
