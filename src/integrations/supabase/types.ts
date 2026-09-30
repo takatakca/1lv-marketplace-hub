@@ -299,6 +299,7 @@ export type Database = {
       orders: {
         Row: {
           billing_address: Json | null
+          checkout_key_hash: string | null
           created_at: string
           currency: string
           customer_email: string | null
@@ -322,6 +323,7 @@ export type Database = {
         }
         Insert: {
           billing_address?: Json | null
+          checkout_key_hash?: string | null
           created_at?: string
           currency?: string
           customer_email?: string | null
@@ -345,6 +347,7 @@ export type Database = {
         }
         Update: {
           billing_address?: Json | null
+          checkout_key_hash?: string | null
           created_at?: string
           currency?: string
           customer_email?: string | null
@@ -1495,7 +1498,22 @@ export type Database = {
         }
         Returns: boolean
       }
-      lookup_guest_order: { Args: { _order_number: string }; Returns: Json }
+      create_marketplace_order: {
+        Args: {
+          _billing_address: Json | null
+          _checkout_key: string
+          _customer_email: string
+          _customer_id: string | null
+          _customer_phone: string
+          _items: Json
+          _shipping_address: Json
+        }
+        Returns: Json
+      }
+      lookup_guest_order: {
+        Args: { _checkout_key: string; _order_number: string }
+        Returns: Json
+      }
       owns_vendor: {
         Args: { _user_id: string; _vendor_id: string }
         Returns: boolean
