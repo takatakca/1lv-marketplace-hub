@@ -220,6 +220,7 @@ export type Database = {
           carrier: string | null
           created_at: string
           id: string
+          inventory_reserved: boolean
           order_id: string
           product_id: string | null
           quantity: number
@@ -234,6 +235,7 @@ export type Database = {
           carrier?: string | null
           created_at?: string
           id?: string
+          inventory_reserved?: boolean
           order_id: string
           product_id?: string | null
           quantity?: number
@@ -248,6 +250,7 @@ export type Database = {
           carrier?: string | null
           created_at?: string
           id?: string
+          inventory_reserved?: boolean
           order_id?: string
           product_id?: string | null
           quantity?: number
@@ -301,6 +304,9 @@ export type Database = {
           billing_address: Json | null
           checkout_idempotency_hash: string | null
           created_at: string
+          inventory_committed_at: string | null
+          inventory_released_at: string | null
+          inventory_reserved_until: string | null
           currency: string
           customer_email: string | null
           customer_id: string | null
@@ -325,6 +331,9 @@ export type Database = {
           billing_address?: Json | null
           checkout_idempotency_hash?: string | null
           created_at?: string
+          inventory_committed_at?: string | null
+          inventory_released_at?: string | null
+          inventory_reserved_until?: string | null
           currency?: string
           customer_email?: string | null
           customer_id?: string | null
@@ -1484,6 +1493,10 @@ export type Database = {
         Args: { _dispute_id: string; _user_id: string }
         Returns: boolean
       }
+      commit_order_inventory: {
+        Args: { _order_id: string }
+        Returns: boolean
+      }
       get_vendor_commission_rates: {
         Args: { _vendor_ids: string[] }
         Returns: {
@@ -1516,6 +1529,14 @@ export type Database = {
       }
       owns_vendor: {
         Args: { _user_id: string; _vendor_id: string }
+        Returns: boolean
+      }
+      release_expired_inventory_reservations: {
+        Args: { _limit?: number }
+        Returns: number
+      }
+      release_order_inventory: {
+        Args: { _order_id: string }
         Returns: boolean
       }
     }
