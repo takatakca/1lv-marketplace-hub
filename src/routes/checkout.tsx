@@ -189,7 +189,12 @@ function Checkout() {
       });
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : "Could not place order");
+      const message =
+        error instanceof Error ? error.message : "Could not place order";
+      if (/checkout session expired/i.test(message)) {
+        checkoutKeyRef.current = null;
+      }
+      toast.error(message);
       setSubmitting(false);
     }
   };
