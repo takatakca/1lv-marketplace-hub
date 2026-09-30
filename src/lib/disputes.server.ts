@@ -225,6 +225,11 @@ export async function refreshOrderPaymentStatus(db: Db, orderId: string) {
     0,
   );
   if (refunded <= 0) return;
-  const next = round2(refunded) >= round2(total) ? "refunded" : "partially_refunded";
+  const fullyRefunded = round2(refunded) >= round2(total);
+  const next = fullyRefunded ? "refunded" : "partially_refunded";
   await db.from("orders").update({ payment_status: next }).eq("id", orderId);
+
+  if (fullyRefunded) {
+    await db.rpc("mark_order_promotion_refunded", { _order_id: orderId });
+  }
 }
