@@ -9,11 +9,7 @@ function safeEqual(left: string, right: string) {
   return diff === 0;
 }
 
-// The generated route tree is refreshed by the Vite/TanStack build after this
-// file is discovered. Cast only the path literal so pre-build tsc can validate
-// the handler without requiring a committed edit to routeTree.gen.ts.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const Route = createFileRoute("/api/internal/takatak/drain" as any)({
+export const Route = createFileRoute("/api/internal/takatak/drain")({
   server: {
     handlers: {
       POST: async ({ request }) => {
