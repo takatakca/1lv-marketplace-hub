@@ -823,6 +823,168 @@ export type Database = {
           },
         ]
       }
+      promotion_redemptions: {
+        Row: {
+          code_snapshot: string
+          created_at: string
+          customer_email: string
+          customer_id: string | null
+          discount_amount: number
+          expires_at: string | null
+          id: string
+          merchandise_discount: number
+          order_id: string
+          promotion_id: string
+          redeemed_at: string | null
+          refunded_at: string | null
+          released_at: string | null
+          shipping_discount: number
+          status: string
+        }
+        Insert: {
+          code_snapshot: string
+          created_at?: string
+          customer_email: string
+          customer_id?: string | null
+          discount_amount?: number
+          expires_at?: string | null
+          id?: string
+          merchandise_discount?: number
+          order_id: string
+          promotion_id: string
+          redeemed_at?: string | null
+          refunded_at?: string | null
+          released_at?: string | null
+          shipping_discount?: number
+          status?: string
+        }
+        Update: {
+          code_snapshot?: string
+          created_at?: string
+          customer_email?: string
+          customer_id?: string | null
+          discount_amount?: number
+          expires_at?: string | null
+          id?: string
+          merchandise_discount?: number
+          order_id?: string
+          promotion_id?: string
+          redeemed_at?: string | null
+          refunded_at?: string | null
+          released_at?: string | null
+          shipping_discount?: number
+          status?: string
+        }
+        Relationships: []
+      }
+      promotion_targets: {
+        Row: {
+          category_slug: string | null
+          created_at: string
+          id: string
+          is_exclusion: boolean
+          product_id: string | null
+          promotion_id: string
+          target_type: string
+          vendor_id: string | null
+        }
+        Insert: {
+          category_slug?: string | null
+          created_at?: string
+          id?: string
+          is_exclusion?: boolean
+          product_id?: string | null
+          promotion_id: string
+          target_type: string
+          vendor_id?: string | null
+        }
+        Update: {
+          category_slug?: string | null
+          created_at?: string
+          id?: string
+          is_exclusion?: boolean
+          product_id?: string | null
+          promotion_id?: string
+          target_type?: string
+          vendor_id?: string | null
+        }
+        Relationships: []
+      }
+      promotions: {
+        Row: {
+          active: boolean
+          code: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          discount_type: string
+          discount_value: number
+          ends_at: string | null
+          exclusive_group: string | null
+          first_order_only: boolean
+          global_usage_limit: number | null
+          id: string
+          max_discount: number | null
+          min_order: number
+          name: string
+          per_customer_limit: number | null
+          priority: number
+          publicly_listed: boolean
+          restores_on_refund: boolean
+          stackable: boolean
+          starts_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          code: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          discount_type: string
+          discount_value?: number
+          ends_at?: string | null
+          exclusive_group?: string | null
+          first_order_only?: boolean
+          global_usage_limit?: number | null
+          id?: string
+          max_discount?: number | null
+          min_order?: number
+          name: string
+          per_customer_limit?: number | null
+          priority?: number
+          publicly_listed?: boolean
+          restores_on_refund?: boolean
+          stackable?: boolean
+          starts_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          discount_type?: string
+          discount_value?: number
+          ends_at?: string | null
+          exclusive_group?: string | null
+          first_order_only?: boolean
+          global_usage_limit?: number | null
+          id?: string
+          max_discount?: number | null
+          min_order?: number
+          name?: string
+          per_customer_limit?: number | null
+          priority?: number
+          publicly_listed?: boolean
+          restores_on_refund?: boolean
+          stackable?: boolean
+          starts_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       products: {
         Row: {
           category_slug: string | null
