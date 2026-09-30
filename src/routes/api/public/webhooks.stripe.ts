@@ -66,16 +66,28 @@ async function handleEvent(evt: StripeEvent) {
   switch (evt.type) {
     case "payment_intent.succeeded": {
       const orderId = meta.order_id;
-      if (orderId) {
-        await supabaseAdmin.from("orders").update({ payment_status: "paid", status: "processing" }).eq("id", orderId);
-        await takatakOrder(orderId, "order.paid");
+      const paymentIntentId = typeof obj.id === "string" ? obj.id : null;
+      if (orderId && paymentIntentId) {
+        const { data: updated } = await supabaseAdmin
+          .from("orders")
+          .update({ payment_status: "paid", status: "processing" })
+          .eq("id", orderId)
+          .eq("stripe_payment_intent_id", paymentIntentId)
+          .select("id")
+          .maybeSingle();
+        if (updated) await takatakOrder(orderId, "order.paid");
       }
       break;
     }
     case "payment_intent.payment_failed": {
       const orderId = meta.order_id;
-      if (orderId) {
-        await supabaseAdmin.from("orders").update({ payment_status: "failed" }).eq("id", orderId);
+      const paymentIntentId = typeof obj.id === "string" ? obj.id : null;
+      if (orderId && paymentIntentId) {
+        await supabaseAdmin
+          .from("orders")
+          .update({ payment_status: "failed" })
+          .eq("id", orderId)
+          .eq("stripe_payment_intent_id", paymentIntentId);
       }
       break;
     }
