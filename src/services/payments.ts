@@ -16,13 +16,13 @@ export function isStripeConfigured() {
   return Boolean(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 }
 
-export async function createPaymentIntent(orderId: string, _amountCAD: number): Promise<PaymentIntent> {
+export async function createPaymentIntent(orderId: string, checkoutKey?: string | null): Promise<PaymentIntent> {
   // Demo/synthetic orders (non-UUID) skip Stripe entirely.
   if (!/^[0-9a-f-]{36}$/i.test(orderId)) {
     return { clientSecret: null, pending: true, reason: "Demo order — Stripe skipped." };
   }
   try {
-    const res = await createPaymentIntentFn({ data: { orderId } });
+    const res = await createPaymentIntentFn({ data: { orderId, checkoutKey: checkoutKey ?? null } });
     return res;
   } catch (err) {
     return {
