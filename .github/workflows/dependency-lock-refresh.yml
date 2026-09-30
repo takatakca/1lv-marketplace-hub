@@ -6,14 +6,17 @@ on:
       - upgrade/dependency-security-audit
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   refresh:
+    if: "!contains(github.event.head_commit.message, 'Apply regenerated dependency lockfile')"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: upgrade/dependency-security-audit
 
       - uses: actions/setup-node@v4
         with:
@@ -26,24 +29,20 @@ jobs:
       - name: Validate regenerated lockfile
         run: npm ci
 
-      - name: Capture runtime audit
+      - name: Require clean runtime dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Commit regenerated dependency files
         shell: bash
         run: |
-          set +e
-          npm audit --omit=dev --audit-level=high > runtime-audit.txt 2>&1
-          code=$?
-          echo "$code" > runtime-audit-exit-code.txt
-          cat runtime-audit.txt
-          exit 0
+          set -euo pipefail
+          if git diff --quiet -- package.json package-lock.json; then
+            echo "Dependency files already current."
+            exit 0
+          fi
 
-      - name: Upload regenerated dependency files
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-lock-refresh
-          path: |
-            package.json
-            package-lock.json
-            runtime-audit.txt
-            runtime-audit-exit-code.txt
-          retention-days: 2
-          if-no-files-found: error
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "Apply regenerated dependency lockfile"
+          git push origin HEAD:upgrade/dependency-security-audit
