@@ -51,7 +51,7 @@ function Page() {
   };
   useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [id, demo]);
 
-  const useDemo = demo || !vo;
+  const useDemo = demo;
   const demoItems: Item[] = products.slice(0, 2).map((p, i) => ({ id: "d" + i, title: p.title, quantity: 1, unit_price: p.price }));
   const lines = useDemo ? demoItems : items;
   const subtotal = useDemo
@@ -73,6 +73,17 @@ function Page() {
   };
 
   if (loading) return <div className="text-sm text-muted-foreground">Loading…</div>;
+
+  if (!demo && !vo) {
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center">
+        <h1 className="text-xl font-bold text-navy">Order not found</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          This vendor order does not exist or your store does not have access to it.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div>
