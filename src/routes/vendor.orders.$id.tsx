@@ -60,13 +60,12 @@ function Page() {
   }, [refresh]);
 
   const useDemo = demo;
-  const demoItems: Item[] = products.slice(0, 2).map((p, i) => ({ id: "d" + i, title: p.title, quantity: 1, unit_price: p.price }));
-  const lines = useDemo ? demoItems : items;
-  const subtotal = useDemo
-    ? lines.reduce((s, p) => s + p.unit_price * p.quantity, 0)
-    : Number(vo!.subtotal);
-  const commission = useDemo ? +(subtotal * 0.1).toFixed(2) : Number(vo!.commission_amount);
-  const payout = useDemo ? +(subtotal - commission).toFixed(2) : Number(vo!.vendor_payout_amount);
+  const demoItems: Item[] = products.slice(0, 2).map((p, i) => ({
+    id: "d" + i,
+    title: p.title,
+    quantity: 1,
+    unit_price: p.price,
+  }));
 
   const update = async (status?: VendorOrderStatus, withTracking = false) => {
     if (useDemo) { toast.message("Demo mode — update simulated"); return; }
@@ -92,6 +91,17 @@ function Page() {
       </div>
     );
   }
+
+  const lines = useDemo ? demoItems : items;
+  const subtotal = useDemo
+    ? lines.reduce((sum, item) => sum + item.unit_price * item.quantity, 0)
+    : Number(vo!.subtotal);
+  const commission = useDemo
+    ? +(subtotal * 0.1).toFixed(2)
+    : Number(vo!.commission_amount);
+  const payout = useDemo
+    ? +(subtotal - commission).toFixed(2)
+    : Number(vo!.vendor_payout_amount);
 
   return (
     <div>
