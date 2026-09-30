@@ -1,8 +1,8 @@
 /**
  * Payments service — thin client wrapper around Stripe server functions.
  *
- * Secret keys live only on the server. This file must never import
- * STRIPE_SECRET_KEY or make direct Stripe API calls.
+ * Secret keys live only on the server. The browser may send a signed guest
+ * capability, but it never sends an amount that Stripe trusts.
  */
 import { createPaymentIntent as createPaymentIntentFn } from "@/lib/stripe.functions";
 
@@ -16,25 +16,31 @@ export function isStripeConfigured() {
   return Boolean(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 }
 
-export async function createPaymentIntent(orderId: string, checkoutKey?: string | null): Promise<PaymentIntent> {
-  // Demo/synthetic orders (non-UUID) skip Stripe entirely.
+export async function createPaymentIntent(
+  orderId: string,
+  guestToken?: string | null,
+): Promise<PaymentIntent> {
   if (!/^[0-9a-f-]{36}$/i.test(orderId)) {
-    return { clientSecret: null, pending: true, reason: "Demo order — Stripe skipped." };
-  }
-  try {
-    const res = await createPaymentIntentFn({ data: { orderId, checkoutKey: checkoutKey ?? null } });
-    return res;
-  } catch (err) {
     return {
       clientSecret: null,
       pending: true,
-      reason: err instanceof Error ? err.message : "Stripe setup required",
+      reason: "Demo order — Stripe skipped.",
     };
   }
-}
 
-export async function confirmPayment(_clientSecret: string): Promise<{ ok: boolean }> {
-  // Stripe.js Elements will confirm on the client using VITE_STRIPE_PUBLISHABLE_KEY.
-  // Wire this up when the checkout UI is upgraded to full Elements integration.
-  return { ok: false };
+  try {
+    return await createPaymentIntentFn({
+      data: {
+        orderId,
+        guestToken: guestToken ?? null,
+      },
+    });
+  } catch (error) {
+    return {
+      clientSecret: null,
+      pending: true,
+      reason:
+        error instanceof Error ? error.message : "Payment authorization failed",
+    };
+  }
 }
