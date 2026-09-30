@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { BadgePercent, Clock3, Store, Truck, Zap } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { FREE_SHIPPING_THRESHOLD_CAD } from "@/lib/canada-commerce";
+import { usePublicMarketplaceSettings } from "@/hooks/use-marketplace-settings";
 import {
   describePromotion,
   listPublicPromotions,
@@ -25,7 +26,7 @@ export const Route = createFileRoute("/coupons")({
 
 const OFFERS = [
   {
-    title: `Free Canadian shipping from $${FREE_SHIPPING_THRESHOLD_CAD}`,
+    title: "Free Canadian shipping",
     detail:
       "Eligible merchandise unlocks standard Canadian shipping at the current marketplace threshold.",
     action: "View shipping terms",
@@ -50,6 +51,9 @@ const OFFERS = [
 ];
 
 function SavingsPage() {
+  const { settings } = usePublicMarketplaceSettings();
+  const freeShippingThreshold =
+    settings?.free_shipping_threshold ?? FREE_SHIPPING_THRESHOLD_CAD;
   const [promotions, setPromotions] = useState<PublicPromotion[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -171,7 +175,9 @@ function SavingsPage() {
                   <Icon size={19} />
                 </span>
                 <h2 className="mt-4 text-lg font-extrabold text-navy">
-                  {offer.title}
+                  {offer.title === "Free Canadian shipping"
+                    ? `Free Canadian shipping from ${freeShippingThreshold}`
+                    : offer.title}
                 </h2>
                 <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
                   {offer.detail}
