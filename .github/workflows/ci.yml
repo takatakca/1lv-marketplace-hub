@@ -52,6 +52,8 @@ jobs:
         if: github.event_name != 'pull_request'
         run: npm run lint
 
+      # TanStack Start regenerates src/routeTree.gen.ts during the Vite build.
+      # Keep this before tsc so newly-added file routes are present in generated types.
       - name: Production build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
