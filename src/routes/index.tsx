@@ -7,7 +7,8 @@ import { ProductImage } from "@/components/ProductImage";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { CouponStrip } from "@/components/CouponStrip";
 import { RecentlyViewed } from "@/components/RecentlyViewed";
-import { categories, products, productsByTag, vendors, formatCAD } from "@/lib/data";\nimport { FREE_SHIPPING_THRESHOLD_CAD } from "@/lib/canada-commerce";
+import { categories, products, productsByTag, vendors, formatCAD } from "@/lib/data";
+import { FREE_SHIPPING_THRESHOLD_CAD } from "@/lib/canada-commerce";
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -62,7 +63,7 @@ function Home() {
                   daily deals in CAD
                 </h1>
                 <p className="mt-3 text-sm text-white/80">
-                  New markdowns every morning. Free shipping over ${FREE_SHIPPING_THRESHOLD_CAD}, 30-day returns.
+                  {`New markdowns every morning. Free shipping over ${FREE_SHIPPING_THRESHOLD_CAD}, 30-day returns.`}
                 </p>
                 <span className="mt-5 inline-flex items-center gap-2 rounded-md bg-deal px-5 py-2.5 text-sm font-bold text-deal-foreground transition group-hover:opacity-90">
                   Shop the event <ArrowRight size={15} />
