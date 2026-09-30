@@ -95,7 +95,7 @@ export const createPaymentIntent = createServerFn({ method: "POST" })
     const { data: order, error } = await supabaseAdmin
       .from("orders")
       .select(
-        "id, order_number, total, currency, customer_email, customer_id, payment_status, stripe_payment_intent_id",
+        "id, order_number, total, currency, customer_email, customer_id, payment_status, stripe_payment_intent_id, inventory_reserved_until, inventory_released_at, inventory_committed_at",
       )
       .eq("id", data.orderId)
       .maybeSingle();
@@ -116,6 +116,25 @@ export const createPaymentIntent = createServerFn({ method: "POST" })
         clientSecret: null,
         pending: false,
         reason: "Order is already paid.",
+      };
+    }
+
+    const reservationExpired =
+      !order.inventory_committed_at &&
+      Boolean(order.inventory_reserved_until) &&
+      new Date(order.inventory_reserved_until as string).getTime() <= Date.now();
+
+    if (order.inventory_released_at || reservationExpired) {
+      if (!order.inventory_released_at && reservationExpired) {
+        await supabaseAdmin.rpc(
+          "release_order_inventory" as never,
+          { _order_id: order.id } as never,
+        );
+      }
+      return {
+        clientSecret: null,
+        pending: true,
+        reason: "This checkout reservation expired. Return to your cart and place the order again.",
       };
     }
 
