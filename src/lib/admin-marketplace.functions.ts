@@ -1,11 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { VENDOR_PLANS, getVendorPlan } from "@/lib/vendor-plans";
+import type { Database } from "@/integrations/supabase/types";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 async function adminDb(context: {
-  supabase: {
-    rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
-  };
+  supabase: SupabaseClient<Database>;
   userId: string;
 }) {
   const { data, error } = await context.supabase.rpc("has_role", {
