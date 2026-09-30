@@ -49,16 +49,34 @@ function Page() {
   }, [demo, user]);
 
   const useDemo = demo;
-  const baseRows = useDemo
-    ? demoProducts.slice(0, 12).map((p, i) => ({
-        id: p.id, title: p.title,
-        status: (["active", "draft", "pending_review", "active", "rejected", "active"] as ProductStatus[])[i % 6],
-        price: Number(p.price), stock: 5 + (i * 7) % 80, category: p.category,
-      }))
-    : (items ?? []).map((p) => ({
-        id: p.id, title: p.title, status: p.status as ProductStatus,
-        price: Number(p.price), stock: p.inventory_quantity, category: p.category_slug ?? "—",
-      }));
+  const baseRows = useMemo(
+    () =>
+      useDemo
+        ? demoProducts.slice(0, 12).map((p, i) => ({
+            id: p.id,
+            title: p.title,
+            status: ([
+              "active",
+              "draft",
+              "pending_review",
+              "active",
+              "rejected",
+              "active",
+            ] as ProductStatus[])[i % 6],
+            price: Number(p.price),
+            stock: 5 + ((i * 7) % 80),
+            category: p.category,
+          }))
+        : (items ?? []).map((p) => ({
+            id: p.id,
+            title: p.title,
+            status: p.status as ProductStatus,
+            price: Number(p.price),
+            stock: p.inventory_quantity,
+            category: p.category_slug ?? "—",
+          })),
+    [items, useDemo],
+  );
 
   const categories = useMemo(() => Array.from(new Set(baseRows.map((r) => r.category))).sort(), [baseRows]);
 
@@ -70,7 +88,10 @@ function Page() {
   });
 
   const toggle = (id: string) => {
-    const next = new Set(selected); next.has(id) ? next.delete(id) : next.add(id); setSelected(next);
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelected(next);
   };
 
   const subActive = vendor?.subscription_status === "active" || vendor?.subscription_status === "trialing";
