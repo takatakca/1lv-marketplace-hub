@@ -227,3 +227,140 @@ export const getAdminSubscriptions = createServerFn({ method: "POST" })
       ).length,
     };
   });
+
+
+export type AdminDashboardSummary = {
+  gmv: number;
+  orderCount: number;
+  pendingVendors: number;
+  activeVendors: number;
+  pendingProducts: number;
+  activeProducts: number;
+  unpaidVendors: number;
+  openDisputes: number;
+  commissionRevenue: number;
+  payoutLiability: number;
+  recentOrders: Array<{
+    id: string;
+    orderNumber: string;
+    customerEmail: string | null;
+    total: number;
+    paymentStatus: string;
+    fulfillmentStatus: string;
+    createdAt: string;
+  }>;
+};
+
+export const getAdminDashboardSummary = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<AdminDashboardSummary> => {
+    const db = await adminDb(context);
+    const [
+      ordersRes,
+      vendorsRes,
+      productsRes,
+      splitsRes,
+      disputesRes,
+      recentOrdersRes,
+    ] = await Promise.all([
+      db.from("orders").select("total, payment_status"),
+      db.from("vendors").select("status, subscription_status"),
+      db.from("products").select("status"),
+      db
+        .from("vendor_orders" as never)
+        .select("commission_amount, vendor_payout_amount, status"),
+      db
+        .from("disputes")
+        .select("id, status"),
+      db
+        .from("orders")
+        .select("id, order_number, customer_email, total, payment_status, status, created_at")
+        .order("created_at", { ascending: false })
+        .limit(12),
+    ]);
+
+    for (const result of [
+      ordersRes,
+      vendorsRes,
+      productsRes,
+      splitsRes,
+      disputesRes,
+      recentOrdersRes,
+    ]) {
+      if (result.error) throw result.error;
+    }
+
+    const orders = (ordersRes.data ?? []) as Array<{
+      total: number;
+      payment_status: string;
+    }>;
+    const vendors = (vendorsRes.data ?? []) as Array<{
+      status: string;
+      subscription_status: string;
+    }>;
+    const products = (productsRes.data ?? []) as Array<{ status: string }>;
+    const splits = (splitsRes.data ?? []) as unknown as Array<{
+      commission_amount: number;
+      vendor_payout_amount: number;
+      status: string;
+    }>;
+    const disputes = (disputesRes.data ?? []) as Array<{ id: string; status: string }>;
+    const recentOrders = (recentOrdersRes.data ?? []) as Array<{
+      id: string;
+      order_number: string;
+      customer_email: string | null;
+      total: number;
+      payment_status: string;
+      status: string;
+      created_at: string;
+    }>;
+
+    const openDisputeStatuses = new Set([
+      "open",
+      "under_review",
+      "waiting_customer",
+      "waiting_vendor",
+    ]);
+
+    return {
+      gmv: orders
+        .filter((order) => order.payment_status === "paid")
+        .reduce((sum, order) => sum + Number(order.total ?? 0), 0),
+      orderCount: orders.length,
+      pendingVendors: vendors.filter((vendor) => vendor.status === "pending").length,
+      activeVendors: vendors.filter((vendor) => vendor.status === "active").length,
+      pendingProducts: products.filter((product) => product.status === "pending_review").length,
+      activeProducts: products.filter((product) => product.status === "active").length,
+      unpaidVendors: vendors.filter(
+        (vendor) =>
+          vendor.subscription_status === "past_due" ||
+          vendor.subscription_status === "unpaid",
+      ).length,
+      openDisputes: disputes.filter((dispute) =>
+        openDisputeStatuses.has(dispute.status),
+      ).length,
+      commissionRevenue: splits.reduce(
+        (sum, split) => sum + Number(split.commission_amount ?? 0),
+        0,
+      ),
+      payoutLiability: splits
+        .filter(
+          (split) =>
+            split.status !== "delivered" &&
+            split.status !== "cancelled",
+        )
+        .reduce(
+          (sum, split) => sum + Number(split.vendor_payout_amount ?? 0),
+          0,
+        ),
+      recentOrders: recentOrders.map((order) => ({
+        id: order.id,
+        orderNumber: order.order_number,
+        customerEmail: order.customer_email,
+        total: Number(order.total ?? 0),
+        paymentStatus: order.payment_status,
+        fulfillmentStatus: order.status,
+        createdAt: order.created_at,
+      })),
+    };
+  });
