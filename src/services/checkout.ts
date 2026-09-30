@@ -77,7 +77,7 @@ export async function createOrder(input: CheckoutInput): Promise<CheckoutResult>
   const checkoutKey = input.checkout_key ?? crypto.randomUUID();
   const result = await createMarketplaceOrder({
     data: {
-      checkoutKey,
+      idempotencyKey: checkoutKey,
       items: input.items.map((item) => ({
         productId: item.productId,
         quantity: item.qty,
