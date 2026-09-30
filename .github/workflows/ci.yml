@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - upgrade/canada-commerce-hardening
   workflow_dispatch:
 
 permissions:
