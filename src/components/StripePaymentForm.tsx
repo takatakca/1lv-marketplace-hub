@@ -14,10 +14,11 @@ function getStripe() {
 type Props = {
   clientSecret: string;
   orderNumber: string;
+  checkoutKey?: string | null;
   onCancel?: () => void;
 };
 
-export function StripePaymentForm({ clientSecret, orderNumber, onCancel }: Props) {
+export function StripePaymentForm({ clientSecret, orderNumber, checkoutKey, onCancel }: Props) {
   const [ready, setReady] = useState<Promise<Stripe | null> | null>(null);
   useEffect(() => {
     setReady(getStripe());
@@ -33,12 +34,20 @@ export function StripePaymentForm({ clientSecret, orderNumber, onCancel }: Props
 
   return (
     <Elements stripe={ready} options={{ clientSecret, appearance: { theme: "stripe" } }}>
-      <InnerForm orderNumber={orderNumber} onCancel={onCancel} />
+      <InnerForm orderNumber={orderNumber} checkoutKey={checkoutKey} onCancel={onCancel} />
     </Elements>
   );
 }
 
-function InnerForm({ orderNumber, onCancel }: { orderNumber: string; onCancel?: () => void }) {
+function InnerForm({
+  orderNumber,
+  checkoutKey,
+  onCancel,
+}: {
+  orderNumber: string;
+  checkoutKey?: string | null;
+  onCancel?: () => void;
+}) {
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
@@ -49,7 +58,9 @@ function InnerForm({ orderNumber, onCancel }: { orderNumber: string; onCancel?: 
     if (!stripe || !elements || submitting) return;
     setSubmitting(true);
     setError(null);
-    const returnUrl = `${window.location.origin}/order-confirmation?order=${encodeURIComponent(orderNumber)}`;
+    const params = new URLSearchParams({ order: orderNumber });
+    if (checkoutKey) params.set("key", checkoutKey);
+    const returnUrl = `${window.location.origin}/order-confirmation?${params.toString()}`;
     const { error: err } = await stripe.confirmPayment({
       elements,
       confirmParams: { return_url: returnUrl },
