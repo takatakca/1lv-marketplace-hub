@@ -9,33 +9,39 @@ import { PaymentBadge, isUnpaid } from "@/components/PaymentBadge";
 import { StripePaymentForm } from "@/components/StripePaymentForm";
 import { formatCAD } from "@/lib/data";
 
-type Search = { order?: string; demo?: number };
+type Search = { order?: string; demo?: number; key?: string };
 
 export const Route = createFileRoute("/order-confirmation")({
   component: Confirmation,
   validateSearch: (s: Record<string, unknown>): Search => ({
     order: typeof s.order === "string" ? s.order : undefined,
     demo: Number(s.demo) ? 1 : 0,
+    key: typeof s.key === "string" ? s.key : undefined,
   }),
-  head: () => ({ meta: [{ title: "Order confirmed — 1LV.CA" }] }),
+  head: () => ({
+    meta: [
+      { title: "Order confirmed — 1LV.CA" },
+      { name: "referrer", content: "no-referrer" },
+    ],
+  }),
 });
 
 function Confirmation() {
-  const { order, demo } = Route.useSearch();
+  const { order, demo, key } = Route.useSearch();
   const [details, setDetails] = useState<Awaited<ReturnType<typeof getOrderByNumber>> | null>(null);
   const [loading, setLoading] = useState(Boolean(order && !demo));
 
   useEffect(() => {
     if (!order || demo) return;
     let cancel = false;
-    getOrderByNumber(order)
+    getOrderByNumber(order, key)
       .then((d) => !cancel && setDetails(d))
       .catch(() => undefined)
       .finally(() => !cancel && setLoading(false));
     return () => {
       cancel = true;
     };
-  }, [order, demo]);
+  }, [order, demo, key]);
 
   if (!order) {
     return (
@@ -99,7 +105,7 @@ function Confirmation() {
                 </div>
 
                 {isUnpaid(details.payment_status) && details.id && (
-                  <RetryPayment orderId={details.id} orderNumber={order} />
+                  <RetryPayment orderId={details.id} orderNumber={order} checkoutKey={key ?? null} />
                 )}
               </>
             ) : (
@@ -126,13 +132,21 @@ function Confirmation() {
   );
 }
 
-function RetryPayment({ orderId, orderNumber }: { orderId: string; orderNumber: string }) {
+function RetryPayment({
+  orderId,
+  orderNumber,
+  checkoutKey,
+}: {
+  orderId: string;
+  orderNumber: string;
+  checkoutKey: string | null;
+}) {
   const [busy, setBusy] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const onRetry = async () => {
     setBusy(true);
     try {
-      const intent = await createPaymentIntent(orderId, 0);
+      const intent = await createPaymentIntent(orderId, checkoutKey);
       if (intent.pending || !intent.clientSecret) {
         toast.message("Payment not ready", { description: intent.reason ?? "Stripe setup required." });
       } else if (!isStripeConfigured()) {
@@ -147,7 +161,12 @@ function RetryPayment({ orderId, orderNumber }: { orderId: string; orderNumber: 
   if (clientSecret) {
     return (
       <div className="mt-4">
-        <StripePaymentForm clientSecret={clientSecret} orderNumber={orderNumber} onCancel={() => setClientSecret(null)} />
+        <StripePaymentForm
+          clientSecret={clientSecret}
+          orderNumber={orderNumber}
+          checkoutKey={checkoutKey}
+          onCancel={() => setClientSecret(null)}
+        />
       </div>
     );
   }
