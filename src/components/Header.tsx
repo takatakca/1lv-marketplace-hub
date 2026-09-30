@@ -8,7 +8,8 @@ import { AISearchBar } from "./AISearchBar";
 import { useCart } from "@/hooks/use-cart";
 import { useAuth } from "@/hooks/use-auth";
 import { canAccessAdmin, canAccessVendor } from "@/lib/roles";
-import { categories } from "@/lib/data";\nimport { FREE_SHIPPING_THRESHOLD_CAD } from "@/lib/canada-commerce";
+import { categories } from "@/lib/data";
+import { FREE_SHIPPING_THRESHOLD_CAD } from "@/lib/canada-commerce";
 
 export function Header() {
   const [megaOpen, setMegaOpen] = useState(false);
