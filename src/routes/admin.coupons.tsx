@@ -184,7 +184,7 @@ function Page() {
           { key: "status", label: "Status" },
         ]}
         rows={rows}
-        emptyMessage={
+        empty={
           loading
             ? "Loading promotions…"
             : "No promotions yet. Create the first verified offer below."
