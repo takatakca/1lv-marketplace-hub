@@ -68,13 +68,45 @@ async function handleEvent(evt: StripeEvent) {
       const orderId = meta.order_id;
       const paymentIntentId = typeof obj.id === "string" ? obj.id : null;
       if (orderId && paymentIntentId) {
+        const { data: inventoryCommitted, error: inventoryError } =
+          await supabaseAdmin.rpc(
+            "commit_order_inventory" as never,
+            { _order_id: orderId } as never,
+          );
+
+        if (inventoryError) throw inventoryError;
+
+        const committed = inventoryCommitted === true;
         const { data: updated } = await supabaseAdmin
           .from("orders")
-          .update({ payment_status: "paid", status: "processing" })
+          .update({
+            payment_status: "paid",
+            status: committed ? "processing" : "pending",
+          })
           .eq("id", orderId)
           .eq("stripe_payment_intent_id", paymentIntentId)
-          .select("id")
+          .select("id, order_number")
           .maybeSingle();
+
+        if (updated && !committed) {
+          const { data: adminRoles } = await supabaseAdmin
+            .from("user_roles")
+            .select("user_id")
+            .eq("role", "admin");
+
+          const notifications = (adminRoles ?? []).map((row) => ({
+            user_id: row.user_id,
+            kind: "inventory_payment_conflict",
+            title: `Inventory conflict on paid order ${updated.order_number}`,
+            body: "Stripe reported payment success after the inventory reservation was released. Review the order before fulfillment.",
+            link: `/admin/orders`,
+          }));
+
+          if (notifications.length > 0) {
+            await supabaseAdmin.from("notifications").insert(notifications);
+          }
+        }
+
         if (updated) await takatakOrder(orderId, "order.paid");
       }
       break;
