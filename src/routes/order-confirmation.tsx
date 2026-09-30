@@ -8,7 +8,6 @@ import { createPaymentIntent, isStripeConfigured } from "@/services/payments";
 import { PaymentBadge, isUnpaid } from "@/components/PaymentBadge";
 import { StripePaymentForm } from "@/components/StripePaymentForm";
 import { formatCAD } from "@/lib/data";
-import { getGuestPaymentContext, type GuestPaymentContext } from "@/services/guest-payment";
 import {
   clearGuestPaymentContext,
   getGuestPaymentContext,
@@ -36,7 +35,6 @@ function Confirmation() {
   const [details, setDetails] = useState<Awaited<ReturnType<typeof getOrderByNumber>> | null>(null);
   const [guestContext, setGuestContext] = useState<GuestPaymentContext | null>(null);
   const [loading, setLoading] = useState(Boolean(order && !demo));
-  const [guestContext, setGuestContext] = useState<GuestPaymentContext | null>(null);
 
   useEffect(() => {
     if (!order || demo) return;
