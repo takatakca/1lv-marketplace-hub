@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";\nimport { FREE_SHIPPING_THRESHOLD_CAD, STANDARD_SHIPPING_FEE_CAD } from "@/lib/canada-commerce";
+import { toast } from "sonner";
+import { FREE_SHIPPING_THRESHOLD_CAD, STANDARD_SHIPPING_FEE_CAD } from "@/lib/canada-commerce";
 
 type Settings = {
   name: string;
