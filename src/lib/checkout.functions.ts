@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getOptionalSupabaseUserId } from "@/integrations/supabase/optional-auth.server";
+import { getOptionalSupabaseUser } from "@/integrations/supabase/optional-auth.server";
 import { createGuestPaymentToken } from "@/lib/guest-payment-token.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -85,14 +85,16 @@ function validateCheckoutInput(data: ServerCheckoutInput): ServerCheckoutInput {
 export const createMarketplaceOrder = createServerFn({ method: "POST" })
   .inputValidator(validateCheckoutInput)
   .handler(async ({ data }): Promise<ServerCheckoutResult> => {
-    const userId = await getOptionalSupabaseUserId();
+    const user = await getOptionalSupabaseUser();
+    const userId = user?.id ?? null;
+    const customerEmail = user?.email?.trim() || data.email.trim();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const { data: result, error } = await supabaseAdmin.rpc(
       "create_marketplace_order" as never,
       {
         _customer_id: userId,
-        _customer_email: data.email,
+        _customer_email: customerEmail,
         _customer_phone: data.phone,
         _shipping_address: data.shippingAddress,
         _billing_address: data.billingAddress ?? null,
