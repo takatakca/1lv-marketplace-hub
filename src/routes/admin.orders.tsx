@@ -51,7 +51,7 @@ function Page() {
     finally { setBusy(false); }
   };
 
-  const useDemo = demo || !rows || rows.length === 0;
+  const useDemo = demo;
   const filtered = useMemo(() => {
     if (useDemo) return [];
     return (rows ?? []).filter((o) => {
@@ -134,7 +134,7 @@ function Page() {
         <select value={ful} onChange={(e) => setFul(e.target.value as (typeof FUL)[number])} className="rounded-md border border-border bg-background px-3 py-2 text-sm">
           {FUL.map((s) => <option key={s} value={s}>Fulfillment: {s}</option>)}
         </select>
-        {!useDemo && <span className="ml-auto text-xs text-muted-foreground">{filtered.length} of {rows?.length ?? 0}</span>}
+        {!demo && <span className="ml-auto text-xs text-muted-foreground">{filtered.length} of {rows?.length ?? 0}</span>}
       </div>
 
       {loading ? <div className="text-sm text-muted-foreground">Loading…</div> : (
@@ -151,6 +151,7 @@ function Page() {
             { key: "date", label: "Date" },
           ]}
           rows={tableRows as unknown as Record<string, unknown>[]}
+          empty={demo ? "No demo orders." : "No marketplace orders yet."}
         />
       )}
     </>
