@@ -42,7 +42,7 @@ function Page() {
   };
 
   const useDemo = demo;
-  const source: VendorRecord[] = demo
+  const source: VendorRecord[] = useMemo(() => demo
     ? demoVendors.map((v, i) => ({
         id: "demo-" + i, user_id: "u-" + i, store_name: v.name, slug: v.slug,
         description: null, business_name: v.name, contact_email: v.slug + "@1lv.ca",
@@ -58,7 +58,7 @@ function Page() {
         payouts_enabled: i % 2 === 0, charges_enabled: i % 2 === 0,
         commission_rate: 0.1, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       }))
-    : rows ?? [];
+    : rows ?? [], [demo, rows]);
 
   const filtered = useMemo(() => {
     return source.filter((v) => {
