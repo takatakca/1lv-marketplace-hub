@@ -64,7 +64,7 @@ RETURNS boolean
 LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = ''
-AS $
+AS $$
 DECLARE
   v_order public.orders%ROWTYPE;
   v_item record;
@@ -110,7 +110,7 @@ BEGIN
 
   RETURN true;
 END;
-$;
+$$;
 
 REVOKE ALL ON FUNCTION public.release_order_inventory(uuid)
   FROM PUBLIC, anon, authenticated;
@@ -124,7 +124,7 @@ RETURNS integer
 LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = ''
-AS $
+AS $$
 DECLARE
   v_order_id uuid;
   v_released integer := 0;
@@ -151,7 +151,7 @@ BEGIN
 
   RETURN v_released;
 END;
-$;
+$$;
 
 REVOKE ALL ON FUNCTION public.release_expired_inventory_reservations(integer)
   FROM PUBLIC, anon, authenticated;
@@ -163,7 +163,7 @@ RETURNS boolean
 LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = ''
-AS $
+AS $$
 DECLARE
   v_order public.orders%ROWTYPE;
 BEGIN
@@ -199,7 +199,7 @@ BEGIN
 
   RETURN true;
 END;
-$;
+$$;
 
 REVOKE ALL ON FUNCTION public.commit_order_inventory(uuid)
   FROM PUBLIC, anon, authenticated;
@@ -219,7 +219,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = ''
-AS $
+AS $$
 DECLARE
   v_idempotency_hash text;
   v_existing public.orders%ROWTYPE;
