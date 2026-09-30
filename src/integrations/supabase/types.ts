@@ -299,7 +299,7 @@ export type Database = {
       orders: {
         Row: {
           billing_address: Json | null
-          checkout_key_hash: string | null
+          checkout_idempotency_hash: string | null
           created_at: string
           currency: string
           customer_email: string | null
@@ -323,7 +323,7 @@ export type Database = {
         }
         Insert: {
           billing_address?: Json | null
-          checkout_key_hash?: string | null
+          checkout_idempotency_hash?: string | null
           created_at?: string
           currency?: string
           customer_email?: string | null
@@ -347,7 +347,7 @@ export type Database = {
         }
         Update: {
           billing_address?: Json | null
-          checkout_key_hash?: string | null
+          checkout_idempotency_hash?: string | null
           created_at?: string
           currency?: string
           customer_email?: string | null
@@ -1501,10 +1501,10 @@ export type Database = {
       create_marketplace_order: {
         Args: {
           _billing_address: Json | null
-          _checkout_key: string
           _customer_email: string
           _customer_id: string | null
           _customer_phone: string
+          _idempotency_key: string
           _items: Json
           _shipping_address: Json
         }
