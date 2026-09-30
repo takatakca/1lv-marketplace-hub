@@ -30,6 +30,7 @@ export type CheckoutResult = {
   order_number: string;
   demo: boolean;
   checkout_key: string | null;
+  guest_payment_token: string | null;
   subtotal: number;
   shipping_total: number;
   tax_total: number;
@@ -59,6 +60,7 @@ export async function createOrder(input: CheckoutInput): Promise<CheckoutResult>
       order_number: synthetic,
       demo: true,
       checkout_key: null,
+      guest_payment_token: null,
       subtotal: pricing.subtotal,
       shipping_total: pricing.shippingTotal,
       tax_total: pricing.taxTotal,
