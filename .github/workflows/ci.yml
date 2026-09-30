@@ -15,13 +15,15 @@ concurrency:
 
 jobs:
   validate:
-    name: Typecheck, lint and build
+    name: Typecheck, changed-file lint and build
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -35,7 +37,22 @@ jobs:
       - name: TypeScript
         run: npx tsc --noEmit
 
-      - name: Lint
+      - name: Lint changed source files
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mapfile -d '' files < <(git diff --name-only -z "$BASE_SHA" "$HEAD_SHA" -- '*.ts' '*.tsx' '*.js' '*.jsx' '*.cjs' '*.mjs')
+          if (( ${#files[@]} == 0 )); then
+            echo "No changed lintable files."
+          else
+            printf 'Linting %s\n' "${files[@]}"
+            npx eslint --max-warnings=0 "${files[@]}"
+          fi
+
+      - name: Lint repository on manual runs
+        if: github.event_name != 'pull_request'
         run: npm run lint
 
       - name: Production build
