@@ -9,7 +9,10 @@ function safeEqual(left: string, right: string) {
   return diff === 0;
 }
 
-export const Route = createFileRoute("/api/internal/takatak/drain")({
+// The generated route tree is refreshed by the Vite/TanStack build after this
+// file is discovered. Cast only the path literal so pre-build tsc can validate
+// the handler without requiring a committed edit to routeTree.gen.ts.
+export const Route = createFileRoute("/api/internal/takatak/drain" as any)({
   server: {
     handlers: {
       POST: async ({ request }) => {
