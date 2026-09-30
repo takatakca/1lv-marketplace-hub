@@ -2,17 +2,19 @@ const TOKEN_TTL_SECONDS = 24 * 60 * 60;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function tokenSecret() {
-  const secret =
-    process.env.CHECKOUT_GUEST_TOKEN_SECRET ??
-    process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const secret = process.env.CHECKOUT_GUEST_TOKEN_SECRET;
 
-  if (!secret) {
+  if (!secret || secret.length < 32) {
     throw new Error(
-      "Missing CHECKOUT_GUEST_TOKEN_SECRET or SUPABASE_SERVICE_ROLE_KEY",
+      "CHECKOUT_GUEST_TOKEN_SECRET must be configured with at least 32 characters.",
     );
   }
 
   return secret;
+}
+
+export function assertGuestPaymentTokenConfigured() {
+  void tokenSecret();
 }
 
 function bytesToHex(bytes: ArrayBuffer) {
