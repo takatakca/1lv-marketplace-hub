@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { products, formatCAD } from "@/lib/data";
 import { useAuth } from "@/hooks/use-auth";
@@ -36,7 +36,7 @@ function Page() {
   const [tracking, setTracking] = useState("");
   const [carrier, setCarrier] = useState("");
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     if (demo) return;
     try {
       const v = (await getVendorOrder(id)) as unknown as VendorOrder | null;
@@ -46,10 +46,18 @@ function Page() {
         setCarrier(v.carrier ?? "");
         const its = await listItemsForVendorOrder(v.order_id, v.vendor_id);
         setItems(its as Item[]);
+      } else {
+        setVo(null);
+        setItems([]);
       }
-    } finally { setLoading(false); }
-  };
-  useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [id, demo]);
+    } finally {
+      setLoading(false);
+    }
+  }, [demo, id]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   const useDemo = demo;
   const demoItems: Item[] = products.slice(0, 2).map((p, i) => ({ id: "d" + i, title: p.title, quantity: 1, unit_price: p.price }));
