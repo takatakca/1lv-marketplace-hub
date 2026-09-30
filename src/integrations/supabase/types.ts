@@ -358,6 +358,9 @@ export type Database = {
           billing_address?: Json | null
           checkout_idempotency_hash?: string | null
           created_at?: string
+          inventory_committed_at?: string | null
+          inventory_released_at?: string | null
+          inventory_reserved_until?: string | null
           currency?: string
           customer_email?: string | null
           customer_id?: string | null
