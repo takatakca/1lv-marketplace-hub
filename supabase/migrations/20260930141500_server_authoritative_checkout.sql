@@ -9,7 +9,19 @@ CREATE SCHEMA IF NOT EXISTS extensions;
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
 ALTER TABLE public.orders
-  ADD COLUMN IF NOT EXISTS checkout_idempotency_hash text;
+  ADD COLUMN IF NOT EXISTS checkout_idempotency_hash text,
+  ADD COLUMN IF NOT EXISTS inventory_reserved_until timestamptz,
+  ADD COLUMN IF NOT EXISTS inventory_released_at timestamptz,
+  ADD COLUMN IF NOT EXISTS inventory_committed_at timestamptz;
+
+ALTER TABLE public.order_items
+  ADD COLUMN IF NOT EXISTS inventory_reserved boolean NOT NULL DEFAULT false;
+
+CREATE INDEX IF NOT EXISTS orders_inventory_reservation_idx
+  ON public.orders (inventory_reserved_until)
+  WHERE inventory_reserved_until IS NOT NULL
+    AND inventory_released_at IS NULL
+    AND inventory_committed_at IS NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS orders_checkout_idempotency_hash_uidx
   ON public.orders (checkout_idempotency_hash)
@@ -31,9 +43,9 @@ DROP POLICY IF EXISTS "Customers create own order items" ON public.order_items;
 DROP POLICY IF EXISTS "Guests can create guest order items" ON public.order_items;
 DROP POLICY IF EXISTS "Checkout can insert vendor orders" ON public.vendor_orders;
 
-REVOKE INSERT ON public.orders FROM anon;
-REVOKE INSERT ON public.order_items FROM anon;
-REVOKE INSERT ON public.vendor_orders FROM anon;
+REVOKE INSERT ON public.orders FROM anon, authenticated;
+REVOKE INSERT ON public.order_items FROM anon, authenticated;
+REVOKE INSERT ON public.vendor_orders FROM anon, authenticated;
 
 -- The browser no longer needs direct access to private commission rates.
 REVOKE ALL ON FUNCTION public.get_vendor_commission_rates(uuid[]) FROM PUBLIC;
@@ -47,6 +59,153 @@ DROP FUNCTION IF EXISTS public.lookup_guest_order(text);
 DROP FUNCTION IF EXISTS public.lookup_guest_order(text, text);
 DROP FUNCTION IF EXISTS public.lookup_guest_order(text, uuid);
 
+CREATE OR REPLACE FUNCTION public.release_order_inventory(_order_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $
+DECLARE
+  v_order public.orders%ROWTYPE;
+  v_item record;
+BEGIN
+  SELECT *
+  INTO v_order
+  FROM public.orders
+  WHERE id = _order_id
+  FOR UPDATE;
+
+  IF NOT FOUND
+     OR v_order.payment_status = 'paid'::public.payment_status
+     OR v_order.inventory_committed_at IS NOT NULL
+     OR v_order.inventory_released_at IS NOT NULL THEN
+    RETURN false;
+  END IF;
+
+  FOR v_item IN
+    SELECT product_id, sum(quantity)::integer AS quantity
+    FROM public.order_items
+    WHERE order_id = _order_id
+      AND inventory_reserved = true
+      AND product_id IS NOT NULL
+    GROUP BY product_id
+  LOOP
+    UPDATE public.products
+    SET inventory_quantity = inventory_quantity + v_item.quantity,
+        updated_at = now()
+    WHERE id = v_item.product_id;
+  END LOOP;
+
+  UPDATE public.order_items
+  SET inventory_reserved = false,
+      updated_at = now()
+  WHERE order_id = _order_id
+    AND inventory_reserved = true;
+
+  UPDATE public.orders
+  SET inventory_reserved_until = NULL,
+      inventory_released_at = now(),
+      updated_at = now()
+  WHERE id = _order_id;
+
+  RETURN true;
+END;
+$;
+
+REVOKE ALL ON FUNCTION public.release_order_inventory(uuid)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.release_order_inventory(uuid)
+  TO service_role;
+
+CREATE OR REPLACE FUNCTION public.release_expired_inventory_reservations(
+  _limit integer DEFAULT 50
+)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $
+DECLARE
+  v_order_id uuid;
+  v_released integer := 0;
+BEGIN
+  FOR v_order_id IN
+    SELECT id
+    FROM public.orders
+    WHERE inventory_reserved_until IS NOT NULL
+      AND inventory_reserved_until <= now()
+      AND inventory_released_at IS NULL
+      AND inventory_committed_at IS NULL
+      AND payment_status IN (
+        'unpaid'::public.payment_status,
+        'failed'::public.payment_status
+      )
+    ORDER BY inventory_reserved_until
+    LIMIT greatest(1, least(COALESCE(_limit, 50), 250))
+    FOR UPDATE SKIP LOCKED
+  LOOP
+    IF public.release_order_inventory(v_order_id) THEN
+      v_released := v_released + 1;
+    END IF;
+  END LOOP;
+
+  RETURN v_released;
+END;
+$;
+
+REVOKE ALL ON FUNCTION public.release_expired_inventory_reservations(integer)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.release_expired_inventory_reservations(integer)
+  TO service_role;
+
+CREATE OR REPLACE FUNCTION public.commit_order_inventory(_order_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $
+DECLARE
+  v_order public.orders%ROWTYPE;
+BEGIN
+  SELECT *
+  INTO v_order
+  FROM public.orders
+  WHERE id = _order_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+
+  IF v_order.inventory_released_at IS NOT NULL THEN
+    RETURN false;
+  END IF;
+
+  IF v_order.inventory_committed_at IS NOT NULL THEN
+    RETURN true;
+  END IF;
+
+  UPDATE public.order_items
+  SET inventory_reserved = false,
+      updated_at = now()
+  WHERE order_id = _order_id
+    AND inventory_reserved = true;
+
+  UPDATE public.orders
+  SET inventory_reserved_until = NULL,
+      inventory_committed_at = now(),
+      updated_at = now()
+  WHERE id = _order_id;
+
+  RETURN true;
+END;
+$;
+
+REVOKE ALL ON FUNCTION public.commit_order_inventory(uuid)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.commit_order_inventory(uuid)
+  TO service_role;
+
 CREATE OR REPLACE FUNCTION public.create_marketplace_order(
   _customer_id uuid,
   _customer_email text,
@@ -58,9 +217,9 @@ CREATE OR REPLACE FUNCTION public.create_marketplace_order(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = pg_catalog, public, extensions, pg_temp
-AS $$
+SECURITY INVOKER
+SET search_path = ''
+AS $
 DECLARE
   v_idempotency_hash text;
   v_existing public.orders%ROWTYPE;
@@ -82,6 +241,8 @@ DECLARE
   v_product record;
   v_line_total numeric(12,2);
 BEGIN
+  PERFORM public.release_expired_inventory_reservations(50);
+
   IF _idempotency_key IS NULL THEN
     RAISE EXCEPTION 'Invalid checkout idempotency key'
       USING ERRCODE = '22023';
@@ -175,9 +336,25 @@ BEGIN
   INTO v_existing
   FROM public.orders
   WHERE checkout_idempotency_hash = v_idempotency_hash
-  LIMIT 1;
+  LIMIT 1
+  FOR UPDATE;
 
   IF FOUND THEN
+    IF v_existing.payment_status <> 'paid'::public.payment_status
+       AND v_existing.inventory_committed_at IS NULL
+       AND v_existing.inventory_released_at IS NULL
+       AND v_existing.inventory_reserved_until IS NOT NULL
+       AND v_existing.inventory_reserved_until <= now() THEN
+      PERFORM public.release_order_inventory(v_existing.id);
+      RAISE EXCEPTION 'Checkout session expired; please submit again'
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    IF v_existing.inventory_released_at IS NOT NULL
+       AND v_existing.payment_status <> 'paid'::public.payment_status THEN
+      RAISE EXCEPTION 'Checkout session expired; please submit again'
+        USING ERRCODE = 'P0001';
+    END IF;
     IF v_existing.customer_id IS DISTINCT FROM _customer_id
        OR lower(COALESCE(v_existing.customer_email, '')) <> v_email THEN
       RAISE EXCEPTION 'Checkout idempotency key conflict'
@@ -225,7 +402,8 @@ BEGIN
     payment_status,
     shipping_address,
     billing_address,
-    checkout_idempotency_hash
+    checkout_idempotency_hash,
+    inventory_reserved_until
   )
   VALUES (
     _customer_id,
@@ -241,7 +419,8 @@ BEGIN
     'unpaid'::public.payment_status,
     v_shipping,
     v_billing,
-    v_idempotency_hash
+    v_idempotency_hash,
+    now() + interval '24 hours'
   )
   RETURNING id, order_number
   INTO v_order_id, v_order_number;
@@ -296,7 +475,8 @@ BEGIN
       title,
       quantity,
       unit_price,
-      status
+      status,
+      inventory_reserved
     )
     VALUES (
       v_order_id,
@@ -305,7 +485,8 @@ BEGIN
       v_product.title,
       v_item.quantity,
       v_product.price,
-      'pending'::public.fulfillment_status
+      'pending'::public.fulfillment_status,
+      v_product.track_inventory
     );
 
     IF v_product.track_inventory THEN
@@ -396,7 +577,7 @@ RETURNS jsonb
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = pg_catalog, public, extensions, pg_temp
+SET search_path = ''
 AS $$
   SELECT jsonb_build_object(
     'id', o.id,
@@ -436,4 +617,4 @@ GRANT EXECUTE ON FUNCTION public.lookup_guest_order(text, uuid)
 COMMENT ON FUNCTION public.create_marketplace_order(
   uuid, text, text, jsonb, jsonb, jsonb, uuid
 ) IS
-  'Trusted 1LV.CA checkout transaction: validates sellers/products, locks and decrements inventory, calculates stored totals and creates vendor splits atomically.';
+  'Trusted 1LV.CA checkout transaction: validates sellers/products, reserves inventory for 24 hours, calculates stored totals and creates vendor splits atomically.';
