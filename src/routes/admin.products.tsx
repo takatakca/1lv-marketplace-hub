@@ -56,7 +56,7 @@ function Page() {
 
   const vendorById = useMemo(() => new Map(vendors.map((v) => [v.id, v])), [vendors]);
 
-  const useDemo = demo || (items && items.length === 0);
+  const useDemo = demo;
   const source: ProductRecord[] = useDemo
     ? demoProducts.slice(0, 12).map((p, i) => ({
         id: "demo-" + i, vendor_id: p.vendorSlug, slug: p.slug, title: p.title,
@@ -117,7 +117,7 @@ function Page() {
   return (
     <>
       <div className="mb-6">
-        {useDemo ? <DemoBanner label={demo ? "Preview mode" : "No products yet"} /> : null}
+        {demo ? <DemoBanner label="Preview mode" /> : null}
         <h1 className="text-2xl font-bold text-navy md:text-3xl">Product moderation</h1>
         <p className="text-sm text-muted-foreground">Approve, reject and archive vendor submissions. Cost, SKU and supplier fields stay private.</p>
       </div>
@@ -151,6 +151,7 @@ function Page() {
             { key: "actions", label: "" },
           ]}
           rows={rows}
+          empty="No marketplace products yet. Product submissions will appear here when vendors create them."
         />
       )}
     </>
