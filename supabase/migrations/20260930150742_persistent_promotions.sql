@@ -159,12 +159,6 @@ USING (
   AND (ends_at IS NULL OR ends_at > now())
 );
 
-CREATE POLICY "Admins can read all promotions"
-ON public.promotions
-FOR SELECT
-TO authenticated
-USING (public.has_role(auth.uid(), 'admin'::public.app_role));
-
 REVOKE ALL ON public.promotions FROM anon, authenticated;
 GRANT SELECT (
   id,
@@ -282,7 +276,7 @@ $$;
 REVOKE ALL ON FUNCTION public.audit_promotion_change()
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.audit_promotion_change()
-  TO service_role;
+  TO service_role, supabase_admin;
 
 DROP TRIGGER IF EXISTS promotions_audit_changes ON public.promotions;
 CREATE TRIGGER promotions_audit_changes
