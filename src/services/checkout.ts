@@ -108,7 +108,7 @@ export async function createOrder(input: CheckoutInput): Promise<CheckoutResult>
 
 export async function getOrderByNumber(orderNumber: string, checkoutKey?: string | null) {
   type OrderShape = {
-    id: string;
+    id?: string;
     order_number: string;
     total: number;
     status: string;
