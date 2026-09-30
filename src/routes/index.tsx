@@ -18,10 +18,10 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          `Shop flash deals, trending products and verified Canadian sellers on 1LV.CA. Free shipping over ${FREE_SHIPPING_THRESHOLD_CAD} CAD, 30-day returns, buyer protection.`,
+          "Shop flash deals, trending products and verified Canadian sellers on 1LV.CA. Free shipping over $" + FREE_SHIPPING_THRESHOLD_CAD + " CAD, 30-day returns, buyer protection.",
       },
       { property: "og:title", content: "1LV.CA — Canada's deal marketplace" },
-      { property: "og:description", content: `Flash deals, Canadian sellers, free shipping over ${FREE_SHIPPING_THRESHOLD_CAD} CAD.` },
+      { property: "og:description", content: "Flash deals, Canadian sellers, free shipping over $" + FREE_SHIPPING_THRESHOLD_CAD + " CAD." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -63,7 +63,7 @@ function Home() {
                   daily deals in CAD
                 </h1>
                 <p className="mt-3 text-sm text-white/80">
-                  {`New markdowns every morning. Free shipping over ${FREE_SHIPPING_THRESHOLD_CAD}, 30-day returns.`}
+                  {"New markdowns every morning. Free shipping over $" + FREE_SHIPPING_THRESHOLD_CAD + ", 30-day returns."}
                 </p>
                 <span className="mt-5 inline-flex items-center gap-2 rounded-md bg-deal px-5 py-2.5 text-sm font-bold text-deal-foreground transition group-hover:opacity-90">
                   Shop the event <ArrowRight size={15} />
