@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getOptionalSupabaseUser } from "@/integrations/supabase/optional-auth.server";
-import { createGuestPaymentToken } from "@/lib/guest-payment-token.server";
+import { assertGuestPaymentTokenConfigured, createGuestPaymentToken } from "@/lib/guest-payment-token.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -88,6 +88,11 @@ export const createMarketplaceOrder = createServerFn({ method: "POST" })
     const user = await getOptionalSupabaseUser();
     const userId = user?.id ?? null;
     const customerEmail = user?.email?.trim() || data.email.trim();
+
+    if (!userId) {
+      assertGuestPaymentTokenConfigured();
+    }
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const { data: result, error } = await supabaseAdmin.rpc(
