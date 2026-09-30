@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "sonner";\nimport { FREE_SHIPPING_THRESHOLD_CAD, STANDARD_SHIPPING_FEE_CAD } from "@/lib/canada-commerce";
 
 type Settings = {
   name: string;
@@ -19,8 +19,8 @@ const DEFAULTS: Settings = {
   name: "1LV.CA",
   supportEmail: "support@1lv.ca",
   commissionRate: 10,
-  freeShippingThreshold: 50,
-  standardShippingFee: 9.99,
+  freeShippingThreshold: FREE_SHIPPING_THRESHOLD_CAD,
+  standardShippingFee: STANDARD_SHIPPING_FEE_CAD,
   quebecTaxRate: 14.975,
   productApproval: true,
   vendorApproval: true,
@@ -80,7 +80,7 @@ function Page() {
     <form onSubmit={save} className="max-w-3xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-navy md:text-3xl">Marketplace settings</h1>
-        <p className="text-sm text-muted-foreground">Defaults applied across vendors, checkout and storefront.</p>
+        <p className="text-sm text-muted-foreground">Administrative defaults preview. Checkout now uses centralized Canadian commerce rules; persistent settings wiring remains separate.</p>
       </div>
 
       <section className="grid gap-4 rounded-xl border border-border bg-card p-5 sm:grid-cols-2">
