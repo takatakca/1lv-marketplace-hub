@@ -3,6 +3,7 @@ import type { CartItem } from "@/hooks/use-cart";
 import {
   calculateCanadianOrderTotals,
   normalizeProvinceCode,
+  type ShippingPricing,
 } from "@/lib/canada-commerce";
 import { createMarketplaceOrder } from "@/lib/checkout.functions";
 
@@ -24,6 +25,7 @@ export type CheckoutInput = {
   billing_address?: Address;
   checkout_key?: string;
   promotion_code?: string | null;
+  shipping_settings?: ShippingPricing;
 };
 
 export type CheckoutResult = {
@@ -56,7 +58,11 @@ export async function createOrder(input: CheckoutInput): Promise<CheckoutResult>
   // Seed/demo products never enter the production financial tables.
   if (uuidItems.length === 0) {
     const subtotal = input.items.reduce((sum, item) => sum + item.price * item.qty, 0);
-    const pricing = calculateCanadianOrderTotals({ subtotal, province });
+    const pricing = calculateCanadianOrderTotals({
+      subtotal,
+      province,
+      shipping: input.shipping_settings,
+    });
     const synthetic = "1LV-" + Math.floor(100000 + Math.random() * 900000);
 
     return {

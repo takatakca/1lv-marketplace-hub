@@ -35,6 +35,16 @@ export type CanadianProvince = {
 export const FREE_SHIPPING_THRESHOLD_CAD = 49;
 export const STANDARD_SHIPPING_FEE_CAD = 7.99;
 
+export type ShippingPricing = {
+  freeShippingThresholdCad: number;
+  standardShippingFeeCad: number;
+};
+
+const DEFAULT_SHIPPING_PRICING: ShippingPricing = {
+  freeShippingThresholdCad: FREE_SHIPPING_THRESHOLD_CAD,
+  standardShippingFeeCad: STANDARD_SHIPPING_FEE_CAD,
+};
+
 export const CANADIAN_PROVINCES: CanadianProvince[] = [
   { code: "AB", name: "Alberta", federalRate: 0.05, provincialRate: 0, combinedRate: 0.05, taxLabel: "GST" },
   { code: "BC", name: "British Columbia", federalRate: 0.05, provincialRate: 0.07, combinedRate: 0.12, taxLabel: "GST + PST" },
@@ -67,9 +77,26 @@ export function getProvinceTaxProfile(value: string | null | undefined): Canadia
   return BY_CODE.get(normalizeProvinceCode(value)) ?? BY_CODE.get("QC")!;
 }
 
-export function calculateShipping(subtotal: number): number {
-  if (subtotal <= 0 || subtotal >= FREE_SHIPPING_THRESHOLD_CAD) return 0;
-  return STANDARD_SHIPPING_FEE_CAD;
+export function calculateShipping(
+  subtotal: number,
+  pricing: ShippingPricing = DEFAULT_SHIPPING_PRICING,
+): number {
+  const safeSubtotal = Math.max(0, Number.isFinite(subtotal) ? subtotal : 0);
+  const threshold = Math.max(
+    0,
+    Number.isFinite(pricing.freeShippingThresholdCad)
+      ? pricing.freeShippingThresholdCad
+      : FREE_SHIPPING_THRESHOLD_CAD,
+  );
+  const fee = Math.max(
+    0,
+    Number.isFinite(pricing.standardShippingFeeCad)
+      ? pricing.standardShippingFeeCad
+      : STANDARD_SHIPPING_FEE_CAD,
+  );
+
+  if (safeSubtotal <= 0 || safeSubtotal >= threshold) return 0;
+  return fee;
 }
 
 export function calculateEstimatedTax(taxableAmount: number, province: string | null | undefined): number {
@@ -82,11 +109,12 @@ export function calculateCanadianOrderTotals(input: {
   subtotal: number;
   discountTotal?: number;
   province: string | null | undefined;
+  shipping?: ShippingPricing;
 }) {
   const subtotal = Math.max(0, input.subtotal);
   const discountTotal = Math.min(Math.max(0, input.discountTotal ?? 0), subtotal);
   const discountedSubtotal = +(subtotal - discountTotal).toFixed(2);
-  const shippingTotal = calculateShipping(discountedSubtotal);
+  const shippingTotal = calculateShipping(discountedSubtotal, input.shipping);
   const taxTotal = calculateEstimatedTax(discountedSubtotal, input.province);
   const total = +(discountedSubtotal + shippingTotal + taxTotal).toFixed(2);
   const taxProfile = getProvinceTaxProfile(input.province);

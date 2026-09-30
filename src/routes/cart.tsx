@@ -4,6 +4,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { EmptyState } from "@/components/EmptyState";
 import { FreeShippingBar } from "@/components/FreeShippingBar";
 import { useCart } from "@/hooks/use-cart";
+import { usePublicMarketplaceSettings } from "@/hooks/use-marketplace-settings";
 import { formatCAD } from "@/lib/data";
 import { calculateShipping } from "@/lib/canada-commerce";
 
@@ -14,8 +15,14 @@ export const Route = createFileRoute("/cart")({
 
 function CartPage() {
   const { items, remove, setQty, subtotal, count } = useCart();
-  const shipping = calculateShipping(subtotal);
-  const beforeTaxTotal = +(subtotal + shipping).toFixed(2);
+  const { settings: marketplaceSettings } = usePublicMarketplaceSettings();
+  const shipping = marketplaceSettings
+    ? calculateShipping(subtotal, {
+        freeShippingThresholdCad: marketplaceSettings.free_shipping_threshold,
+        standardShippingFeeCad: marketplaceSettings.standard_shipping_fee,
+      })
+    : null;
+  const beforeTaxTotal = shipping == null ? subtotal : +(subtotal + shipping).toFixed(2);
 
   const byVendor = items.reduce<Record<string, typeof items>>((acc, item) => {
     (acc[item.vendorSlug] ??= []).push(item);
@@ -43,7 +50,12 @@ function CartPage() {
         ) : (
           <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_360px]">
             <div className="space-y-4">
-              <FreeShippingBar subtotal={subtotal} />
+              {marketplaceSettings ? (
+                <FreeShippingBar
+                  subtotal={subtotal}
+                  threshold={marketplaceSettings.free_shipping_threshold}
+                />
+              ) : null}
 
               {Object.entries(byVendor).map(([vendorSlug, group]) => (
                 <div key={vendorSlug} className="overflow-hidden rounded-xl border border-border bg-card">
@@ -138,7 +150,9 @@ function CartPage() {
                 </div>
                 <div className="flex justify-between">
                   <dt>Shipping (Canada)</dt>
-                  <dd className="font-medium">{shipping === 0 ? "Free" : formatCAD(shipping)}</dd>
+                  <dd className="font-medium">
+                    {shipping == null ? "Confirmed at checkout" : shipping === 0 ? "Free" : formatCAD(shipping)}
+                  </dd>
                 </div>
                 <div className="flex justify-between text-muted-foreground">
                   <dt>Sales tax</dt>
@@ -147,7 +161,7 @@ function CartPage() {
               </dl>
 
               <div className="flex items-baseline justify-between">
-                <span className="font-bold text-navy">Before tax</span>
+                <span className="font-bold text-navy">{shipping == null ? "Subtotal" : "Before tax"}</span>
                 <span className="text-xl font-extrabold text-navy">{formatCAD(beforeTaxTotal)}</span>
               </div>
 

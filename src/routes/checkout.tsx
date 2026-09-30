@@ -7,6 +7,7 @@ import { formatCAD } from "@/lib/data";
 import {
   CANADIAN_PROVINCES,
   calculateCanadianOrderTotals,
+  calculateEstimatedTax,
   type CanadianProvinceCode,
 } from "@/lib/canada-commerce";
 import { toast } from "sonner";
@@ -14,6 +15,7 @@ import { createOrder, type Address } from "@/services/checkout";
 import { createPaymentIntent, isStripeConfigured } from "@/services/payments";
 import { StripePaymentForm } from "@/components/StripePaymentForm";
 import { useAuth } from "@/hooks/use-auth";
+import { usePublicMarketplaceSettings } from "@/hooks/use-marketplace-settings";
 import { saveGuestPaymentContext } from "@/services/guest-payment";
 
 export const Route = createFileRoute("/checkout")({
@@ -75,12 +77,12 @@ function ProvinceField({
 
 type PricingSnapshot = {
   subtotal: number;
-  shipping: number;
+  shipping: number | null;
   taxes: number;
   discount: number;
   promotionSavings: number;
   promotionCode: string | null;
-  total: number;
+  total: number | null;
   taxLabel: string;
 };
 
@@ -94,6 +96,7 @@ type PaymentStep = {
 function Checkout() {
   const { items, subtotal, clear } = useCart();
   const { user } = useAuth();
+  const { settings: marketplaceSettings } = usePublicMarketplaceSettings();
   const nav = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [province, setProvince] = useState<CanadianProvinceCode>("QC");
@@ -101,20 +104,40 @@ function Checkout() {
   const checkoutKeyRef = useRef<string | null>(null);
 
   const preview = useMemo(
-    () => calculateCanadianOrderTotals({ subtotal, province }),
-    [subtotal, province],
+    () => marketplaceSettings
+      ? calculateCanadianOrderTotals({
+          subtotal,
+          province,
+          shipping: {
+            freeShippingThresholdCad: marketplaceSettings.free_shipping_threshold,
+            standardShippingFeeCad: marketplaceSettings.standard_shipping_fee,
+          },
+        })
+      : null,
+    [subtotal, province, marketplaceSettings],
   );
 
-  const previewPricing: PricingSnapshot = {
-    subtotal: preview.subtotal,
-    shipping: preview.shippingTotal,
-    taxes: preview.taxTotal,
-    discount: 0,
-    promotionSavings: 0,
-    promotionCode: null,
-    total: preview.total,
-    taxLabel: preview.taxProfile.taxLabel,
-  };
+  const previewPricing: PricingSnapshot = preview
+    ? {
+        subtotal: preview.subtotal,
+        shipping: preview.shippingTotal,
+        taxes: preview.taxTotal,
+        discount: 0,
+        promotionSavings: 0,
+        promotionCode: null,
+        total: preview.total,
+        taxLabel: preview.taxProfile.taxLabel,
+      }
+    : {
+        subtotal,
+        shipping: null,
+        taxes: calculateEstimatedTax(subtotal, province),
+        discount: 0,
+        promotionSavings: 0,
+        promotionCode: null,
+        total: null,
+        taxLabel: CANADIAN_PROVINCES.find((entry) => entry.code === province)?.taxLabel ?? "Tax",
+      };
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -143,6 +166,12 @@ function Checkout() {
         shipping_address: shippingAddress,
         checkout_key: checkoutKeyRef.current,
         promotion_code: get("promotion_code") || null,
+        shipping_settings: marketplaceSettings
+          ? {
+              freeShippingThresholdCad: marketplaceSettings.free_shipping_threshold,
+              standardShippingFeeCad: marketplaceSettings.standard_shipping_fee,
+            }
+          : undefined,
       });
 
       if (
@@ -337,8 +366,12 @@ function Checkout() {
                 {submitting
                   ? "Processing…"
                   : isStripeConfigured()
-                    ? `Continue to payment · ${formatCAD(preview.total)}`
-                    : `Place order · ${formatCAD(preview.total)}`}
+                    ? preview
+                      ? `Continue to payment · ${formatCAD(preview.total)}`
+                      : "Continue to payment"
+                    : preview
+                      ? `Place order · ${formatCAD(preview.total)}`
+                      : "Place order"}
               </button>
             </OrderSummary>
           </form>
@@ -379,7 +412,9 @@ function OrderSummary({
         </div>
         <div className="flex justify-between">
           <dt>Shipping</dt>
-          <dd>{pricing.shipping === 0 ? "Free" : formatCAD(pricing.shipping)}</dd>
+          <dd>
+            {pricing.shipping == null ? "Confirmed at checkout" : pricing.shipping === 0 ? "Free" : formatCAD(pricing.shipping)}
+          </dd>
         </div>
         {pricing.promotionSavings > 0 && (
           <div className="flex justify-between font-semibold text-success">
@@ -396,7 +431,9 @@ function OrderSummary({
       </dl>
       <div className="flex items-baseline justify-between">
         <span className="font-bold text-navy">Total</span>
-        <span className="text-xl font-extrabold text-navy">{formatCAD(pricing.total)}</span>
+        <span className="text-xl font-extrabold text-navy">
+          {pricing.total == null ? "Confirmed at checkout" : formatCAD(pricing.total)}
+        </span>
       </div>
       <p className="text-[11px] leading-relaxed text-muted-foreground">
         All amounts are in Canadian dollars. Shipping and estimated tax are confirmed before payment.
