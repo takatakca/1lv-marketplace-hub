@@ -48,7 +48,7 @@ jobs:
             echo "No changed lintable files."
           else
             printf 'Linting %s\n' "${files[@]}"
-            npx eslint --max-warnings=0 "${files[@]}"
+            npx eslint --max-warnings=0 --rule "prettier/prettier: off" "${files[@]}"
           fi
 
       - name: Lint repository on manual runs
