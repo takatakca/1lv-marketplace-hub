@@ -1,0 +1,47 @@
+name: Generate checkout migration
+
+on:
+  pull_request:
+    types: [opened, reopened]
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    if: github.head_ref == 'upgrade/canada-commerce-hardening' || github.ref_name == 'upgrade/canada-commerce-hardening'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: upgrade/canada-commerce-hardening
+          fetch-depth: 0
+
+      - name: Stop if migration already exists
+        id: existing
+        shell: bash
+        run: |
+          if compgen -G "supabase/migrations/*_server_authoritative_checkout.sql" > /dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate migration with pinned Supabase CLI
+        if: steps.existing.outputs.exists != 'true'
+        run: npx --yes supabase@2.118.0 migration new server_authoritative_checkout
+
+      - name: Commit generated migration
+        if: steps.existing.outputs.exists != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add supabase/migrations/*_server_authoritative_checkout.sql
+          git commit -m "Generate server-authoritative checkout migration"
+          git push origin HEAD:upgrade/canada-commerce-hardening
