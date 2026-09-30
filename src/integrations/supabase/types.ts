@@ -315,6 +315,9 @@ export type Database = {
           id: string
           order_number: string
           payment_status: Database["public"]["Enums"]["payment_status"]
+          promotion_code: string | null
+          promotion_id: string | null
+          promotion_savings_total: number
           shipping_address: Json | null
           shipping_total: number
           status: Database["public"]["Enums"]["order_status"]
@@ -342,6 +345,12 @@ export type Database = {
           id?: string
           order_number?: string
           payment_status?: Database["public"]["Enums"]["payment_status"]
+          promotion_code?: string | null
+          promotion_id?: string | null
+          promotion_savings_total?: number
+          promotion_code?: string | null
+          promotion_id?: string | null
+          promotion_savings_total?: number
           shipping_address?: Json | null
           shipping_total?: number
           status?: Database["public"]["Enums"]["order_status"]
@@ -1442,6 +1451,54 @@ export type Database = {
           },
         ]
       }
+      public_promotions: {
+        Row: {
+          code: string | null
+          description: string | null
+          discount_type: string | null
+          discount_value: number | null
+          ends_at: string | null
+          first_order_only: boolean | null
+          id: string | null
+          max_discount: number | null
+          min_order: number | null
+          name: string | null
+          priority: number | null
+          stackable: boolean | null
+          starts_at: string | null
+        }
+        Insert: {
+          code?: string | null
+          description?: string | null
+          discount_type?: string | null
+          discount_value?: number | null
+          ends_at?: string | null
+          first_order_only?: boolean | null
+          id?: string | null
+          max_discount?: number | null
+          min_order?: number | null
+          name?: string | null
+          priority?: number | null
+          stackable?: boolean | null
+          starts_at?: string | null
+        }
+        Update: {
+          code?: string | null
+          description?: string | null
+          discount_type?: string | null
+          discount_value?: number | null
+          ends_at?: string | null
+          first_order_only?: boolean | null
+          id?: string | null
+          max_discount?: number | null
+          min_order?: number | null
+          name?: string | null
+          priority?: number | null
+          stackable?: boolean | null
+          starts_at?: string | null
+        }
+        Relationships: []
+      }
       public_vendors: {
         Row: {
           banner_url: string | null
@@ -1522,6 +1579,7 @@ export type Database = {
           _customer_phone: string
           _idempotency_key: string
           _items: Json
+          _promotion_code?: string | null
           _shipping_address: Json
         }
         Returns: Json
@@ -1529,6 +1587,10 @@ export type Database = {
       lookup_guest_order: {
         Args: { _checkout_key: string; _order_number: string }
         Returns: Json
+      }
+      mark_order_promotion_refunded: {
+        Args: { _order_id: string }
+        Returns: boolean
       }
       owns_vendor: {
         Args: { _user_id: string; _vendor_id: string }
@@ -1541,6 +1603,16 @@ export type Database = {
       release_order_inventory: {
         Args: { _order_id: string }
         Returns: boolean
+      }
+      reserve_order_promotion: {
+        Args: {
+          _base_shipping: number
+          _customer_email: string
+          _customer_id: string | null
+          _order_id: string
+          _promotion_code: string
+        }
+        Returns: Json
       }
     }
     Enums: {
