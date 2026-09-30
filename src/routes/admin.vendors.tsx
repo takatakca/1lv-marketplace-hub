@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DataTable } from "@/components/DataTable";
 import { vendors as demoVendors } from "@/lib/data";
@@ -31,10 +31,17 @@ function Page() {
   const [sub, setSub] = useState<(typeof SUBS)[number]>("all");
   const [payoutOnly, setPayoutOnly] = useState(false);
 
-  const refresh = async () => {
-    try { setRows(await listAllVendors()); } finally { setLoading(false); }
-  };
-  useEffect(() => { if (!demo) refresh(); }, [demo]);
+  const refresh = useCallback(async () => {
+    try {
+      setRows(await listAllVendors());
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!demo) void refresh();
+  }, [demo, refresh]);
 
   const act = async (id: string, s: VendorStatus) => {
     try { await setVendorStatus(id, s); toast.success("Vendor " + s); await refresh(); }
