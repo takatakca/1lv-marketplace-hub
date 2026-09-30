@@ -348,9 +348,6 @@ export type Database = {
           promotion_code?: string | null
           promotion_id?: string | null
           promotion_savings_total?: number
-          promotion_code?: string | null
-          promotion_id?: string | null
-          promotion_savings_total?: number
           shipping_address?: Json | null
           shipping_total?: number
           status?: Database["public"]["Enums"]["order_status"]
