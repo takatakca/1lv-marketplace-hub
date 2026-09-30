@@ -23,6 +23,7 @@ export type CheckoutInput = {
   shipping_address: Address;
   billing_address?: Address;
   checkout_key?: string;
+  promotion_code?: string | null;
 };
 
 export type CheckoutResult = {
@@ -37,6 +38,9 @@ export type CheckoutResult = {
   total: number;
   tax_label: string;
   province: string;
+  discount_total: number;
+  promotion_code: string | null;
+  promotion_savings_total: number;
 };
 
 function isUuid(value: string) {
@@ -67,6 +71,9 @@ export async function createOrder(input: CheckoutInput): Promise<CheckoutResult>
       total: pricing.total,
       tax_label: pricing.taxProfile.taxLabel,
       province,
+      discount_total: 0,
+      promotion_code: null,
+      promotion_savings_total: 0,
     };
   }
 
@@ -96,6 +103,7 @@ export async function createOrder(input: CheckoutInput): Promise<CheckoutResult>
             country: "Canada",
           }
         : undefined,
+      promotionCode: input.promotion_code?.trim().toUpperCase() || null,
     },
   });
 
