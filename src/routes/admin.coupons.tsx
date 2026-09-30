@@ -1,100 +1,168 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DataTable } from "@/components/DataTable";
+import {
+  createPromotion,
+  listAdminPromotions,
+  setPromotionActive,
+  type AdminPromotion,
+  type PromotionInput,
+} from "@/services/promotions";
 
-type Coupon = {
-  code: string;
-  type: "percent" | "fixed";
-  value: number;
-  minOrder: number;
-  startsAt: string;
-  endsAt: string;
-  usage: number;
-  usageLimit: number;
-  vendorSlug: string | null;
-  active: boolean;
+const emptyForm: PromotionInput = {
+  code: "",
+  name: "",
+  description: "",
+  discountType: "percent",
+  discountValue: 10,
+  maxDiscount: null,
+  minOrder: 0,
+  active: false,
+  publiclyListed: false,
+  startsAt: null,
+  endsAt: null,
+  globalUsageLimit: null,
+  perCustomerLimit: 1,
+  firstOrderOnly: false,
 };
 
-const initial: Coupon[] = [
-  { code: "WELCOME10", type: "percent", value: 10, minOrder: 0, startsAt: "2026-01-01", endsAt: "2026-12-31", usage: 120, usageLimit: 500, vendorSlug: null, active: true },
-  { code: "FREESHIP", type: "fixed", value: 10, minOrder: 35, startsAt: "2026-04-01", endsAt: "2026-06-30", usage: 44, usageLimit: 200, vendorSlug: null, active: true },
-  { code: "SUMMER25", type: "percent", value: 25, minOrder: 50, startsAt: "2026-06-15", endsAt: "2026-08-31", usage: 0, usageLimit: 1000, vendorSlug: null, active: false },
-];
-
-const codeRegex = /^[A-Z0-9_-]{3,24}$/;
-
 function Page() {
-  const [coupons, setCoupons] = useState<Coupon[]>(initial);
-  const [form, setForm] = useState<Coupon>({
-    code: "", type: "percent", value: 10, minOrder: 0,
-    startsAt: "", endsAt: "", usage: 0, usageLimit: 100, vendorSlug: null, active: true,
-  });
+  const [promotions, setPromotions] = useState<AdminPromotion[]>([]);
+  const [form, setForm] = useState<PromotionInput>(emptyForm);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const create = (e: React.FormEvent) => {
-    e.preventDefault();
-    const code = form.code.toUpperCase().trim();
-    if (!codeRegex.test(code)) { toast.error("Code must be 3–24 chars (A-Z, 0-9, _, -)"); return; }
-    if (coupons.some((c) => c.code === code)) { toast.error("Code already exists"); return; }
-    if (form.value <= 0) { toast.error("Value must be > 0"); return; }
-    setCoupons([{ ...form, code }, ...coupons]);
-    toast.success("Coupon created (local — backend wiring pending)");
-    setForm({ ...form, code: "", value: 10, minOrder: 0 });
+  const refresh = async () => {
+    try {
+      setPromotions(await listAdminPromotions());
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not load promotions");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const rows = coupons.map((c) => ({
-    code: c.code,
-    type: c.type,
-    value: c.type === "percent" ? `${c.value}%` : `$${c.value.toFixed(2)}`,
-    min: c.minOrder ? `$${c.minOrder.toFixed(2)}` : "—",
-    scope: c.vendorSlug ? c.vendorSlug : "All vendors",
-    usage: `${c.usage}/${c.usageLimit}`,
-    window: `${c.startsAt || "—"} → ${c.endsAt || "—"}`,
-    status: c.active ? "Active" : "Inactive",
-  }));
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  const create = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    try {
+      await createPromotion(form);
+      toast.success("Promotion created");
+      setForm(emptyForm);
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create promotion");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggle = async (promotion: AdminPromotion) => {
+    try {
+      await setPromotionActive(promotion.id, !promotion.active);
+      toast.success(promotion.active ? "Promotion disabled" : "Promotion activated");
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update promotion");
+    }
+  };
+
+  const rows = promotions.map((promotion) => {
+    const redemptions = promotion.promotion_redemptions ?? [];
+    const used = redemptions.filter((r) => r.status === "redeemed").length;
+    const reserved = redemptions.filter((r) => r.status === "reserved").length;
+    const value =
+      promotion.discount_type === "free_shipping"
+        ? "Free shipping"
+        : promotion.discount_type === "percent"
+          ? `${Number(promotion.discount_value)}%`
+          : `$${Number(promotion.discount_value).toFixed(2)}`;
+
+    return {
+      code: <span className="font-mono font-bold">{promotion.code}</span>,
+      name: promotion.name,
+      value,
+      min: Number(promotion.min_order) > 0 ? `$${Number(promotion.min_order).toFixed(2)}` : "—",
+      usage: `${used} redeemed · ${reserved} reserved`,
+      public: promotion.publicly_listed ? "Listed" : "Private",
+      window: `${promotion.starts_at ? new Date(promotion.starts_at).toLocaleDateString("en-CA") : "Now"} → ${promotion.ends_at ? new Date(promotion.ends_at).toLocaleDateString("en-CA") : "No end"}`,
+      status: (
+        <button
+          type="button"
+          onClick={() => void toggle(promotion)}
+          className={`rounded-full px-2.5 py-1 text-xs font-bold ${promotion.active ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}
+        >
+          {promotion.active ? "Active" : "Inactive"}
+        </button>
+      ),
+    };
+  });
 
   return (
     <>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-navy md:text-3xl">Coupons</h1>
-        <p className="text-sm text-muted-foreground">Manage promo codes. Checkout integration is wired in the next phase.</p>
+        <h1 className="text-2xl font-bold text-navy md:text-3xl">Promotions</h1>
+        <p className="text-sm text-muted-foreground">
+          Server-validated codes. Activating a promotion makes it eligible for checkout; public listing is controlled separately.
+        </p>
       </div>
 
-      <DataTable
-        columns={[
-          { key: "code", label: "Code" },
-          { key: "type", label: "Type" },
-          { key: "value", label: "Value" },
-          { key: "min", label: "Min order" },
-          { key: "scope", label: "Scope" },
-          { key: "usage", label: "Usage" },
-          { key: "window", label: "Window" },
-          { key: "status", label: "Status" },
-        ]}
-        rows={rows}
-      />
+      {loading ? (
+        <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Loading promotions…</div>
+      ) : (
+        <DataTable
+          columns={[
+            { key: "code", label: "Code" },
+            { key: "name", label: "Name" },
+            { key: "value", label: "Value" },
+            { key: "min", label: "Min order" },
+            { key: "usage", label: "Usage" },
+            { key: "public", label: "Public" },
+            { key: "window", label: "Window" },
+            { key: "status", label: "Status" },
+          ]}
+          rows={rows}
+        />
+      )}
 
       <form onSubmit={create} className="mt-8 grid gap-3 rounded-xl border border-border bg-card p-5 md:grid-cols-3">
-        <h3 className="md:col-span-3 text-sm font-semibold text-navy">Create coupon</h3>
-        <input placeholder="CODE" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} className={inp} />
-        <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as Coupon["type"] })} className={inp}>
+        <h3 className="text-sm font-semibold text-navy md:col-span-3">Create promotion</h3>
+        <input required placeholder="CODE" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} className={inp} />
+        <input required placeholder="Promotion name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inp} />
+        <select value={form.discountType} onChange={(e) => setForm({ ...form, discountType: e.target.value as PromotionInput["discountType"], discountValue: e.target.value === "free_shipping" ? 0 : form.discountValue || 10 })} className={inp}>
           <option value="percent">Percent off</option>
           <option value="fixed">Fixed $ off</option>
+          <option value="free_shipping">Free shipping</option>
         </select>
-        <input type="number" placeholder="Value" value={form.value} onChange={(e) => setForm({ ...form, value: Number(e.target.value) })} className={inp} />
-        <input type="number" placeholder="Min order $" value={form.minOrder} onChange={(e) => setForm({ ...form, minOrder: Number(e.target.value) })} className={inp} />
-        <input type="number" placeholder="Usage limit" value={form.usageLimit} onChange={(e) => setForm({ ...form, usageLimit: Number(e.target.value) })} className={inp} />
-        <input placeholder="Vendor slug (optional)" value={form.vendorSlug ?? ""} onChange={(e) => setForm({ ...form, vendorSlug: e.target.value || null })} className={inp} />
-        <input type="date" value={form.startsAt} onChange={(e) => setForm({ ...form, startsAt: e.target.value })} className={inp} />
-        <input type="date" value={form.endsAt} onChange={(e) => setForm({ ...form, endsAt: e.target.value })} className={inp} />
+        <input type="number" min="0" step="0.01" disabled={form.discountType === "free_shipping"} placeholder="Value" value={form.discountValue} onChange={(e) => setForm({ ...form, discountValue: Number(e.target.value) })} className={inp} />
+        <input type="number" min="0" step="0.01" placeholder="Min order $" value={form.minOrder} onChange={(e) => setForm({ ...form, minOrder: Number(e.target.value) })} className={inp} />
+        <input type="number" min="1" placeholder="Global usage limit (optional)" value={form.globalUsageLimit ?? ""} onChange={(e) => setForm({ ...form, globalUsageLimit: e.target.value ? Number(e.target.value) : null })} className={inp} />
+        <input type="number" min="1" placeholder="Per customer limit" value={form.perCustomerLimit ?? ""} onChange={(e) => setForm({ ...form, perCustomerLimit: e.target.value ? Number(e.target.value) : null })} className={inp} />
+        <input type="datetime-local" value={form.startsAt ?? ""} onChange={(e) => setForm({ ...form, startsAt: e.target.value ? new Date(e.target.value).toISOString() : null })} className={inp} />
+        <input type="datetime-local" value={form.endsAt ?? ""} onChange={(e) => setForm({ ...form, endsAt: e.target.value ? new Date(e.target.value).toISOString() : null })} className={inp} />
+        <textarea placeholder="Description (optional)" value={form.description ?? ""} onChange={(e) => setForm({ ...form, description: e.target.value })} className={`${inp} md:col-span-3 min-h-20`} />
         <label className="flex items-center gap-2 text-xs text-navy">
-          <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active
+          <input type="checkbox" checked={form.firstOrderOnly} onChange={(e) => setForm({ ...form, firstOrderOnly: e.target.checked })} /> First paid order only
         </label>
-        <button className="md:col-span-3 rounded-md bg-electric px-3 py-2 text-sm font-semibold text-electric-foreground">Create coupon</button>
+        <label className="flex items-center gap-2 text-xs text-navy">
+          <input type="checkbox" checked={form.publiclyListed} onChange={(e) => setForm({ ...form, publiclyListed: e.target.checked })} /> Show in public savings center
+        </label>
+        <label className="flex items-center gap-2 text-xs text-navy">
+          <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Activate immediately
+        </label>
+        <button disabled={saving} className="rounded-md bg-electric px-3 py-2 text-sm font-semibold text-electric-foreground disabled:opacity-60 md:col-span-3">
+          {saving ? "Creating…" : "Create promotion"}
+        </button>
       </form>
 
       <p className="mt-4 rounded-lg border border-dashed border-electric/30 bg-electric/5 p-3 text-xs text-navy">
-        Checkout will validate code, scope (all vendors or vendor-specific), min order, window and usage limits before applying discount.
+        Checkout recalculates eligibility, limits, item scope and the payable discount inside PostgreSQL. The browser never supplies a discount amount.
       </p>
     </>
   );
