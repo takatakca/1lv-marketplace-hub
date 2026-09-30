@@ -14,6 +14,12 @@ async function verifyStripeSignature(payload: string, header: string | null, sec
   const timestamp = parts.t;
   const sig = parts.v1;
   if (!timestamp || !sig) return false;
+
+  const timestampSeconds = Number(timestamp);
+  if (!Number.isSafeInteger(timestampSeconds)) return false;
+  const ageSeconds = Math.abs(Math.floor(Date.now() / 1000) - timestampSeconds);
+  if (ageSeconds > 300) return false;
+
   const signedPayload = `${timestamp}.${payload}`;
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
