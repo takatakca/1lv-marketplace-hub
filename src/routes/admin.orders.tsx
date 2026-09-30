@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DataTable } from "@/components/DataTable";
 import { products, formatCAD } from "@/lib/data";
@@ -33,12 +33,18 @@ function Page() {
   const [ful, setFul] = useState<(typeof FUL)[number]>("all");
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (demo) return;
-    try { setRows(await listAllOrdersWithSplits()); }
-    finally { setLoading(false); }
-  };
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [demo]);
+    try {
+      setRows(await listAllOrdersWithSplits());
+    } finally {
+      setLoading(false);
+    }
+  }, [demo]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const onBackfill = async () => {
     if (!confirm("Backfill vendor_orders for any orders missing them?")) return;
