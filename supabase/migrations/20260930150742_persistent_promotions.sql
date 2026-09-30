@@ -1030,7 +1030,20 @@ BEGIN
   SET subtotal = v_subtotal
   WHERE id = v_order_id;
 
-  v_base_shipping := CASE WHEN v_subtotal >= 49 THEN 0 ELSE 7.99 END;
+  SELECT
+    CASE
+      WHEN v_subtotal >= s.free_shipping_threshold THEN 0
+      ELSE s.standard_shipping_fee
+    END
+  INTO v_base_shipping
+  FROM public.marketplace_settings AS s
+  WHERE s.id = true;
+
+  IF v_base_shipping IS NULL THEN
+    RAISE EXCEPTION 'Marketplace shipping settings are unavailable'
+      USING ERRCODE = 'P0001';
+  END IF;
+
   v_shipping_total := v_base_shipping;
 
   IF v_requested_promotion_code IS NOT NULL THEN
