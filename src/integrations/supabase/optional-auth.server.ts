@@ -2,7 +2,12 @@ import { createClient } from "@supabase/supabase-js";
 import { getRequest } from "@tanstack/react-start/server";
 import type { Database } from "./types";
 
-export async function getOptionalSupabaseUserId(): Promise<string | null> {
+export type OptionalSupabaseUser = {
+  id: string;
+  email: string | null;
+};
+
+export async function getOptionalSupabaseUser(): Promise<OptionalSupabaseUser | null> {
   const request = getRequest();
   const authorization = request?.headers?.get("authorization");
 
@@ -29,11 +34,17 @@ export async function getOptionalSupabaseUserId(): Promise<string | null> {
     },
   });
 
-  const { data, error } = await client.auth.getClaims(token);
-  const userId = data?.claims?.sub;
-  if (error || !userId) {
+  const { data, error } = await client.auth.getUser(token);
+  if (error || !data.user) {
     throw new Response("Unauthorized", { status: 401 });
   }
 
-  return userId;
+  return {
+    id: data.user.id,
+    email: data.user.email ?? null,
+  };
+}
+
+export async function getOptionalSupabaseUserId(): Promise<string | null> {
+  return (await getOptionalSupabaseUser())?.id ?? null;
 }
