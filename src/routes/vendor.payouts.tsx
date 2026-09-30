@@ -76,11 +76,11 @@ function Page() {
     })();
   }, [demo, user]);
 
-  const useDemo = demo || !stats;
-  const s = useDemo
+  const useDemo = demo;
+  const s = demo
     ? { payoutAvailable: 845.2, payoutPending: 312.4, payoutLifetime: 18420, commission: 1840, gmv: 12480 }
-    : stats!;
-  const rows: PayoutPeriod[] = useDemo || !periods || periods.length === 0 ? buildDemoPeriods() : periods;
+    : stats ?? { payoutAvailable: 0, payoutPending: 0, payoutLifetime: 0, commission: 0, gmv: 0 };
+  const rows: PayoutPeriod[] = demo ? buildDemoPeriods() : periods ?? [];
 
   const effectiveStatus: ConnectStatus = demo ? "not_connected" : connectStatus;
   const readiness =
@@ -138,13 +138,13 @@ function Page() {
   return (
     <div>
       <div className="mb-6">
-        {useDemo ? <DemoBanner label={demo ? "Preview mode" : "No data yet"} /> : null}
+        {demo ? <DemoBanner label="Preview mode" /> : null}
         <h1 className="text-2xl font-bold text-navy md:text-3xl">Payouts</h1>
         <p className="mt-1 text-sm text-muted-foreground">Your earnings from delivered orders</p>
       </div>
       {demo && <PreviewModeNotice />}
 
-      {!useDemo && !vendor?.payouts_enabled && (
+      {!demo && vendor && !vendor.payouts_enabled && (
         <div className="mb-6 flex items-start gap-2 rounded-lg border border-deal/40 bg-deal/5 p-3 text-xs">
           <AlertTriangle size={16} className="mt-0.5 shrink-0 text-deal" />
           <div>
@@ -164,7 +164,7 @@ function Page() {
       <div className="mt-8 rounded-xl border border-border bg-card p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-bold text-navy">
-            {payouts.length > 0 ? "Payout history" : "Payout history (estimated weekly)"}
+            {payouts.length > 0 ? "Payout history" : demo ? "Payout history (preview estimates)" : "Payout history"}
           </h2>
           <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
             <Info size={12} />{" "}
@@ -210,7 +210,7 @@ function Page() {
               </tbody>
             </table>
           </div>
-        ) : (
+        ) : rows.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="text-muted-foreground">
@@ -241,8 +241,14 @@ function Page() {
               </tbody>
             </table>
             <p className="mt-2 text-[11px] text-muted-foreground">
-              Estimates only — based on delivered orders. Official payout records appear here once issued.
+              {demo
+                ? "Preview estimates only. Sign in for live payout records."
+                : "Estimated periods are derived from your real delivered orders. Official payout records appear once issued."}
             </p>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+            No payout activity yet. Earnings will appear after paid orders are delivered.
           </div>
         )}
       </div>
@@ -305,7 +311,7 @@ function Page() {
       </div>
 
       <div className="mt-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
-        Commission rate: <span className="font-semibold text-navy">{vendor ? `${Math.round(Number(vendor.commission_rate) * 100)}%` : "10%"}</span> of GMV ({formatCAD(s.gmv)} lifetime).
+        Commission rate: <span className="font-semibold text-navy">{demo ? "10% preview" : vendor ? `${Math.round(Number(vendor.commission_rate) * 100)}%` : "—"}</span> of GMV ({formatCAD(s.gmv)} lifetime).
       </div>
     </div>
   );
