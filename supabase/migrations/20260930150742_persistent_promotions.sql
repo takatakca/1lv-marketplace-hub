@@ -748,6 +748,7 @@ DECLARE
   v_promotion_id uuid;
   v_applied_promotion_code text;
   v_requested_promotion_code text;
+  v_allow_guest_checkout boolean;
   v_item record;
   v_product record;
   v_line_total numeric(12,2);
@@ -908,6 +909,23 @@ BEGIN
       'demo', false,
       'reused', true
     );
+  END IF;
+
+  IF _customer_id IS NULL THEN
+    SELECT s.allow_guest_checkout
+    INTO v_allow_guest_checkout
+    FROM public.marketplace_settings AS s
+    WHERE s.id = true;
+
+    IF v_allow_guest_checkout IS NULL THEN
+      RAISE EXCEPTION 'Marketplace checkout settings are unavailable'
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    IF NOT v_allow_guest_checkout THEN
+      RAISE EXCEPTION 'Guest checkout is disabled'
+        USING ERRCODE = 'P0001';
+    END IF;
   END IF;
 
   INSERT INTO public.orders (
