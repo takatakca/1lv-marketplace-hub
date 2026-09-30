@@ -13,6 +13,8 @@ import { toast } from "sonner";
 import { createOrder, type Address } from "@/services/checkout";
 import { createPaymentIntent, isStripeConfigured } from "@/services/payments";
 import { StripePaymentForm } from "@/components/StripePaymentForm";
+import { useAuth } from "@/hooks/use-auth";
+import { saveGuestPaymentContext } from "@/services/guest-payment";
 
 export const Route = createFileRoute("/checkout")({
   component: Checkout,
@@ -83,12 +85,12 @@ type PaymentStep = {
   orderId: string;
   orderNumber: string;
   clientSecret: string;
-  checkoutKey: string | null;
   pricing: PricingSnapshot;
 };
 
 function Checkout() {
   const { items, subtotal, clear } = useCart();
+  const { user } = useAuth();
   const nav = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [province, setProvince] = useState<CanadianProvinceCode>("QC");
@@ -136,14 +138,30 @@ function Checkout() {
         checkout_key: checkoutKeyRef.current,
       });
 
-      const intent = await createPaymentIntent(result.order_id, result.checkout_key);
+      if (
+        !result.demo &&
+        result.checkout_key &&
+        result.guest_payment_token
+      ) {
+        saveGuestPaymentContext({
+          orderId: result.order_id,
+          orderNumber: result.order_number,
+          checkoutKey: result.checkout_key,
+          token: result.guest_payment_token,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      const intent = await createPaymentIntent(
+        result.order_id,
+        result.guest_payment_token,
+      );
 
       if (isStripeConfigured() && intent.clientSecret && !intent.pending && !result.demo) {
         setPaymentStep({
           orderId: result.order_id,
           orderNumber: result.order_number,
           clientSecret: intent.clientSecret,
-          checkoutKey: result.checkout_key,
           pricing: {
             subtotal: result.subtotal,
             shipping: result.shipping_total,
@@ -167,7 +185,6 @@ function Checkout() {
         search: {
           order: result.order_number,
           demo: result.demo ? 1 : 0,
-          key: result.checkout_key ?? undefined,
         } as never,
       });
     } catch (error) {
@@ -200,7 +217,6 @@ function Checkout() {
               <StripePaymentForm
                 clientSecret={paymentStep.clientSecret}
                 orderNumber={paymentStep.orderNumber}
-                checkoutKey={paymentStep.checkoutKey}
                 onCancel={() => {
                   clear();
                   nav({
@@ -208,7 +224,6 @@ function Checkout() {
                     search: {
                       order: paymentStep.orderNumber,
                       demo: 0,
-                      key: paymentStep.checkoutKey ?? undefined,
                     } as never,
                   });
                 }}
@@ -231,6 +246,7 @@ function Checkout() {
                     type="email"
                     required
                     autoComplete="email"
+                    defaultValue={user?.email ?? ""}
                     placeholder="you@example.com"
                   />
                   <Field
