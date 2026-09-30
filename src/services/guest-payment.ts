@@ -1,6 +1,7 @@
 export type GuestPaymentContext = {
   orderId: string;
   orderNumber: string;
+  checkoutKey: string;
   token: string;
   createdAt: string;
 };
@@ -34,6 +35,7 @@ export function getGuestPaymentContext(
     if (
       typeof parsed.orderId !== "string" ||
       typeof parsed.orderNumber !== "string" ||
+      typeof parsed.checkoutKey !== "string" ||
       typeof parsed.token !== "string"
     ) {
       return null;
@@ -42,6 +44,7 @@ export function getGuestPaymentContext(
     return {
       orderId: parsed.orderId,
       orderNumber: parsed.orderNumber,
+      checkoutKey: parsed.checkoutKey,
       token: parsed.token,
       createdAt:
         typeof parsed.createdAt === "string"
