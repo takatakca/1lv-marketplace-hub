@@ -175,6 +175,8 @@ BEGIN
       RAISE EXCEPTION 'Checkout key is already in use';
     END IF;
 
+    v_province := upper(COALESCE(v_existing.shipping_address->>'province', v_province));
+
     RETURN jsonb_build_object(
       'order_id', v_existing.id,
       'order_number', v_existing.order_number,
