@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 import { Lock, MapPin } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCart } from "@/hooks/use-cart";
@@ -10,7 +10,6 @@ import {
   type CanadianProvinceCode,
 } from "@/lib/canada-commerce";
 import { toast } from "sonner";
-import { useAuth } from "@/hooks/use-auth";
 import { createOrder, type Address } from "@/services/checkout";
 import { createPaymentIntent, isStripeConfigured } from "@/services/payments";
 import { StripePaymentForm } from "@/components/StripePaymentForm";
@@ -84,16 +83,17 @@ type PaymentStep = {
   orderId: string;
   orderNumber: string;
   clientSecret: string;
+  checkoutKey: string | null;
   pricing: PricingSnapshot;
 };
 
 function Checkout() {
   const { items, subtotal, clear } = useCart();
-  const { user } = useAuth();
   const nav = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [province, setProvince] = useState<CanadianProvinceCode>("QC");
   const [paymentStep, setPaymentStep] = useState<PaymentStep | null>(null);
+  const checkoutKeyRef = useRef<string | null>(null);
 
   const preview = useMemo(
     () => calculateCanadianOrderTotals({ subtotal, province }),
@@ -127,21 +127,23 @@ function Checkout() {
     };
 
     try {
+      checkoutKeyRef.current ??= crypto.randomUUID();
       const result = await createOrder({
         items,
         email: get("email"),
         phone: get("phone"),
         shipping_address: shippingAddress,
-        customer_id: user?.id ?? null,
+        checkout_key: checkoutKeyRef.current,
       });
 
-      const intent = await createPaymentIntent(result.order_id, result.total);
+      const intent = await createPaymentIntent(result.order_id, result.checkout_key);
 
       if (isStripeConfigured() && intent.clientSecret && !intent.pending && !result.demo) {
         setPaymentStep({
           orderId: result.order_id,
           orderNumber: result.order_number,
           clientSecret: intent.clientSecret,
+          checkoutKey: result.checkout_key,
           pricing: {
             subtotal: result.subtotal,
             shipping: result.shipping_total,
@@ -162,7 +164,11 @@ function Checkout() {
       clear();
       nav({
         to: "/order-confirmation",
-        search: { order: result.order_number, demo: result.demo ? 1 : 0 } as never,
+        search: {
+          order: result.order_number,
+          demo: result.demo ? 1 : 0,
+          key: result.checkout_key ?? undefined,
+        } as never,
       });
     } catch (error) {
       console.error(error);
@@ -194,11 +200,16 @@ function Checkout() {
               <StripePaymentForm
                 clientSecret={paymentStep.clientSecret}
                 orderNumber={paymentStep.orderNumber}
+                checkoutKey={paymentStep.checkoutKey}
                 onCancel={() => {
                   clear();
                   nav({
                     to: "/order-confirmation",
-                    search: { order: paymentStep.orderNumber, demo: 0 } as never,
+                    search: {
+                      order: paymentStep.orderNumber,
+                      demo: 0,
+                      key: paymentStep.checkoutKey ?? undefined,
+                    } as never,
                   });
                 }}
               />
@@ -220,7 +231,6 @@ function Checkout() {
                     type="email"
                     required
                     autoComplete="email"
-                    defaultValue={user?.email ?? ""}
                     placeholder="you@example.com"
                   />
                   <Field
@@ -232,15 +242,9 @@ function Checkout() {
                     placeholder="+1 514 555 0123"
                   />
                 </div>
-                {!user && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Checking out as guest.{" "}
-                    <a className="font-medium text-electric hover:underline" href="/login">
-                      Sign in
-                    </a>{" "}
-                    to keep your order history in your account.
-                  </p>
-                )}
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Signed-in customers keep this order in their account automatically. Guest checkout remains available.
+                </p>
               </section>
 
               <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
