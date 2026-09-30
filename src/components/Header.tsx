@@ -8,7 +8,7 @@ import { AISearchBar } from "./AISearchBar";
 import { useCart } from "@/hooks/use-cart";
 import { useAuth } from "@/hooks/use-auth";
 import { canAccessAdmin, canAccessVendor } from "@/lib/roles";
-import { categories } from "@/lib/data";
+import { categories } from "@/lib/data";\nimport { FREE_SHIPPING_THRESHOLD_CAD } from "@/lib/canada-commerce";
 
 export function Header() {
   const [megaOpen, setMegaOpen] = useState(false);
@@ -24,8 +24,8 @@ export function Header() {
       {/* Top promo strip */}
       <div className="bg-navy text-navy-foreground">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-1.5 text-xs">
-          <span className="hidden sm:inline">Free shipping on Canadian orders over $49 · 30-day returns</span>
-          <span className="sm:hidden">Free CA shipping over $49</span>
+          <span className="hidden sm:inline">{`Free shipping on Canadian orders over ${FREE_SHIPPING_THRESHOLD_CAD} CAD · 30-day returns`}</span>
+          <span className="sm:hidden">{`Free CA shipping over ${FREE_SHIPPING_THRESHOLD_CAD}`}</span>
           <div className="flex items-center gap-3">
             <Link to="/become-a-vendor" className="hidden font-medium hover:text-electric sm:inline">
               Sell on 1LV
