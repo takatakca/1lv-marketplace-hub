@@ -95,7 +95,7 @@ export const createPaymentIntent = createServerFn({ method: "POST" })
     const { data: order, error } = await supabaseAdmin
       .from("orders")
       .select(
-        "id, order_number, total, currency, customer_email, customer_id, payment_status, stripe_payment_intent_id, inventory_reserved_until, inventory_released_at, inventory_committed_at",
+        "id, order_number, total, currency, customer_email, customer_id, status, payment_status, stripe_payment_intent_id, inventory_reserved_until, inventory_released_at, inventory_committed_at",
       )
       .eq("id", data.orderId)
       .maybeSingle();
@@ -116,6 +116,19 @@ export const createPaymentIntent = createServerFn({ method: "POST" })
         clientSecret: null,
         pending: false,
         reason: "Order is already paid.",
+      };
+    }
+
+    if (
+      order.status === "cancelled" ||
+      order.status === "refunded" ||
+      order.payment_status === "refunded" ||
+      order.payment_status === "partially_refunded"
+    ) {
+      return {
+        clientSecret: null,
+        pending: true,
+        reason: "This order can no longer accept payment.",
       };
     }
 
