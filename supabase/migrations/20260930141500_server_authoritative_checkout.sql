@@ -1,8 +1,8 @@
 -- 1LV.CA server-authoritative checkout.
 --
--- One SECURITY DEFINER function owns the financial transaction boundary:
--- product/seller validation, inventory locking, DB prices, Canada tax estimate,
--- vendor commission splits and order creation happen in one PostgreSQL
+-- A service-role-only SECURITY INVOKER function owns the financial transaction
+-- boundary: product/seller validation, inventory locking, DB prices, Canada tax
+-- estimate, vendor commission splits and order creation happen in one PostgreSQL
 -- transaction. Browser clients cannot insert financial order rows directly.
 
 CREATE SCHEMA IF NOT EXISTS extensions;
