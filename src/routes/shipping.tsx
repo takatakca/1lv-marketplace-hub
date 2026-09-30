@@ -5,6 +5,7 @@ import {
   STANDARD_SHIPPING_FEE_CAD,
 } from "@/lib/canada-commerce";
 import { formatCAD } from "@/lib/data";
+import { usePublicMarketplaceSettings } from "@/hooks/use-marketplace-settings";
 
 export const Route = createFileRoute("/shipping")({
   component: Shipping,
@@ -20,6 +21,12 @@ export const Route = createFileRoute("/shipping")({
 });
 
 function Shipping() {
+  const { settings } = usePublicMarketplaceSettings();
+  const freeShippingThreshold =
+    settings?.free_shipping_threshold ?? FREE_SHIPPING_THRESHOLD_CAD;
+  const standardShippingFee =
+    settings?.standard_shipping_fee ?? STANDARD_SHIPPING_FEE_CAD;
+
   return (
     <ContentPage kicker="Delivery" title="Shipping across Canada">
       <p>
@@ -29,8 +36,8 @@ function Shipping() {
 
       <h2>Standard shipping</h2>
       <ul>
-        <li>Free standard shipping is available when the eligible merchandise subtotal reaches {formatCAD(FREE_SHIPPING_THRESHOLD_CAD)}.</li>
-        <li>Below that threshold, the current standard marketplace shipping charge is {formatCAD(STANDARD_SHIPPING_FEE_CAD)}.</li>
+        <li>Free standard shipping is available when the eligible merchandise subtotal reaches {formatCAD(freeShippingThreshold)}.</li>
+        <li>Below that threshold, the current standard marketplace shipping charge is {formatCAD(standardShippingFee)}.</li>
         <li>Some products or vendors can offer their own free or expedited shipping terms.</li>
       </ul>
 
