@@ -134,8 +134,18 @@ async function handleEvent(evt: StripeEvent) {
       const amountRefunded = Number((obj as { amount_refunded?: number }).amount_refunded ?? 0);
       const amount = Number((obj as { amount?: number }).amount ?? 0);
       if (orderId) {
-        const status = amountRefunded >= amount ? "refunded" : "partially_refunded";
+        const fullyRefunded = amount > 0 && amountRefunded >= amount;
+        const status = fullyRefunded ? "refunded" : "partially_refunded";
         await supabaseAdmin.from("orders").update({ payment_status: status }).eq("id", orderId);
+
+        if (fullyRefunded) {
+          const { error: promotionRefundError } = await supabaseAdmin.rpc(
+            "mark_order_promotion_refunded" as never,
+            { _order_id: orderId } as never,
+          );
+          if (promotionRefundError) throw promotionRefundError;
+        }
+
         await takatakOrder(orderId, "order.refunded");
       }
       break;
