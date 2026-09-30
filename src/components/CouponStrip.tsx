@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, BadgePercent, Store, Truck, Zap } from "lucide-react";
 import { FREE_SHIPPING_THRESHOLD_CAD } from "@/lib/canada-commerce";
+import { usePublicMarketplaceSettings } from "@/hooks/use-marketplace-settings";
 
 const SAVINGS = [
   {
@@ -30,6 +31,10 @@ const SAVINGS = [
 ];
 
 export function CouponStrip() {
+  const { settings } = usePublicMarketplaceSettings();
+  const freeShippingThreshold =
+    settings?.free_shipping_threshold ?? FREE_SHIPPING_THRESHOLD_CAD;
+
   return (
     <section className="mx-auto max-w-7xl px-4 py-4" aria-label="Ways to save">
       <div className="scrollbar-hide flex gap-2 overflow-x-auto">
@@ -46,7 +51,9 @@ export function CouponStrip() {
               </span>
               <div className="min-w-0 flex-1 text-xs">
                 <div className="font-bold text-navy">{item.label}</div>
-                <div className="text-[11px] text-muted-foreground">{item.detail}</div>
+                <div className="text-[11px] text-muted-foreground">{item.label === "Free Canadian shipping"
+                  ? `Eligible orders ${freeShippingThreshold}+`
+                  : item.detail}</div>
               </div>
               <ArrowRight size={14} className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-electric" />
             </Link>
