@@ -50,9 +50,7 @@ function validateCheckoutInput(data: ServerCheckoutInput): ServerCheckoutInput {
 
   if (
     typeof data.idempotencyKey !== "string" ||
-    data.idempotencyKey.length < 16 ||
-    data.idempotencyKey.length > 128 ||
-    !/^[A-Za-z0-9_-]+$/.test(data.idempotencyKey)
+    !UUID_RE.test(data.idempotencyKey)
   ) {
     throw new Error("Invalid checkout session.");
   }
