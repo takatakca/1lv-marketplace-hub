@@ -8,6 +8,11 @@ import { createPaymentIntent, isStripeConfigured } from "@/services/payments";
 import { PaymentBadge, isUnpaid } from "@/components/PaymentBadge";
 import { StripePaymentForm } from "@/components/StripePaymentForm";
 import { formatCAD } from "@/lib/data";
+import {
+  clearGuestPaymentContext,
+  getGuestPaymentContext,
+  type GuestPaymentContext,
+} from "@/services/guest-payment";
 
 type Search = { order?: string; demo?: number; key?: string };
 
@@ -29,6 +34,7 @@ export const Route = createFileRoute("/order-confirmation")({
 function Confirmation() {
   const { order, demo, key } = Route.useSearch();
   const [details, setDetails] = useState<Awaited<ReturnType<typeof getOrderByNumber>> | null>(null);
+  const [guestContext, setGuestContext] = useState<GuestPaymentContext | null>(null);
   const [loading, setLoading] = useState(Boolean(order && !demo));
 
   useEffect(() => {
@@ -42,6 +48,12 @@ function Confirmation() {
       cancel = true;
     };
   }, [order, demo, key]);
+
+  useEffect(() => {
+    if (order && details?.payment_status === "paid") {
+      clearGuestPaymentContext(order);
+    }
+  }, [order, details?.payment_status]);
 
   if (!order) {
     return (
