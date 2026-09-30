@@ -220,6 +220,7 @@ export type Database = {
           carrier: string | null
           created_at: string
           id: string
+          inventory_reserved: boolean
           order_id: string
           product_id: string | null
           quantity: number
@@ -234,6 +235,7 @@ export type Database = {
           carrier?: string | null
           created_at?: string
           id?: string
+          inventory_reserved?: boolean
           order_id: string
           product_id?: string | null
           quantity?: number
@@ -248,6 +250,7 @@ export type Database = {
           carrier?: string | null
           created_at?: string
           id?: string
+          inventory_reserved?: boolean
           order_id?: string
           product_id?: string | null
           quantity?: number
@@ -299,7 +302,11 @@ export type Database = {
       orders: {
         Row: {
           billing_address: Json | null
+          checkout_idempotency_hash: string | null
           created_at: string
+          inventory_committed_at: string | null
+          inventory_released_at: string | null
+          inventory_reserved_until: string | null
           currency: string
           customer_email: string | null
           customer_id: string | null
@@ -322,7 +329,11 @@ export type Database = {
         }
         Insert: {
           billing_address?: Json | null
+          checkout_idempotency_hash?: string | null
           created_at?: string
+          inventory_committed_at?: string | null
+          inventory_released_at?: string | null
+          inventory_reserved_until?: string | null
           currency?: string
           customer_email?: string | null
           customer_id?: string | null
@@ -345,7 +356,11 @@ export type Database = {
         }
         Update: {
           billing_address?: Json | null
+          checkout_idempotency_hash?: string | null
           created_at?: string
+          inventory_committed_at?: string | null
+          inventory_released_at?: string | null
+          inventory_reserved_until?: string | null
           currency?: string
           customer_email?: string | null
           customer_id?: string | null
@@ -1481,6 +1496,10 @@ export type Database = {
         Args: { _dispute_id: string; _user_id: string }
         Returns: boolean
       }
+      commit_order_inventory: {
+        Args: { _order_id: string }
+        Returns: boolean
+      }
       get_vendor_commission_rates: {
         Args: { _vendor_ids: string[] }
         Returns: {
@@ -1495,9 +1514,32 @@ export type Database = {
         }
         Returns: boolean
       }
-      lookup_guest_order: { Args: { _order_number: string }; Returns: Json }
+      create_marketplace_order: {
+        Args: {
+          _billing_address: Json | null
+          _customer_email: string
+          _customer_id: string | null
+          _customer_phone: string
+          _idempotency_key: string
+          _items: Json
+          _shipping_address: Json
+        }
+        Returns: Json
+      }
+      lookup_guest_order: {
+        Args: { _checkout_key: string; _order_number: string }
+        Returns: Json
+      }
       owns_vendor: {
         Args: { _user_id: string; _vendor_id: string }
+        Returns: boolean
+      }
+      release_expired_inventory_reservations: {
+        Args: { _limit?: number }
+        Returns: number
+      }
+      release_order_inventory: {
+        Args: { _order_id: string }
         Returns: boolean
       }
     }

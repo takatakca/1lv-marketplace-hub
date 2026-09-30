@@ -551,16 +551,33 @@ export async function takatakStatus(): Promise<TakatakStatus> {
 /** Sanitized single-event inspector for admins. Secrets never reach the payload. */
 const SECRET_HINT = /(key|secret|token|password|otp|card|cvc|authorization|apikey)/i;
 
-export function sanitizePayload(input: unknown, depth = 0): unknown {
-  if (depth > 4 || input === null || typeof input !== "object") return input;
-  if (Array.isArray(input)) return input.slice(0, 25).map((v) => sanitizePayload(v, depth + 1));
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
-    if (SECRET_HINT.test(k)) {
-      out[k] = "[redacted]";
+export type SerializableJson =
+  | string
+  | number
+  | boolean
+  | null
+  | SerializableJson[]
+  | { [key: string]: SerializableJson };
+
+export function sanitizePayload(input: unknown, depth = 0): SerializableJson {
+  if (depth > 4) return "[truncated]";
+  if (input === null) return null;
+
+  if (typeof input === "string" || typeof input === "boolean") return input;
+  if (typeof input === "number") return Number.isFinite(input) ? input : null;
+  if (typeof input !== "object") return null;
+
+  if (Array.isArray(input)) {
+    return input.slice(0, 25).map((value) => sanitizePayload(value, depth + 1));
+  }
+
+  const out: { [key: string]: SerializableJson } = {};
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (SECRET_HINT.test(key)) {
+      out[key] = "[redacted]";
       continue;
     }
-    out[k] = sanitizePayload(v, depth + 1);
+    out[key] = sanitizePayload(value, depth + 1);
   }
   return out;
 }
@@ -584,6 +601,6 @@ export async function takatakEventDetail(id: string) {
     attempt_count: Number(row["attempt_count"] ?? 0),
     delivered_at: (row["delivered_at"] as string | null) ?? null,
     error_summary: safeError((row["last_error"] as string | null) ?? null),
-    payload: sanitizePayload(row["payload"] ?? {}) as Record<string, unknown>,
+    payload: sanitizePayload(row["payload"] ?? {}),
   };
 }

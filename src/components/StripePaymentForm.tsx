@@ -38,7 +38,13 @@ export function StripePaymentForm({ clientSecret, orderNumber, onCancel }: Props
   );
 }
 
-function InnerForm({ orderNumber, onCancel }: { orderNumber: string; onCancel?: () => void }) {
+function InnerForm({
+  orderNumber,
+  onCancel,
+}: {
+  orderNumber: string;
+  onCancel?: () => void;
+}) {
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
