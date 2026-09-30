@@ -77,6 +77,9 @@ type PricingSnapshot = {
   subtotal: number;
   shipping: number;
   taxes: number;
+  discount: number;
+  promotionSavings: number;
+  promotionCode: string | null;
   total: number;
   taxLabel: string;
 };
@@ -106,6 +109,9 @@ function Checkout() {
     subtotal: preview.subtotal,
     shipping: preview.shippingTotal,
     taxes: preview.taxTotal,
+    discount: 0,
+    promotionSavings: 0,
+    promotionCode: null,
     total: preview.total,
     taxLabel: preview.taxProfile.taxLabel,
   };
@@ -136,6 +142,7 @@ function Checkout() {
         phone: get("phone"),
         shipping_address: shippingAddress,
         checkout_key: checkoutKeyRef.current,
+        promotion_code: get("promotion_code") || null,
       });
 
       if (
@@ -166,6 +173,9 @@ function Checkout() {
             subtotal: result.subtotal,
             shipping: result.shipping_total,
             taxes: result.tax_total,
+            discount: result.discount_total,
+            promotionSavings: result.promotion_savings_total,
+            promotionCode: result.promotion_code,
             total: result.total,
             taxLabel: result.tax_label,
           },
@@ -297,8 +307,19 @@ function Checkout() {
               </section>
 
               <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
-                <h2 className="mb-2 font-bold text-navy">Payment</h2>
-                <p className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+                <h2 className="mb-3 font-bold text-navy">Promotion & payment</h2>
+                <Field
+                  label="Promotion code (optional)"
+                  name="promotion_code"
+                  autoComplete="off"
+                  maxLength={32}
+                  placeholder="Enter a verified code"
+                />
+                <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                  Codes are validated against active dates, order minimums, usage limits and eligible products on the
+                  server. The final savings appear before card payment.
+                </p>
+                <p className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
                   <Lock size={12} />{" "}
                   {isStripeConfigured()
                     ? "You'll enter payment details securely in the next step."
@@ -360,6 +381,14 @@ function OrderSummary({
           <dt>Shipping</dt>
           <dd>{pricing.shipping === 0 ? "Free" : formatCAD(pricing.shipping)}</dd>
         </div>
+        {pricing.promotionSavings > 0 && (
+          <div className="flex justify-between font-semibold text-success">
+            <dt>
+              Promotion{pricing.promotionCode ? ` (${pricing.promotionCode})` : ""}
+            </dt>
+            <dd>-{formatCAD(pricing.promotionSavings)}</dd>
+          </div>
+        )}
         <div className="flex justify-between">
           <dt>Estimated tax ({pricing.taxLabel})</dt>
           <dd>{formatCAD(pricing.taxes)}</dd>
