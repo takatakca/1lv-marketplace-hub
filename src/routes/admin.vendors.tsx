@@ -41,8 +41,8 @@ function Page() {
     catch (e) { toast.error((e as Error).message); }
   };
 
-  const useDemo = demo || (rows && rows.length === 0);
-  const source: VendorRecord[] = useDemo
+  const useDemo = demo;
+  const source: VendorRecord[] = demo
     ? demoVendors.map((v, i) => ({
         id: "demo-" + i, user_id: "u-" + i, store_name: v.name, slug: v.slug,
         description: null, business_name: v.name, contact_email: v.slug + "@1lv.ca",
@@ -126,7 +126,7 @@ function Page() {
   return (
     <>
       <div className="mb-6">
-        {useDemo ? <DemoBanner label={demo ? "Preview mode" : "No vendors yet"} /> : null}
+        {demo ? <DemoBanner label="Preview mode" /> : null}
         <h1 className="text-2xl font-bold text-navy md:text-3xl">Vendors</h1>
         <p className="text-sm text-muted-foreground">Search, filter, approve and moderate marketplace sellers.</p>
       </div>
