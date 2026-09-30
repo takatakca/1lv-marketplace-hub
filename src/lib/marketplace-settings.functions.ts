@@ -1,5 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
-import { supabase } from "@/integrations/supabase/client";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { Database } from "@/integrations/supabase/types";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type MarketplaceSettings = {
   marketplace_name: string;
@@ -25,22 +27,24 @@ function validateSettings(input: MarketplaceSettings): MarketplaceSettings {
   return input;
 }
 
-async function requireAdmin() {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Authentication required.");
-  const { data: role } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", auth.user.id)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (!role) throw new Error("Admin access required.");
-  return auth.user.id;
+async function adminDb(context: {
+  supabase: SupabaseClient<Database>;
+  userId: string;
+}) {
+  const { data, error } = await context.supabase.rpc("has_role", {
+    _user_id: context.userId,
+    _role: "admin",
+  });
+  if (error || data !== true) throw new Error("Forbidden");
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return supabaseAdmin;
 }
 
-export const getMarketplaceSettings = createServerFn({ method: "GET" }).handler(async () => {
-  await requireAdmin();
-  const { data, error } = await supabase
+export const getMarketplaceSettings = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+  const db = await adminDb(context);
+  const { data, error } = await db
     .from("marketplace_settings" as never)
     .select("*")
     .eq("id", true)
@@ -50,11 +54,12 @@ export const getMarketplaceSettings = createServerFn({ method: "GET" }).handler(
 });
 
 export const saveMarketplaceSettings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator(validateSettings)
-  .handler(async ({ data }) => {
-    await requireAdmin();
+  .handler(async ({ data, context }) => {
+    const db = await adminDb(context);
     const expectedVersion = data.version;
-    const { data: saved, error } = await supabase
+    const { data: saved, error } = await db
       .from("marketplace_settings" as never)
       .update({
         marketplace_name: data.marketplace_name.trim(),
