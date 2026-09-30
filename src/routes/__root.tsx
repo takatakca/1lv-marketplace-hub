@@ -38,6 +38,7 @@ function NotFoundComponent() {
 
 function ErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
   console.error(error);
+  const message = error instanceof Error ? error.message : "An unexpected error occurred.";
   const router = useRouter();
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
