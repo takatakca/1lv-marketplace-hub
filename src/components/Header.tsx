@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { canAccessAdmin, canAccessVendor } from "@/lib/roles";
 import { categories } from "@/lib/data";
 import { FREE_SHIPPING_THRESHOLD_CAD } from "@/lib/canada-commerce";
+import { usePublicMarketplaceSettings } from "@/hooks/use-marketplace-settings";
 
 export function Header() {
   const [megaOpen, setMegaOpen] = useState(false);
@@ -18,15 +19,17 @@ export function Header() {
   const { user, roles, signOut } = useAuth();
   const showVendor = canAccessVendor(roles);
   const showAdmin = canAccessAdmin(roles);
-
+  const { settings: marketplaceSettings } = usePublicMarketplaceSettings();
+  const freeShippingThreshold =
+    marketplaceSettings?.free_shipping_threshold ?? FREE_SHIPPING_THRESHOLD_CAD;
 
   return (
     <>
       {/* Top promo strip */}
       <div className="bg-navy text-navy-foreground">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-1.5 text-xs">
-          <span className="hidden sm:inline">{"Free shipping on Canadian orders over $" + FREE_SHIPPING_THRESHOLD_CAD + " CAD · 30-day returns"}</span>
-          <span className="sm:hidden">{"Free CA shipping over $" + FREE_SHIPPING_THRESHOLD_CAD}</span>
+          <span className="hidden sm:inline">{"Free shipping on Canadian orders over $" + freeShippingThreshold + " CAD · 30-day returns"}</span>
+          <span className="sm:hidden">{"Free CA shipping over $" + freeShippingThreshold}</span>
           <div className="flex items-center gap-3">
             <Link to="/become-a-vendor" className="hidden font-medium hover:text-electric sm:inline">
               Sell on 1LV
