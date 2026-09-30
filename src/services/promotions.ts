@@ -41,3 +41,33 @@ export function describePromotion(promotion: PublicPromotion) {
   }
   return `$${Number(promotion.discount_value).toFixed(2)} off`;
 }
+
+
+import {
+  createPromotion as createPromotionFn,
+  listAdminPromotions as listAdminPromotionsFn,
+  setPromotionActive as setPromotionActiveFn,
+  type PromotionInput,
+} from "@/lib/promotions.functions";
+
+export type { PromotionInput };
+
+export type AdminPromotion = PublicPromotion & {
+  active: boolean;
+  publicly_listed: boolean;
+  global_usage_limit: number | null;
+  per_customer_limit: number | null;
+  promotion_redemptions?: Array<{ id: string; status: string }>;
+};
+
+export async function listAdminPromotions(): Promise<AdminPromotion[]> {
+  return (await listAdminPromotionsFn()) as unknown as AdminPromotion[];
+}
+
+export async function createPromotion(input: PromotionInput) {
+  return await createPromotionFn({ data: input });
+}
+
+export async function setPromotionActive(promotionId: string, active: boolean) {
+  return await setPromotionActiveFn({ data: { promotionId, active } });
+}
