@@ -26,6 +26,7 @@ export type ServerCheckoutInput = {
   phone: string;
   shippingAddress: ServerCheckoutAddress;
   billingAddress?: ServerCheckoutAddress;
+  promotionCode?: string | null;
 };
 
 export type ServerCheckoutResult = {
@@ -41,6 +42,8 @@ export type ServerCheckoutResult = {
   demo: false;
   reused: boolean;
   guest_payment_token: string | null;
+  promotion_code: string | null;
+  promotion_savings_total: number;
 };
 
 function validateCheckoutInput(data: ServerCheckoutInput): ServerCheckoutInput {
@@ -73,6 +76,13 @@ function validateCheckoutInput(data: ServerCheckoutInput): ServerCheckoutInput {
   }
   if (!data.shippingAddress?.province) {
     throw new Error("Shipping province is required.");
+  }
+
+  if (
+    data.promotionCode != null &&
+    !/^[A-Za-z0-9_-]{3,32}$/.test(data.promotionCode.trim())
+  ) {
+    throw new Error("Invalid promotion code.");
   }
 
   if (JSON.stringify(data).length > 50_000) {
@@ -108,6 +118,7 @@ export const createMarketplaceOrder = createServerFn({ method: "POST" })
           quantity: item.quantity,
         })),
         _idempotency_key: data.idempotencyKey,
+        _promotion_code: data.promotionCode?.trim().toUpperCase() || null,
       } as never,
     );
 
