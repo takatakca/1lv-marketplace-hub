@@ -42,31 +42,35 @@ Official references:
 - Header, shipping and storefront messaging share the same shipping threshold.
 - Shipping, privacy, terms and return pages now explain the multi-vendor operating model more clearly.
 
-## Critical remaining control: server-authoritative atomic checkout
+## Server-authoritative atomic checkout
 
-The application still creates production order rows from the browser through the Supabase Data API. Existing guest INSERT policies allow anonymous creation of guest orders.
+This branch now contains the P0 checkout boundary. It is **code-complete but not production-active until the new Supabase migration is applied and the required server secret is configured**.
 
-That means the UI-level pricing hardening in this branch is **not sufficient as a final financial security boundary**. A malicious client can bypass the React application and call the Data API directly.
+The new flow:
 
-Before automatic production payment processing is considered hardened, checkout should move to one trusted transaction boundary that:
+1. browser sends product IDs, quantities, contact/address data and a UUID checkout key to a TanStack server function;
+2. authenticated identity is resolved server-side rather than trusted from the payload;
+3. a service-role-only PostgreSQL RPC validates active products/vendors, database prices and inventory;
+4. province tax and shipping totals are calculated inside the database transaction;
+5. parent order, order items and vendor splits are created atomically;
+6. duplicate retries are collapsed by a hashed checkout idempotency key;
+7. direct browser INSERT policies/privileges for financial order rows are removed;
+8. guest lookup requires both the public order reference and the original high-entropy checkout key;
+9. guest Stripe payment requires a separate short-lived signed capability;
+10. PaymentIntent creation verifies ownership/capability, blocks cancelled/refunded/expired orders and persists one order-scoped PaymentIntent;
+11. inventory is reserved at checkout, committed on Stripe payment success, and can be safely restored when an unpaid reservation expires.
 
-1. accepts only product IDs, quantities, contact/address data, and a validated promotion reference;
-2. loads active product prices and seller state from the database;
-3. verifies inventory and purchase eligibility;
-4. calculates shipping and applicable tax server-side;
-5. validates coupons/promotions server-side;
-6. calculates vendor commissions server-side;
-7. creates the parent order, order items and vendor splits atomically;
-8. returns only the final order ID/order number and safe totals;
-9. prevents direct customer/guest INSERT access to financial order columns afterward;
-10. uses idempotency protection so retries cannot create duplicate purchases.
+The database RPC is executable only by `service_role`; it uses `SECURITY INVOKER`, an empty `search_path`, schema-qualified relations, and explicit function grants. The public guest lookup remains a narrowly scoped `SECURITY DEFINER` function because it must read a guest order through RLS, and it requires the high-entropy checkout key in addition to the order number.
 
-Preferred implementation paths:
+### Deployment requirements
 
-- a tightly scoped server function using server-only Supabase credentials; or
-- a carefully designed database RPC with explicit grants, validated inputs and an intentionally limited security model.
+Before this branch is merged/deployed:
 
-Any privileged database function must use a pinned/empty `search_path`, schema-qualified references, minimum EXECUTE grants, and a documented reason if anonymous execution is intentionally permitted.
+- apply `supabase/migrations/20260930141500_server_authoritative_checkout.sql` to the correct 1LV.CA Supabase project;
+- set a dedicated `CHECKOUT_GUEST_TOKEN_SECRET` of at least 32 random characters on the server;
+- keep `SUPABASE_SERVICE_ROLE_KEY`, Stripe secret keys and the guest token secret server-only;
+- run Supabase Security Advisor after the migration;
+- test guest and authenticated checkout, tampered totals, duplicate retries, expired reservations, inventory exhaustion and unauthorized PaymentIntent attempts.
 
 ## Coupon engine
 
@@ -116,10 +120,10 @@ Do not enable fully automatic payment/payout operations solely because this UI b
 
 Recommended release sequence:
 
-1. merge this Canada commerce/UI consistency upgrade;
-2. implement server-authoritative atomic checkout;
-3. implement the persistent coupon engine;
-4. persist marketplace settings;
-5. run Supabase Security Advisor and targeted checkout tests;
-6. test paid orders in Stripe test mode across representative provinces;
+1. apply and verify the server-authoritative checkout migration on the correct 1LV.CA Supabase project;
+2. configure the dedicated guest checkout signing secret;
+3. merge this Canada commerce/security upgrade only after CI and database verification are green;
+4. implement the persistent coupon engine;
+5. persist marketplace settings;
+6. run targeted Stripe test-mode orders across representative provinces and inventory edge cases;
 7. only then widen production traffic and automation.
