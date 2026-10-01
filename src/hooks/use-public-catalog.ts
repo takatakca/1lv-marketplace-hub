@@ -1,8 +1,9 @@
-import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   products as demoProducts,
   vendors as demoVendors,
+  type Product,
+  type Vendor,
 } from "@/lib/data";
 import { usePublicMarketplaceSettings } from "@/hooks/use-marketplace-settings";
 import {
@@ -11,6 +12,8 @@ import {
 } from "@/services/public-catalog";
 
 const PUBLIC_CATALOG_QUERY_KEY = ["public-marketplace-catalog"] as const;
+const EMPTY_PRODUCTS: Product[] = [];
+const EMPTY_VENDORS: Vendor[] = [];
 
 export function usePublicCatalog() {
   const { settings, loading: settingsLoading } = usePublicMarketplaceSettings();
@@ -29,8 +32,8 @@ export function usePublicCatalog() {
     retry: 1,
   });
 
-  const liveProducts = catalogQuery.data?.products ?? [];
-  const liveVendors = catalogQuery.data?.vendors ?? [];
+  const liveProducts = catalogQuery.data?.products ?? EMPTY_PRODUCTS;
+  const liveVendors = catalogQuery.data?.vendors ?? EMPTY_VENDORS;
   const demo = Boolean(
     settings?.demo_mode &&
       !catalogQuery.isPending &&
@@ -38,18 +41,9 @@ export function usePublicCatalog() {
       liveVendors.length === 0,
   );
 
-  const products = useMemo(
-    () => (demo ? demoProducts : liveProducts),
-    [demo, liveProducts],
-  );
-  const vendors = useMemo(
-    () => (demo ? demoVendors : liveVendors),
-    [demo, liveVendors],
-  );
-
   return {
-    products,
-    vendors,
+    products: demo ? demoProducts : liveProducts,
+    vendors: demo ? demoVendors : liveVendors,
     demo,
     error:
       catalogQuery.error instanceof Error
