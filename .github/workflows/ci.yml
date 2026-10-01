@@ -149,6 +149,11 @@ jobs:
           set -euo pipefail
           supabase db lint --local --schema public --level warning --fail-on error
 
+      - name: Run database integrity tests
+        run: |
+          set -euo pipefail
+          supabase test db --local
+
       - name: Stop local Supabase
         if: always()
         run: supabase stop --no-backup || true
