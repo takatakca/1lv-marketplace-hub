@@ -85,7 +85,7 @@ function Page() {
   const effectiveStatus: ConnectStatus = demo ? "not_connected" : connectStatus;
   const readiness =
     effectiveStatus === "enabled"
-      ? "This account is ready to receive payouts once transfer scheduling goes live."
+      ? "This account is payout-capable. Transfers follow the current marketplace payout settings and approval state."
       : effectiveStatus === "restricted"
         ? "Stripe still needs more information before charges or payouts can be enabled."
         : effectiveStatus === "onboarding"
@@ -164,11 +164,11 @@ function Page() {
       <div className="mt-8 rounded-xl border border-border bg-card p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-bold text-navy">
-            {payouts.length > 0 ? "Payout history" : "Payout history (estimated weekly)"}
+            {payouts.length > 0 ? "Payout history" : "Payout eligibility estimates"}
           </h2>
           <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
             <Info size={12} />{" "}
-            {payouts.length > 0 ? "Transfers are released manually by 1LV.CA." : "No payout records issued yet."}
+            {payouts.length > 0 ? "Transfer status reflects the recorded payout workflow." : "No payout records issued yet."}
           </span>
         </div>
         {loading ? (
@@ -304,7 +304,7 @@ function Page() {
 
         {connectNotice && <p className="mt-2 text-xs text-deal">{connectNotice}</p>}
         <p className="mt-2 text-xs text-muted-foreground">
-          Automatic transfers are not enabled yet — onboarding only prepares the payout account.
+          Stripe onboarding prepares the payout account. Transfer timing and automation follow the marketplace payout settings.
         </p>
       </div>
 

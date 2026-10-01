@@ -20,10 +20,10 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Shop flash deals, trending products and verified Canadian sellers on 1LV.CA. Free shipping over $" + FREE_SHIPPING_THRESHOLD_CAD + " CAD, 30-day returns, buyer protection.",
+          "Shop live marketplace products, active markdowns and Canadian sellers on 1LV.CA with protected checkout and returns on eligible items.",
       },
       { property: "og:title", content: "1LV.CA — Canada's deal marketplace" },
-      { property: "og:description", content: "Flash deals, Canadian sellers, free shipping over $" + FREE_SHIPPING_THRESHOLD_CAD + " CAD." },
+      { property: "og:description", content: "Live marketplace products, Canadian sellers, active markdowns and protected checkout." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -112,12 +112,12 @@ function Home() {
                     : `Free shipping over ${freeShippingThreshold} where eligible, with protected checkout.`}
                 </p>
                 <span className="mt-5 inline-flex items-center gap-2 rounded-md bg-deal px-5 py-2.5 text-sm font-bold text-deal-foreground transition group-hover:opacity-90">
-                  Shop the event <ArrowRight size={15} />
+                  {discounted.length > 0 ? "Shop current deals" : "Browse marketplace"} <ArrowRight size={15} />
                 </span>
                 <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-[11px] text-white/70">
                   <span className="inline-flex items-center gap-1.5"><ShieldCheck size={13} className="text-electric" /> Buyer protection</span>
-                  <span className="inline-flex items-center gap-1.5"><Truck size={13} className="text-electric" /> Fast CA delivery</span>
-                  <span className="inline-flex items-center gap-1.5"><RefreshCw size={13} className="text-electric" /> 30-day returns</span>
+                  <span className="inline-flex items-center gap-1.5"><Truck size={13} className="text-electric" /> Canada-wide shipping</span>
+                  <span className="inline-flex items-center gap-1.5"><RefreshCw size={13} className="text-electric" /> Returns on eligible items</span>
                 </div>
               </div>
               {heroDeal && (
@@ -141,7 +141,13 @@ function Home() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-electric">
-                      {i === 0 ? "Editor's pick" : i === 1 ? "Best seller" : "Lowest price this week"}
+                      {p.compareAt && p.compareAt > p.price
+                        ? "Current markdown"
+                        : p.sold > 0
+                          ? "Ordered on 1LV"
+                          : i === 0
+                            ? "New marketplace item"
+                            : "Marketplace item"}
                     </p>
                     <p className="line-clamp-2 text-sm font-semibold text-navy group-hover:text-electric">{p.title}</p>
                     <p className="mt-0.5 text-sm font-extrabold text-deal">{formatCAD(p.price)}</p>
@@ -198,9 +204,9 @@ function Home() {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
             {[
               { label: "Under $10", to: "/deals", tone: "bg-deal text-deal-foreground" },
-              { label: "Free shipping", to: "/search", tone: "bg-success text-success-foreground" },
+              { label: "Shipping terms", to: "/shipping", tone: "bg-success text-success-foreground" },
               { label: "Canadian sellers 🇨🇦", to: "/search", tone: "bg-navy text-navy-foreground" },
-              { label: "New this week", to: "/new-arrivals", tone: "bg-electric text-electric-foreground" },
+              { label: "New arrivals", to: "/new-arrivals", tone: "bg-electric text-electric-foreground" },
             ].map((t) => (
               <Link
                 key={t.label}
@@ -229,7 +235,7 @@ function Home() {
 
       {/* ---------- FEATURED STORES ---------- */}
       <section className="mx-auto max-w-7xl px-4 py-7">
-        <SectionHead eyebrow="Verified sellers" title="Featured stores" action="All stores" actionTo="/categories" />
+        <SectionHead eyebrow="Active sellers" title="Marketplace stores" action="Browse marketplace" actionTo="/categories" />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {featuredVendors.map(({ vendor, items }) => (
             <div key={vendor.slug} className="merch-card group overflow-hidden">
@@ -297,7 +303,7 @@ function Home() {
       {/* ---------- BEST SELLERS ---------- */}
       <section className="surface-2 border-y border-border">
         <div className="mx-auto max-w-7xl px-4 py-7">
-          <SectionHead eyebrow="Most ordered" title="Best sellers this week" action="See top products" actionTo="/trending" />
+          <SectionHead eyebrow="Recorded sales" title="Most ordered products" action="See ranking" actionTo="/trending" />
           <ProductRail products={best} />
         </div>
       </section>
@@ -306,7 +312,7 @@ function Home() {
 
       {/* ---------- RECOMMENDED FEED ---------- */}
       <section className="mx-auto max-w-7xl px-4 py-8">
-        <SectionHead eyebrow="Picked for you" title="Recommended" />
+        <SectionHead eyebrow="Keep browsing" title="Explore more products" />
         <ProductGrid products={products} cols={6} />
         <div className="mt-6 text-center">
           <Link
@@ -327,7 +333,7 @@ function Home() {
               Reach Canadian shoppers. Get paid in CAD.
             </h2>
             <p className="mt-2 max-w-lg text-sm text-white/70">
-              List products in minutes, manage every order from one dashboard, and receive weekly payouts.
+              Create listings, manage orders from one dashboard, and track eligible earnings and payout status in CAD.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row md:justify-end">

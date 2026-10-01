@@ -11,8 +11,8 @@ const SAVINGS = [
     icon: Truck,
   },
   {
-    label: "Flash deals",
-    detail: "Limited-time markdowns",
+    label: "Current deals",
+    detail: "Marked-down marketplace products",
     to: "/deals" as const,
     icon: Zap,
   },
@@ -52,7 +52,7 @@ export function CouponStrip() {
               <div className="min-w-0 flex-1 text-xs">
                 <div className="font-bold text-navy">{item.label}</div>
                 <div className="text-[11px] text-muted-foreground">{item.label === "Free Canadian shipping"
-                  ? `Eligible orders ${freeShippingThreshold}+`
+                  ? `Eligible orders ${freeShippingThreshold} CAD+`
                   : item.detail}</div>
               </div>
               <ArrowRight size={14} className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-electric" />

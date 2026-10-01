@@ -26,7 +26,7 @@ function VendorPricing() {
               >
                 {featured && (
                   <span className="absolute -top-3 left-6 rounded-full bg-electric px-3 py-1 text-[10px] font-bold uppercase text-electric-foreground">
-                    Most popular
+                    Recommended
                   </span>
                 )}
                 <h3 className="font-display text-xl font-extrabold text-navy">{plan.name}</h3>
