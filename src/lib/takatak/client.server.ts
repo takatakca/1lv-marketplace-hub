@@ -100,3 +100,131 @@ export async function resolveTakatakMerchant(
 ): Promise<SendResult> {
   return call("/v1/identity/resolve-merchant", payload);
 }
+
+
+export type TakatakVerifiedIdentity = {
+  id: string;
+  phone: string;
+  email: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  locale: string | null;
+};
+
+export type TakatakOtpResult =
+  | { ok: true }
+  | { ok: false; setupRequired?: boolean; error: string };
+
+export type TakatakOtpVerifyResult =
+  | { ok: true; identity: TakatakVerifiedIdentity }
+  | { ok: false; setupRequired?: boolean; error: string };
+
+async function callOtp(
+  path: string,
+  body: Record<string, unknown>,
+): Promise<
+  | { ok: true; json: Record<string, unknown> }
+  | { ok: false; setupRequired?: boolean; error: string }
+> {
+  const cfg = takatakConfig();
+  if (!cfg) {
+    return {
+      ok: false,
+      setupRequired: true,
+      error: "TAKATAK identity service is not configured",
+    };
+  }
+
+  try {
+    const response = await fetch(`${cfg.url}${path}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${cfg.key}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const raw = await response.text();
+    let json: Record<string, unknown> = {};
+    try {
+      json = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+    } catch {
+      json = {};
+    }
+
+    if (!response.ok) {
+      const error =
+        typeof json["error"] === "string"
+          ? json["error"]
+          : `TAKATAK responded ${response.status}`;
+      return { ok: false, error: error.slice(0, 300) };
+    }
+
+    return { ok: true, json };
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message.slice(0, 300)
+          : "TAKATAK identity service is unavailable",
+    };
+  }
+}
+
+export async function requestTakatakPhoneOtp(
+  phone: string,
+): Promise<TakatakOtpResult> {
+  const result = await callOtp("/v1/auth/otp/send", { phone });
+  if (!result.ok) return result;
+  return { ok: true };
+}
+
+export async function verifyTakatakPhoneOtp(
+  phone: string,
+  code: string,
+): Promise<TakatakOtpVerifyResult> {
+  const result = await callOtp("/v1/auth/otp/verify", { phone, code });
+  if (!result.ok) return result;
+
+  const identityRaw = result.json["identity"];
+  if (
+    !identityRaw ||
+    typeof identityRaw !== "object" ||
+    Array.isArray(identityRaw)
+  ) {
+    return { ok: false, error: "TAKATAK returned an invalid identity." };
+  }
+
+  const identity = identityRaw as Record<string, unknown>;
+  const id = typeof identity["id"] === "string" ? identity["id"] : "";
+  const verifiedPhone =
+    typeof identity["phone"] === "string" ? identity["phone"] : "";
+
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      id,
+    ) ||
+    !verifiedPhone
+  ) {
+    return { ok: false, error: "TAKATAK returned an invalid identity." };
+  }
+
+  const optionalString = (key: string): string | null => {
+    const value = identity[key];
+    return typeof value === "string" && value.trim() ? value.trim() : null;
+  };
+
+  return {
+    ok: true,
+    identity: {
+      id,
+      phone: verifiedPhone,
+      email: optionalString("email"),
+      first_name: optionalString("first_name"),
+      last_name: optionalString("last_name"),
+      locale: optionalString("locale"),
+    },
+  };
+}

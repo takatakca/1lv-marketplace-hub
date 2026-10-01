@@ -6,6 +6,10 @@ import { PasswordField } from "@/components/PasswordField";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
+import {
+  requestTakatakPhoneLoginCode,
+  verifyTakatakPhoneLoginCode,
+} from "@/lib/takatak-auth.functions";
 
 export const Route = createFileRoute("/login")({
   component: Login,
@@ -113,14 +117,16 @@ function PhoneLogin() {
   const sendCode = async () => {
     if (loading || !formatted) return;
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({ phone: formatted });
+    const result = await requestTakatakPhoneLoginCode({
+      data: { phone: formatted },
+    });
     setLoading(false);
-    if (error) {
-      if (/phone provider/i.test(error.message) || /not enabled/i.test(error.message) || /unsupported/i.test(error.message)) {
-        toast.error("Phone OTP not configured yet. See docs/AUTH_SETUP.md.");
-      } else {
-        toast.error(error.message);
-      }
+    if (!result.ok) {
+      toast.error(
+        result.setupRequired
+          ? "Phone verification is temporarily unavailable."
+          : result.error,
+      );
       return;
     }
     setStage("code");
@@ -141,11 +147,34 @@ function PhoneLogin() {
   const verify = async (e: FormEvent) => {
     e.preventDefault();
     if (loading) return;
+    if (!formatted) return;
     setLoading(true);
-    const { error } = await supabase.auth.verifyOtp({ phone: formatted!, token: code, type: "sms" });
+    const result = await verifyTakatakPhoneLoginCode({
+      data: { phone: formatted, code },
+    });
+
+    if (!result.ok) {
+      setLoading(false);
+      toast.error(
+        result.setupRequired
+          ? "Phone verification is temporarily unavailable."
+          : result.error,
+      );
+      return;
+    }
+
+    const { error } = await supabase.auth.verifyOtp({
+      type: "magiclink",
+      token_hash: result.tokenHash,
+    });
     setLoading(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Signed in");
+
+    if (error) {
+      toast.error("Your phone was verified, but the 1LV session could not start.");
+      return;
+    }
+
+    toast.success("Signed in securely");
     nav({ to: "/account" });
   };
 
@@ -166,7 +195,11 @@ function PhoneLogin() {
         {phone && !formatted && (
           <p className="mt-1 text-[11px] text-destructive">Enter a valid Canadian number (10 digits, or starting with +1).</p>
         )}
-        {formatted && <p className="mt-1 text-[11px] text-muted-foreground">Will send to: {formatted}</p>}
+        {formatted && (
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Secure verification will be sent to {formatted}.
+          </p>
+        )}
       </label>
 
       {stage === "phone" ? (
