@@ -35,12 +35,12 @@ function Page() {
   };
   useEffect(() => { if (!demo) refresh().catch(() => setRows([])); }, [demo]);
 
-  const useDemo = demo || (rows && rows.length === 0);
+  const useDemo = demo;
   const display: CatRow[] = useDemo
     ? demoCategories.map((c, i) => ({
         slug: c.slug, name_en: c.name, name_fr: null, parent_slug: null, active: true, position: i,
       }))
-    : rows!;
+    : rows ?? [];
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,7 +73,7 @@ function Page() {
   return (
     <>
       <div className="mb-6">
-        {useDemo ? <DemoBanner label={demo ? "Preview mode" : "No categories yet"} /> : null}
+        {useDemo ? <DemoBanner label="Preview mode" /> : null}
         <h1 className="text-2xl font-bold text-navy md:text-3xl">Categories</h1>
         <p className="text-sm text-muted-foreground">Bilingual taxonomy with SEO and ordering.</p>
       </div>
@@ -93,6 +93,13 @@ function Page() {
               </tr>
             </thead>
             <tbody>
+              {display.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    No categories yet. Create the first marketplace category.
+                  </td>
+                </tr>
+              )}
               {display.map((c) => (
                 <tr key={c.slug} className="border-t border-border">
                   <td className="px-4 py-3 font-medium text-navy">{c.name_en}</td>

@@ -50,7 +50,7 @@ function Page() {
     })();
   }, [demo, user]);
 
-  const useDemo = demo || (items && items.length === 0);
+  const useDemo = demo;
   const baseRows = useDemo
     ? demoProducts.slice(0, 12).map((p, i) => ({
         id: p.id, title: p.title,
@@ -122,7 +122,7 @@ function Page() {
     <div>
       <div className="mb-6 flex items-center justify-between flex-wrap gap-3">
         <div>
-          {useDemo ? <DemoBanner label={demo ? "Preview mode" : "No products yet"} /> : null}
+          {useDemo ? <DemoBanner label="Preview mode" /> : null}
           <h1 className="text-2xl font-bold text-navy md:text-3xl">Products</h1>
         </div>
         <Link to="/vendor/products/new" className="rounded-md bg-electric px-4 py-2 text-sm font-semibold text-electric-foreground">New product</Link>
@@ -174,6 +174,7 @@ function Page() {
             ) },
           ]}
           rows={rows}
+          empty="No products yet. Create your first product to get started."
         />
       )}
     </div>
