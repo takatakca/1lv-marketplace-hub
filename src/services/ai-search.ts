@@ -79,7 +79,38 @@ export const TRENDING_SEARCHES = [
   "gift under $25",
 ];
 
+export type SearchNavigationParams = {
+  q: string;
+  raw?: string;
+  category: string;
+  minPrice?: number;
+  maxPrice?: number;
+  freeShipping: boolean;
+  canadian: boolean;
+  rating: number;
+  sale: boolean;
+  sort: string;
+};
+
 export type QuickChip = { label: string; search: Record<string, string | number | boolean> };
+
+export function toSearchNavigation(
+  search: Record<string, string | number | boolean>,
+  raw?: string,
+): SearchNavigationParams {
+  return {
+    q: typeof search.q === "string" ? search.q : "",
+    ...(raw ? { raw } : {}),
+    category: typeof search.category === "string" ? search.category : "",
+    ...(typeof search.minPrice === "number" ? { minPrice: search.minPrice } : {}),
+    ...(typeof search.maxPrice === "number" ? { maxPrice: search.maxPrice } : {}),
+    freeShipping: search.freeShipping === true,
+    canadian: search.canadian === true,
+    rating: typeof search.rating === "number" ? search.rating : 0,
+    sale: search.sale === true,
+    sort: typeof search.sort === "string" ? search.sort : "relevance",
+  };
+}
 
 export const QUICK_CHIPS: QuickChip[] = [
   { label: "Deals under $10", search: { maxPrice: 10, sale: true } },
