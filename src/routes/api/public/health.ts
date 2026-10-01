@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-const EXPECTED_SCHEMA_VERSION = "20261001043000";
+const EXPECTED_SCHEMA_VERSION = "20261001044500";
 
 const REQUIRED_RUNTIME_ENV = [
   "SUPABASE_URL",
