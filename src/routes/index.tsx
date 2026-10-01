@@ -7,7 +7,8 @@ import { ProductImage } from "@/components/ProductImage";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { CouponStrip } from "@/components/CouponStrip";
 import { RecentlyViewed } from "@/components/RecentlyViewed";
-import { categories, products, productsByTag, vendors, formatCAD } from "@/lib/data";
+import { categories, formatCAD } from "@/lib/data";
+import { usePublicCatalog } from "@/hooks/use-public-catalog";
 import { FREE_SHIPPING_THRESHOLD_CAD } from "@/lib/canada-commerce";
 import { usePublicMarketplaceSettings } from "@/hooks/use-marketplace-settings";
 
@@ -31,23 +32,49 @@ export const Route = createFileRoute("/")({
 
 function Home() {
   const { settings } = usePublicMarketplaceSettings();
+  const { products, vendors, demo, loading, error } = usePublicCatalog();
   const freeShippingThreshold =
     settings?.free_shipping_threshold ?? FREE_SHIPPING_THRESHOLD_CAD;
-  const flash = productsByTag("flash");
-  const trending = productsByTag("trending");
-  const local = productsByTag("local");
-  const newArrivals = productsByTag("new");
-  const best = productsByTag("best");
+  const discounted = products
+    .filter((p) => p.compareAt && p.compareAt > p.price)
+    .sort(
+      (a, b) =>
+        ((b.compareAt ?? b.price) - b.price) / (b.compareAt ?? b.price) -
+        (((a.compareAt ?? a.price) - a.price) / (a.compareAt ?? a.price)),
+    );
+  const flash = discounted;
+  const trending = [...products].sort((a, b) => b.sold - a.sold);
+  const local = products.filter((p) => p.vendorCountry === "CA" || p.tags.includes("local"));
+  const newArrivals = [...products].sort(
+    (a, b) =>
+      new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime(),
+  );
+  const best = trending;
   const under10 = products.filter((p) => p.price < 25).slice(0, 4);
-  const heroDeal = flash[0] ?? products[0];
-  const tiles = [products[3], products[6], products[12]].filter(Boolean);
-  const featuredVendors = vendors.slice(0, 4).map((v) => ({
-    vendor: v,
-    items: products.filter((p) => p.vendorSlug === v.slug),
+  const heroDeal = flash[0] ?? trending[0] ?? products[0];
+  const tiles = products.slice(0, 3);
+  const featuredVendors = vendors.slice(0, 4).map((vendor) => ({
+    vendor,
+    items: products.filter((p) => p.vendorSlug === vendor.slug),
   }));
 
   return (
     <AppLayout>
+      {loading && (
+        <div className="border-b border-border bg-muted/40 px-4 py-2 text-center text-xs text-muted-foreground">
+          Loading the live 1LV.CA marketplace…
+        </div>
+      )}
+      {!loading && error && (
+        <div className="border-b border-destructive/20 bg-destructive/5 px-4 py-2 text-center text-xs text-destructive">
+          Live catalog unavailable. {demo ? "Showing authorized preview data." : "Please try again shortly."}
+        </div>
+      )}
+      {!loading && !demo && products.length === 0 && (
+        <div className="border-b border-border bg-muted/40 px-4 py-3 text-center text-sm text-muted-foreground">
+          No live products are published yet.
+        </div>
+      )}
       {/* ---------- HERO MERCHANDISING ---------- */}
       <section className="surface-3 border-b border-border">
         <div className="mx-auto max-w-7xl px-4 py-4 md:py-6">
@@ -195,9 +222,17 @@ function Home() {
                   </div>
                   <div className="text-white">
                     <div className="text-sm font-bold leading-tight">{vendor.name}</div>
-                    <div className="flex items-center gap-1 text-[11px] text-white/85">
-                      <Star size={10} className="fill-warning text-warning" /> {vendor.rating} · {vendor.city}
-                    </div>
+                    {(vendor.rating > 0 || vendor.city) && (
+                      <div className="flex items-center gap-1 text-[11px] text-white/85">
+                        {vendor.rating > 0 && (
+                          <>
+                            <Star size={10} className="fill-warning text-warning" /> {vendor.rating}
+                          </>
+                        )}
+                        {vendor.rating > 0 && vendor.city ? " · " : ""}
+                        {vendor.city}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

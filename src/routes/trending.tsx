@@ -3,7 +3,8 @@ import { TrendingUp, Flame } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
 import { SectionHead } from "@/components/ProductRail";
-import { categories, products } from "@/lib/data";
+import { categories } from "@/lib/data";
+import { usePublicCatalog } from "@/hooks/use-public-catalog";
 
 export const Route = createFileRoute("/trending")({
   component: TrendingPage,
@@ -20,9 +21,15 @@ export const Route = createFileRoute("/trending")({
 });
 
 function TrendingPage() {
+  const { products } = usePublicCatalog();
   const trending = [...products].sort((a, b) => b.sold - a.sold);
   const top = trending.slice(0, 12);
-  const rising = [...products].sort((a, b) => b.reviews - a.reviews).slice(0, 6);
+  const rising = [...products]
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime(),
+    )
+    .slice(0, 6);
   const hotCategories = categories
     .map((c) => ({ c, sold: products.filter((p) => p.category === c.slug).reduce((s, p) => s + p.sold, 0) }))
     .sort((a, b) => b.sold - a.sold)
@@ -66,7 +73,7 @@ function TrendingPage() {
 
       <section className="surface-2 border-y border-border">
         <div className="mx-auto max-w-7xl px-4 py-7">
-          <SectionHead eyebrow="Most reviewed" title="🔥 Rising fast" />
+          <SectionHead eyebrow="Recently published" title="🔥 Rising fast" />
           <ProductGrid products={rising} cols={6} />
         </div>
       </section>

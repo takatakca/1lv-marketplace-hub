@@ -1,7 +1,8 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
-import { getCategory, productsByCategory } from "@/lib/data";
+import { getCategory } from "@/lib/data";
+import { usePublicCatalog } from "@/hooks/use-public-catalog";
 
 export const Route = createFileRoute("/category/$slug")({
   component: CategoryPage,
@@ -20,7 +21,8 @@ export const Route = createFileRoute("/category/$slug")({
 
 function CategoryPage() {
   const { cat } = Route.useLoaderData();
-  const items = productsByCategory(cat.slug);
+  const { products, demo } = usePublicCatalog();
+  const items = products.filter((product) => product.category === cat.slug);
   return (
     <AppLayout>
       <div className="border-b border-border bg-gradient-to-b from-muted/40 to-transparent">
@@ -51,11 +53,13 @@ function CategoryPage() {
                   <input className="w-full rounded-md border border-border px-2 py-1 text-xs" placeholder="Max" />
                 </div>
               </div>
-              <div>
-                <p className="font-semibold text-navy">Shipping</p>
-                <label className="mt-2 flex items-center gap-2 text-xs"><input type="checkbox" /> Free shipping</label>
-                <label className="flex items-center gap-2 text-xs"><input type="checkbox" /> Fast (2-day)</label>
-              </div>
+              {demo && (
+                <div>
+                  <p className="font-semibold text-navy">Shipping</p>
+                  <label className="mt-2 flex items-center gap-2 text-xs"><input type="checkbox" /> Free shipping</label>
+                  <label className="flex items-center gap-2 text-xs"><input type="checkbox" /> Fast (2-day)</label>
+                </div>
+              )}
               <div>
                 <p className="font-semibold text-navy">Vendor</p>
                 <label className="mt-2 flex items-center gap-2 text-xs"><input type="checkbox" /> 🇨🇦 Canadian only</label>

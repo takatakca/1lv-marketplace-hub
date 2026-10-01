@@ -7,7 +7,8 @@ import { AppLayout } from "@/components/AppLayout";
 import { AISearchBar } from "@/components/AISearchBar";
 import { ProductGrid } from "@/components/ProductGrid";
 import { EmptyState } from "@/components/EmptyState";
-import { products, vendors, categories } from "@/lib/data";
+import { categories } from "@/lib/data";
+import { usePublicCatalog } from "@/hooks/use-public-catalog";
 import { QUICK_CHIPS, toSearchNavigation } from "@/services/ai-search";
 
 const searchSchema = z.object({
@@ -29,7 +30,7 @@ export const Route = createFileRoute("/search")({
   head: () => ({
     meta: [
       { title: "Search products — 1LV.CA Marketplace" },
-      { name: "description", content: "Search 1LV.CA with smart filters and voice search: price, free shipping, Canadian sellers, ratings and deals." },
+      { name: "description", content: "Search live 1LV.CA marketplace products with price, category, Canadian seller and deal filters." },
       { property: "og:title", content: "Search products — 1LV.CA" },
       { property: "og:description", content: "Smart, voice-enabled product search across Canadian and global vendors." },
       { property: "og:type", content: "website" },
@@ -45,6 +46,7 @@ const PRICE_CEILING = 2000;
 function SearchPage() {
   const sp = Route.useSearch();
   const navigate = Route.useNavigate();
+  const { products, demo } = usePublicCatalog();
   const term = (sp.q ?? "").trim().toLowerCase();
 
   const safeSort: Sort = SORTS.includes(sp.sort as Sort) ? (sp.sort as Sort) : "relevance";
@@ -80,12 +82,11 @@ function SearchPage() {
       ? products.filter((p) => p.title.toLowerCase().includes(term) || p.category.includes(term))
       : products;
     if (category) r = r.filter((p) => p.category === category);
-    if (freeShip) r = r.filter((p) => p.shipping === "free" || p.shipping === "fast");
-    if (minRating > 0) r = r.filter((p) => p.rating >= minRating);
+    if (demo && freeShip) r = r.filter((p) => p.shipping === "free" || p.shipping === "fast");
+    if (demo && minRating > 0) r = r.filter((p) => p.rating >= minRating);
     if (saleOnly) r = r.filter((p) => p.compareAt && p.compareAt > p.price);
     if (caOnly) {
-      const caVendors = new Set(vendors.filter((v) => v.country === "CA").map((v) => v.slug));
-      r = r.filter((p) => caVendors.has(p.vendorSlug));
+      r = r.filter((p) => p.vendorCountry === "CA" || p.tags.includes("local"));
     }
     r = r.filter((p) => p.price <= maxPrice && p.price >= minPrice);
 
@@ -96,7 +97,7 @@ function SearchPage() {
       case "sold": r = [...r].sort((a, b) => b.sold - a.sold); break;
     }
     return r;
-  }, [term, sort, maxPrice, minPrice, freeShip, minRating, caOnly, saleOnly, category]);
+  }, [products, demo, term, sort, maxPrice, minPrice, freeShip, minRating, caOnly, saleOnly, category]);
 
   const smartBits = [
     sp.q ? sp.q : null,
@@ -167,22 +168,26 @@ function SearchPage() {
           aria-label="Maximum price"
         />
       </div>
-      <div className="space-y-2">
-        <p className="font-semibold text-navy">Shipping</p>
-        <label className="flex items-center gap-2 text-xs">
-          <input type="checkbox" checked={freeShip} onChange={(e) => setFreeShip(e.target.checked)} />
-          Free / fast shipping
-        </label>
-      </div>
-      <div className="space-y-2">
-        <p className="font-semibold text-navy">Rating</p>
-        {[0, 3, 4, 4.5].map((r) => (
-          <label key={r} className="flex items-center gap-2 text-xs">
-            <input type="radio" name="rating" checked={minRating === r} onChange={() => setMinRating(r)} />
-            {r === 0 ? "Any" : `${r}+ stars`}
-          </label>
-        ))}
-      </div>
+      {demo && (
+        <>
+          <div className="space-y-2">
+            <p className="font-semibold text-navy">Shipping</p>
+            <label className="flex items-center gap-2 text-xs">
+              <input type="checkbox" checked={freeShip} onChange={(e) => setFreeShip(e.target.checked)} />
+              Free / fast shipping
+            </label>
+          </div>
+          <div className="space-y-2">
+            <p className="font-semibold text-navy">Rating</p>
+            {[0, 3, 4, 4.5].map((r) => (
+              <label key={r} className="flex items-center gap-2 text-xs">
+                <input type="radio" name="rating" checked={minRating === r} onChange={() => setMinRating(r)} />
+                {r === 0 ? "Any" : `${r}+ stars`}
+              </label>
+            ))}
+          </div>
+        </>
+      )}
       <div className="space-y-2">
         <p className="font-semibold text-navy">Vendor</p>
         <label className="flex items-center gap-2 text-xs">

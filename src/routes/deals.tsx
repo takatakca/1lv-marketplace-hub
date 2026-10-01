@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
 import { SectionHead } from "@/components/ProductRail";
 import { CountdownTimer } from "@/components/CountdownTimer";
-import { products } from "@/lib/data";
+import { usePublicCatalog } from "@/hooks/use-public-catalog";
 import { CouponStrip } from "@/components/CouponStrip";
 
 export const Route = createFileRoute("/deals")({
@@ -23,6 +23,7 @@ export const Route = createFileRoute("/deals")({
 
 
 function DealsPage() {
+  const { products } = usePublicCatalog();
   const discounted = products
     .filter((p) => p.compareAt && p.compareAt > p.price)
     .sort((a, b) => ((b.compareAt! - b.price) / b.compareAt!) - ((a.compareAt! - a.price) / a.compareAt!));

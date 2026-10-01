@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Sparkles } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
-import { products, productsByTag } from "@/lib/data";
+import { usePublicCatalog } from "@/hooks/use-public-catalog";
 
 export const Route = createFileRoute("/new-arrivals")({
   component: NewArrivalsPage,
@@ -15,8 +15,14 @@ export const Route = createFileRoute("/new-arrivals")({
 });
 
 function NewArrivalsPage() {
-  const fresh = productsByTag("new");
-  const rest = products.filter((p) => !fresh.includes(p)).slice(0, 18);
+  const { products } = usePublicCatalog();
+  const ordered = [...products].sort(
+    (a, b) =>
+      new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime(),
+  );
+  const fresh = ordered.filter((p) => p.tags.includes("new"));
+  const featured = fresh.length > 0 ? fresh : ordered.slice(0, 12);
+  const rest = ordered.filter((p) => !featured.includes(p)).slice(0, 18);
   return (
     <AppLayout>
       <section className="bg-navy text-white">
@@ -29,7 +35,7 @@ function NewArrivalsPage() {
       </section>
       <section className="mx-auto max-w-7xl px-4 py-8">
         <h2 className="mb-4 font-display text-xl font-extrabold text-navy">Just landed</h2>
-        <ProductGrid products={fresh} cols={6} />
+        <ProductGrid products={featured} cols={6} />
       </section>
       <section className="mx-auto max-w-7xl px-4 py-8">
         <h2 className="mb-4 font-display text-xl font-extrabold text-navy">More to discover</h2>
