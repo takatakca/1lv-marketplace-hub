@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DataTable } from "@/components/DataTable";
 import { DisputeThread } from "@/components/DisputeThread";
@@ -150,15 +150,21 @@ function DisputeDrawer({
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const reload = () => {
+  const reload = useCallback(() => {
     Promise.all([getDispute(disputeId), listRefundsForDispute(disputeId)]).then(([d, r]) => {
       setDispute(d);
       setRefunds(r);
-      if (d && !amount) setAmount(String(d.approved_refund_amount || d.requested_refund_amount || ""));
+      if (d) {
+        setAmount((current) =>
+          current || String(d.approved_refund_amount || d.requested_refund_amount || ""),
+        );
+      }
     });
-  };
+  }, [disputeId]);
 
-  useEffect(reload, [disputeId]);
+  useEffect(() => {
+    reload();
+  }, [reload]);
 
   const act = async (
     action: Parameters<typeof runDisputeAction>[0]["action"],
