@@ -115,3 +115,30 @@ jobs:
 
           cat /tmp/1lv-server.log
           exit 1
+
+
+  database-migrations:
+    name: Rebuild Supabase migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase database
+        run: supabase db start
+
+      - name: Replay all migrations from scratch
+        run: supabase db reset --local --no-seed
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup || true
