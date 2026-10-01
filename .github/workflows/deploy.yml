@@ -30,13 +30,13 @@ jobs:
       # 1. Checkout source
       # ------------------------------------------------------------
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # ------------------------------------------------------------
       # 2. Use same Node major as MochaHost
       # ------------------------------------------------------------
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ vars.NODE_VERSION }}
           cache: npm
@@ -64,6 +64,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}
         run: |
           set -euo pipefail
 
@@ -77,7 +78,12 @@ jobs:
             exit 1
           fi
 
-          echo "Supabase frontend environment variables are available."
+          if [ -z "$VITE_STRIPE_PUBLISHABLE_KEY" ]; then
+            echo "ERROR: VITE_STRIPE_PUBLISHABLE_KEY is missing"
+            exit 1
+          fi
+
+          echo "Frontend production environment variables are available."
           echo "Building 1lv.ca..."
 
           npm run build
@@ -92,12 +98,17 @@ jobs:
 
           node --check server.cjs
 
-          if [ ! -d "dist" ] && [ ! -d ".output" ]; then
-            echo "ERROR: Neither dist nor .output exists."
+          test -f "dist/client/index.html" || {
+            echo "ERROR: dist/client/index.html is missing."
             exit 1
-          fi
+          }
 
-          echo "Production build verified."
+          test -f "dist/server/server.js" || {
+            echo "ERROR: dist/server/server.js is missing."
+            exit 1
+          }
+
+          echo "Full-stack production build verified."
 
       # ------------------------------------------------------------
       # 6. Remove development packages
@@ -120,14 +131,7 @@ jobs:
           rm -rf .release
           mkdir -p .release
 
-          if [ -d "dist" ]; then
-            cp -a dist .release/
-          fi
-
-          if [ -d ".output" ]; then
-            cp -a .output .release/
-          fi
-
+          cp -a dist .release/
           cp server.cjs .release/
 
           for file in server-*.cjs; do
@@ -354,12 +358,8 @@ jobs:
           test -f "$RELEASE/server.cjs"
           test -f "$RELEASE/package.json"
           test -d "$RELEASE/node_modules"
-
-          if [ ! -d "$RELEASE/dist" ] && \
-             [ ! -d "$RELEASE/.output" ]; then
-            echo "ERROR: Release has no frontend production build."
-            exit 1
-          fi
+          test -f "$RELEASE/dist/client/index.html"
+          test -f "$RELEASE/dist/server/server.js"
 
           if [ -s "$APP_ROOT/CURRENT" ]; then
             OLD="$(tr -d '\r\n' < "$APP_ROOT/CURRENT")"
@@ -372,10 +372,27 @@ jobs:
             fi
           fi
 
+          cp "$RELEASE/server.cjs" "$APP_ROOT/server.cjs.new"
+          mv -f "$APP_ROOT/server.cjs.new" "$APP_ROOT/server.cjs"
+
+          cp "$RELEASE/package.json" "$APP_ROOT/package.json.new"
+          mv -f "$APP_ROOT/package.json.new" "$APP_ROOT/package.json"
+
+          if [ -f "$RELEASE/package-lock.json" ]; then
+            cp "$RELEASE/package-lock.json" "$APP_ROOT/package-lock.json.new"
+            mv -f "$APP_ROOT/package-lock.json.new" "$APP_ROOT/package-lock.json"
+          fi
+
+          rm -rf "$APP_ROOT/dist.new"
+          ln -s "$RELEASE/dist" "$APP_ROOT/dist.new"
+          rm -rf "$APP_ROOT/dist"
+          mv "$APP_ROOT/dist.new" "$APP_ROOT/dist"
+
           printf '%s\n' "$SHA" > "$APP_ROOT/CURRENT.new"
           mv -f "$APP_ROOT/CURRENT.new" "$APP_ROOT/CURRENT"
 
           echo "CURRENT switched to: $SHA"
+          echo "Application root now points to: $RELEASE"
 
           mkdir -p "$APP_ROOT/tmp"
 
@@ -418,20 +435,29 @@ jobs:
             exit 1
           fi
 
-          for attempt in 1 2 3 4 5 6 7 8 9 10; do
-            echo "Health check attempt $attempt/10"
+          SITE_URL="${SITE_URL%/}"
 
-            if curl \
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            echo "Full-stack health check attempt $attempt/10"
+
+            if HEALTH="$(curl \
               --fail \
               --silent \
               --show-error \
               --location \
               --max-time 20 \
-              "$SITE_URL" > /dev/null
+              "$SITE_URL/api/public/health")"
             then
-              echo "Production is healthy:"
-              echo "$SITE_URL"
-              exit 0
+              if node -e '
+                const payload = JSON.parse(process.argv[1]);
+                if (payload.ok !== true || payload.runtime !== "tanstack-start") process.exit(1);
+              ' "$HEALTH" && \
+                 curl --fail --silent --show-error --location --max-time 20 "$SITE_URL/" > /dev/null
+              then
+                echo "Production frontend and TanStack server are healthy:"
+                echo "$SITE_URL"
+                exit 0
+              fi
             fi
 
             echo "Health check failed. Retrying..."
@@ -494,7 +520,25 @@ jobs:
             exit 1
           fi
 
+          PREVIOUS_RELEASE="$APP_ROOT/releases/$PREVIOUS"
+
+          test -f "$PREVIOUS_RELEASE/server.cjs"
+          test -f "$PREVIOUS_RELEASE/dist/client/index.html"
+
           echo "Rolling back to: $PREVIOUS"
+
+          cp "$PREVIOUS_RELEASE/server.cjs" "$APP_ROOT/server.cjs.new"
+          mv -f "$APP_ROOT/server.cjs.new" "$APP_ROOT/server.cjs"
+
+          if [ -f "$PREVIOUS_RELEASE/package.json" ]; then
+            cp "$PREVIOUS_RELEASE/package.json" "$APP_ROOT/package.json.new"
+            mv -f "$APP_ROOT/package.json.new" "$APP_ROOT/package.json"
+          fi
+
+          rm -rf "$APP_ROOT/dist.new"
+          ln -s "$PREVIOUS_RELEASE/dist" "$APP_ROOT/dist.new"
+          rm -rf "$APP_ROOT/dist"
+          mv "$APP_ROOT/dist.new" "$APP_ROOT/dist"
 
           printf '%s\n' "$PREVIOUS" > "$APP_ROOT/CURRENT.new"
           mv -f "$APP_ROOT/CURRENT.new" "$APP_ROOT/CURRENT"
