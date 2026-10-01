@@ -36,24 +36,49 @@ function Page() {
     getAdminOverview().then(setStats).catch(() => setStats(null));
   }, [demo]);
 
-  const useDemo = demo || !stats || !stats.hasData;
-  const s: AdminOverview = stats ?? {
-    gmv: 184220,
-    orderCount: 2841,
-    pendingVendors: 6,
-    activeVendors: 42,
-    pendingProducts: 18,
-    activeProducts: 312,
-    unpaidVendors: 4,
-    commissionRevenue: 16580,
-    payoutLiability: 38420,
-    hasData: false,
-  };
+  const useDemo = demo;
+  const s: AdminOverview = demo
+    ? {
+        gmv: 184220,
+        orderCount: 2841,
+        pendingVendors: 6,
+        activeVendors: 42,
+        pendingProducts: 18,
+        activeProducts: 312,
+        unpaidVendors: 4,
+        commissionRevenue: 16580,
+        payoutLiability: 38420,
+        hasData: true,
+        recentOrders: [],
+      }
+    : stats ?? {
+        gmv: 0,
+        orderCount: 0,
+        pendingVendors: 0,
+        activeVendors: 0,
+        pendingProducts: 0,
+        activeProducts: 0,
+        unpaidVendors: 0,
+        commissionRevenue: 0,
+        payoutLiability: 0,
+        hasData: false,
+        recentOrders: [],
+      };
+
+  const recentRows = useDemo
+    ? demoRecent
+    : s.recentOrders.map((order) => ({
+        order: order.order,
+        customer: order.customer,
+        vendor: "Marketplace",
+        total: formatCAD(order.total),
+        status: order.status,
+      }));
 
   return (
     <div>
       <div className="mb-6">
-        {useDemo && <DemoBanner label={demo ? "Preview mode" : "No live data yet"} />}
+        {useDemo && <DemoBanner label="Preview mode" />}
         <h1 className="text-2xl font-bold text-navy md:text-3xl">Marketplace overview</h1>
         <p className="text-sm text-muted-foreground">Operational health, revenue and moderation queues.</p>
       </div>
@@ -82,7 +107,8 @@ function Page() {
               { key: "total", label: "Total" },
               { key: "status", label: "Status" },
             ]}
-            rows={demoRecent}
+            rows={recentRows}
+            empty="No marketplace orders yet."
           />
         </section>
         <section>

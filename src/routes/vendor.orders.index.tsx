@@ -46,7 +46,7 @@ function Page() {
     })();
   }, [demo, user]);
 
-  const useDemo = demo || (items && items.length === 0);
+  const useDemo = demo;
 
   const baseRows = useMemo(() => {
     if (useDemo) {
@@ -106,7 +106,7 @@ function Page() {
   return (
     <div>
       <div className="mb-6">
-        {useDemo ? <DemoBanner label={demo ? "Preview mode" : "No orders yet"} /> : null}
+        {useDemo ? <DemoBanner label="Preview mode" /> : null}
         <h1 className="text-2xl font-bold text-navy md:text-3xl">Orders</h1>
       </div>
       {demo && <PreviewModeNotice />}
@@ -143,6 +143,7 @@ function Page() {
             } },
           ]}
           rows={rows}
+          empty="No vendor orders yet."
         />
       )}
     </div>

@@ -38,11 +38,22 @@ export type AdminOverview = {
   commissionRevenue: number;
   payoutLiability: number;
   hasData: boolean;
+  recentOrders: Array<{
+    order: string;
+    customer: string;
+    total: number;
+    status: string;
+    createdAt: string;
+  }>;
 };
 
 export async function getAdminOverview(): Promise<AdminOverview> {
   const [orders, vendors, products, splits] = await Promise.all([
-    supabase.from("orders").select("total, payment_status").limit(1000),
+    supabase
+      .from("orders")
+      .select("order_number, customer_email, total, payment_status, created_at")
+      .order("created_at", { ascending: false })
+      .limit(1000),
     supabase.from("vendors").select("status, subscription_status").limit(1000),
     supabase.from("products").select("status").limit(2000),
     supabase
@@ -51,7 +62,13 @@ export async function getAdminOverview(): Promise<AdminOverview> {
       .limit(2000),
   ]);
 
-  const oRows = (orders.data ?? []) as Array<{ total: number; payment_status: string }>;
+  const oRows = (orders.data ?? []) as Array<{
+    order_number: string;
+    customer_email: string | null;
+    total: number;
+    payment_status: string;
+    created_at: string;
+  }>;
   const vRows = (vendors.data ?? []) as Array<{ status: string; subscription_status: string }>;
   const pRows = (products.data ?? []) as Array<{ status: string }>;
   const sRows = (splits.data ?? []) as Array<{
@@ -79,5 +96,12 @@ export async function getAdminOverview(): Promise<AdminOverview> {
       .filter((r) => r.status !== "delivered" && r.status !== "cancelled")
       .reduce((s, r) => s + Number(r.vendor_payout_amount ?? 0), 0),
     hasData: oRows.length + vRows.length + pRows.length > 0,
+    recentOrders: oRows.slice(0, 6).map((order) => ({
+      order: order.order_number,
+      customer: order.customer_email ?? "—",
+      total: Number(order.total ?? 0),
+      status: order.payment_status,
+      createdAt: order.created_at,
+    })),
   };
 }

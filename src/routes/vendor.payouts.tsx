@@ -76,11 +76,11 @@ function Page() {
     })();
   }, [demo, user]);
 
-  const useDemo = demo || !stats;
+  const useDemo = demo;
   const s = useDemo
     ? { payoutAvailable: 845.2, payoutPending: 312.4, payoutLifetime: 18420, commission: 1840, gmv: 12480 }
-    : stats!;
-  const rows: PayoutPeriod[] = useDemo || !periods || periods.length === 0 ? buildDemoPeriods() : periods;
+    : stats ?? { payoutAvailable: 0, payoutPending: 0, payoutLifetime: 0, commission: 0, gmv: 0, orders: { total: 0, pending: 0, accepted: 0, processing: 0, shipped: 0, delivered: 0, cancelled: 0 } };
+  const rows: PayoutPeriod[] = useDemo ? buildDemoPeriods() : periods ?? [];
 
   const effectiveStatus: ConnectStatus = demo ? "not_connected" : connectStatus;
   const readiness =
@@ -138,7 +138,7 @@ function Page() {
   return (
     <div>
       <div className="mb-6">
-        {useDemo ? <DemoBanner label={demo ? "Preview mode" : "No data yet"} /> : null}
+        {useDemo ? <DemoBanner label="Preview mode" /> : null}
         <h1 className="text-2xl font-bold text-navy md:text-3xl">Payouts</h1>
         <p className="mt-1 text-sm text-muted-foreground">Your earnings from delivered orders</p>
       </div>
@@ -210,7 +210,7 @@ function Page() {
               </tbody>
             </table>
           </div>
-        ) : (
+        ) : rows.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="text-muted-foreground">
@@ -243,6 +243,10 @@ function Page() {
             <p className="mt-2 text-[11px] text-muted-foreground">
               Estimates only — based on delivered orders. Official payout records appear here once issued.
             </p>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
+            No payout records or delivered-order estimates yet.
           </div>
         )}
       </div>
@@ -305,7 +309,7 @@ function Page() {
       </div>
 
       <div className="mt-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
-        Commission rate: <span className="font-semibold text-navy">{vendor ? `${Math.round(Number(vendor.commission_rate) * 100)}%` : "10%"}</span> of GMV ({formatCAD(s.gmv)} lifetime).
+        Commission rate: <span className="font-semibold text-navy">{vendor ? `${Math.round(Number(vendor.commission_rate) * 100)}%` : demo ? "10%" : "—"}</span> of GMV ({formatCAD(s.gmv)} lifetime).
       </div>
     </div>
   );
