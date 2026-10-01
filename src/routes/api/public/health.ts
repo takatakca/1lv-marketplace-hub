@@ -22,7 +22,10 @@ async function checkDatabaseSchema(): Promise<{
   status: DatabaseHealth;
   version?: string;
 }> {
-  if (process.env.HEALTH_SKIP_DATABASE_CHECK === "1") {
+  if (
+    process.env.HEALTH_SKIP_DATABASE_CHECK === "1" &&
+    process.env.GITHUB_ACTIONS === "true"
+  ) {
     return { status: "skipped" };
   }
 
