@@ -3,11 +3,9 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import {
   adminDb,
   adminUserIds,
-  applyRefundToPayouts,
   assertAdmin,
   notify,
   OPEN_STATUSES,
-  refreshOrderPaymentStatus,
   remainingRefundable,
   round2,
   setVendorOrderHold,
@@ -270,6 +268,52 @@ export const adminDisputeAction = createServerFn({ method: "POST" })
           return { ok: false, reason: `Refund exceeds the remaining refundable amount (${remaining.toFixed(2)}).` };
         }
 
+        let currency = "CAD";
+        let splitPayoutAmount = requested;
+
+        if (dispute.vendor_order_id) {
+          const { data: vendorOrder } = await db
+            .from("vendor_orders")
+            .select("subtotal, vendor_payout_amount")
+            .eq("id", dispute.vendor_order_id)
+            .maybeSingle();
+          const split = vendorOrder as
+            | { subtotal: number; vendor_payout_amount: number }
+            | null;
+          if (!split) return { ok: false, reason: "Vendor split not found." };
+
+          const { data: splitRefunds } = await db
+            .from("refund_records")
+            .select("amount, status")
+            .eq("vendor_order_id", dispute.vendor_order_id)
+            .in("status", ["approved", "processing", "refunded"]);
+          const reservedForSplit = (
+            (splitRefunds ?? []) as Array<{ amount: number; status: RefundStatus }>
+          ).reduce((sum, refund) => sum + Number(refund.amount ?? 0), 0);
+          const splitRemaining = round2(
+            Math.max(0, Number(split.subtotal) - reservedForSplit),
+          );
+          if (requested > splitRemaining) {
+            return {
+              ok: false,
+              reason: `Refund exceeds the remaining refundable vendor amount (${splitRemaining.toFixed(2)}).`,
+            };
+          }
+          splitPayoutAmount = Number(split.vendor_payout_amount ?? requested);
+        }
+
+        const { data: orderCurrency } = await db
+          .from("orders")
+          .select("currency")
+          .eq("id", dispute.order_id)
+          .maybeSingle();
+        if (
+          orderCurrency &&
+          typeof (orderCurrency as { currency?: string }).currency === "string"
+        ) {
+          currency = (orderCurrency as { currency: string }).currency.toUpperCase();
+        }
+
         const { data: refund, error: rErr } = await db
           .from("refund_records")
           .insert({
@@ -277,7 +321,7 @@ export const adminDisputeAction = createServerFn({ method: "POST" })
             vendor_order_id: dispute.vendor_order_id,
             dispute_id: dispute.id,
             amount: requested,
-            currency: "CAD",
+            currency,
             reason: data.note ?? "Dispute resolution",
             status: "approved",
             created_by: context.userId,
@@ -286,14 +330,20 @@ export const adminDisputeAction = createServerFn({ method: "POST" })
           })
           .select("id")
           .single();
-        if (rErr || !refund) return { ok: false, reason: rErr?.message ?? "Could not create refund record" };
+        if (rErr || !refund) {
+          return {
+            ok: false,
+            reason: rErr?.message ?? "Could not create refund record",
+          };
+        }
 
-        const applied = await applyRefundToPayouts(db, {
-          vendorOrderId: dispute.vendor_order_id,
-          vendorId: dispute.vendor_id,
-          amount: requested,
-          note: `Refund for dispute ${dispute.id}`,
-        });
+        if (dispute.vendor_order_id) {
+          await setVendorOrderHold(
+            db,
+            dispute.vendor_order_id,
+            Math.min(requested, splitPayoutAmount),
+          );
+        }
 
         patch.approved_refund_amount = requested;
         patch.status = "resolved_customer";
@@ -303,10 +353,14 @@ export const adminDisputeAction = createServerFn({ method: "POST" })
         await notify(db, [dispute.customer_id, owner], {
           kind: "refund_approved",
           title: "Refund approved",
-          body: `A refund of $${requested.toFixed(2)} was approved.`,
+          body: `A refund of ${requested.toFixed(2)} was approved and is awaiting Stripe processing.`,
           disputeId: dispute.id,
         });
-        return { ok: true, refundId: (refund as { id: string }).id, adjustment: applied.adjustment };
+        return {
+          ok: true,
+          refundId: (refund as { id: string }).id,
+          adjustment: false,
+        };
       }
     }
 
@@ -349,15 +403,26 @@ export const processApprovedRefund = createServerFn({ method: "POST" })
           stripe_refund_id: string | null;
         }
       | null;
-    if (!refund) return { ok: false, status: "requested", reason: "Refund not found" };
-    if (refund.status !== "approved") {
-      return { ok: false, status: refund.status, reason: "Refund must be approved first." };
+
+    if (!refund) {
+      return { ok: false, status: "requested", reason: "Refund not found" };
     }
-    if (refund.stripe_refund_id) {
-      return { ok: false, status: refund.status, reason: "This refund was already processed." };
+    if (refund.status === "refunded") {
+      return { ok: true, status: "refunded" };
+    }
+    if (!["approved", "failed", "processing"].includes(refund.status)) {
+      return {
+        ok: false,
+        status: refund.status,
+        reason: "Refund is not eligible for processing.",
+      };
     }
     if (Number(refund.amount) <= 0) {
-      return { ok: false, status: refund.status, reason: "Refund amount must be greater than zero." };
+      return {
+        ok: false,
+        status: refund.status,
+        reason: "Refund amount must be greater than zero.",
+      };
     }
 
     const { data: oRow } = await db
@@ -366,19 +431,33 @@ export const processApprovedRefund = createServerFn({ method: "POST" })
       .eq("id", refund.order_id)
       .maybeSingle();
     const order = oRow as
-      | { payment_status: string; stripe_payment_intent_id: string | null; stripe_charge_id: string | null }
+      | {
+          payment_status: string;
+          stripe_payment_intent_id: string | null;
+          stripe_charge_id: string | null;
+        }
       | null;
-    if (!order) return { ok: false, status: refund.status, reason: "Order not found" };
+
+    if (!order) {
+      return { ok: false, status: refund.status, reason: "Order not found" };
+    }
     if (!["paid", "partially_refunded"].includes(order.payment_status)) {
       return { ok: false, status: refund.status, reason: "Order is not paid." };
     }
 
     const remaining = await remainingRefundable(db, refund.order_id, refund.id);
     if (Number(refund.amount) > remaining) {
-      return { ok: false, status: refund.status, reason: "Refund exceeds the remaining refundable amount." };
+      return {
+        ok: false,
+        status: refund.status,
+        reason: "Refund exceeds the remaining refundable amount.",
+      };
     }
 
-    if (!stripeConfigured() || (!order.stripe_payment_intent_id && !order.stripe_charge_id)) {
+    if (
+      !stripeConfigured() ||
+      (!order.stripe_payment_intent_id && !order.stripe_charge_id)
+    ) {
       return {
         ok: false,
         status: refund.status,
@@ -387,65 +466,122 @@ export const processApprovedRefund = createServerFn({ method: "POST" })
       };
     }
 
-    await db.from("refund_records").update({ status: "processing", failure_reason: null }).eq("id", refund.id);
+    await db
+      .from("refund_records")
+      .update({ status: "processing", failure_reason: null })
+      .eq("id", refund.id);
 
-    try {
-      const body: Record<string, string> = {
-        amount: String(Math.round(Number(refund.amount) * 100)),
-        "metadata[refund_record_id]": refund.id,
-        "metadata[order_id]": refund.order_id,
-      };
-      if (order.stripe_payment_intent_id) body.payment_intent = order.stripe_payment_intent_id;
-      else if (order.stripe_charge_id) body.charge = order.stripe_charge_id;
+    let stripeRefundId = refund.stripe_refund_id;
 
-      const created = await stripeCall("/refunds", body);
+    if (!stripeRefundId) {
+      try {
+        const body: Record<string, string> = {
+          amount: String(Math.round(Number(refund.amount) * 100)),
+          "metadata[refund_record_id]": refund.id,
+          "metadata[order_id]": refund.order_id,
+        };
+        if (order.stripe_payment_intent_id) {
+          body.payment_intent = order.stripe_payment_intent_id;
+        } else if (order.stripe_charge_id) {
+          body.charge = order.stripe_charge_id;
+        }
+
+        const created = await stripeCall(
+          "/refunds",
+          body,
+          `1lv_refund_${refund.id}_v1`,
+        );
+        stripeRefundId =
+          typeof created.id === "string" && created.id.startsWith("re_")
+            ? created.id
+            : null;
+        if (!stripeRefundId) {
+          throw new Error("Stripe did not return a valid refund id.");
+        }
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : "Refund failed";
+        await db
+          .from("refund_records")
+          .update({ status: "failed", failure_reason: reason })
+          .eq("id", refund.id);
+        if (refund.dispute_id) {
+          await notify(db, await adminUserIds(db), {
+            kind: "refund_failed",
+            title: "Refund failed",
+            body: reason,
+            disputeId: refund.dispute_id,
+          });
+        }
+        return { ok: false, status: "failed", reason };
+      }
+    }
+
+    const { data: accounting, error: accountingError } = await db.rpc(
+      "finalize_refund_accounting",
+      {
+        _refund_id: refund.id,
+        _stripe_refund_id: stripeRefundId,
+      },
+    );
+
+    if (accountingError) {
+      const reason =
+        "Stripe refunded the payment, but accounting finalization is pending. Retry this refund to reconcile safely.";
       await db
         .from("refund_records")
         .update({
-          status: "refunded",
-          stripe_refund_id: created.id as string,
-          processed_at: new Date().toISOString(),
-          failure_reason: null,
+          status: "processing",
+          stripe_refund_id: stripeRefundId,
+          failure_reason: accountingError.message.slice(0, 500),
         })
         .eq("id", refund.id);
+      await notify(db, await adminUserIds(db), {
+        kind: "refund_accounting_pending",
+        title: "Refund accounting needs reconciliation",
+        body: `${reason} Refund ${refund.id}.`,
+        disputeId: refund.dispute_id ?? undefined,
+      });
+      return { ok: false, status: "processing", reason };
+    }
 
-      await refreshOrderPaymentStatus(db, refund.order_id);
+    const result = (accounting ?? {}) as Record<string, unknown>;
+    if (result.ok !== true) {
+      return {
+        ok: false,
+        status: "processing",
+        reason: "Refund accounting did not finalize.",
+      };
+    }
 
-      try {
-        const { queueOrderEvent } = await import("./takatak/outbox.server");
-        await queueOrderEvent(refund.order_id, "order.refunded");
-      } catch {
-        /* master sync never blocks a refund */
-      }
+    try {
+      const { queueOrderEvent } = await import("./takatak/outbox.server");
+      await queueOrderEvent(refund.order_id, "order.refunded");
+    } catch {
+      /* master sync never blocks a refund */
+    }
 
-      if (refund.dispute_id) {
-        const { data: d } = await db
-          .from("disputes")
-          .select("customer_id, vendor_id")
-          .eq("id", refund.dispute_id)
-          .maybeSingle();
-        const dispute = d as { customer_id: string | null; vendor_id: string } | null;
-        if (dispute) {
-          await notify(db, [dispute.customer_id, await vendorOwnerId(db, dispute.vendor_id)], {
+    if (refund.dispute_id) {
+      const { data: d } = await db
+        .from("disputes")
+        .select("customer_id, vendor_id")
+        .eq("id", refund.dispute_id)
+        .maybeSingle();
+      const dispute = d as
+        | { customer_id: string | null; vendor_id: string }
+        | null;
+      if (dispute) {
+        await notify(
+          db,
+          [dispute.customer_id, await vendorOwnerId(db, dispute.vendor_id)],
+          {
             kind: "refund_processed",
             title: "Refund processed",
             body: `$${Number(refund.amount).toFixed(2)} has been refunded.`,
             disputeId: refund.dispute_id,
-          });
-        }
+          },
+        );
       }
-      return { ok: true, status: "refunded" };
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : "Refund failed";
-      await db.from("refund_records").update({ status: "failed", failure_reason: reason }).eq("id", refund.id);
-      if (refund.dispute_id) {
-        await notify(db, await adminUserIds(db), {
-          kind: "refund_failed",
-          title: "Refund failed",
-          body: reason,
-          disputeId: refund.dispute_id,
-        });
-      }
-      return { ok: false, status: "failed", reason };
     }
+
+    return { ok: true, status: "refunded" };
   });

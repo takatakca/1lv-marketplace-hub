@@ -41,15 +41,23 @@ export function stripeConfigured() {
   return Boolean(process.env.STRIPE_SECRET_KEY);
 }
 
-export async function stripeCall(path: string, body: Record<string, string>) {
+export async function stripeCall(
+  path: string,
+  body: Record<string, string>,
+  idempotencyKey?: string,
+) {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) throw new Error("Stripe not configured");
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${key}`,
+    "Content-Type": "application/x-www-form-urlencoded",
+  };
+  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+
   const res = await fetch(`${STRIPE_API}${path}`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
+    headers,
     body: new URLSearchParams(body).toString(),
   });
   const json = (await res.json()) as Record<string, unknown>;
@@ -155,81 +163,4 @@ export async function setVendorOrderHold(db: Db, vendorOrderId: string, amount: 
     await db.from("payouts").update({ status: "pending_review" }).eq("id", payoutId);
   }
   return { payoutId, paid: false };
-}
-
-/** Record the money movement of an approved refund against payouts. */
-export async function applyRefundToPayouts(
-  db: Db,
-  args: { vendorOrderId: string | null; vendorId: string; amount: number; note: string },
-) {
-  if (!args.vendorOrderId || args.amount <= 0) return { adjustment: false };
-
-  const { data: vo } = await db
-    .from("vendor_orders")
-    .select("id, refund_amount")
-    .eq("id", args.vendorOrderId)
-    .maybeSingle();
-  const current = Number((vo as { refund_amount?: number } | null)?.refund_amount ?? 0);
-  await db
-    .from("vendor_orders")
-    .update({ refund_amount: round2(current + args.amount), dispute_hold_amount: 0 })
-    .eq("id", args.vendorOrderId);
-
-  const { data: item } = await db
-    .from("payout_items")
-    .select("payout_id")
-    .eq("vendor_order_id", args.vendorOrderId)
-    .maybeSingle();
-  const payoutId = (item as { payout_id?: string } | null)?.payout_id ?? null;
-
-  if (!payoutId) {
-    // Not paid out yet — the generator will subtract refund_amount later.
-    return { adjustment: false };
-  }
-
-  const { data: payout } = await db.from("payouts").select("id, status").eq("id", payoutId).maybeSingle();
-  const status = (payout as { status?: string } | null)?.status;
-
-  if (status === "paid" || status === "processing") {
-    // Money already left — claw it back on the next payout.
-    await db.from("payout_adjustments").insert({
-      vendor_id: args.vendorId,
-      vendor_order_id: args.vendorOrderId,
-      payout_id: payoutId,
-      kind: "refund_clawback",
-      amount: -round2(args.amount),
-      note: args.note,
-    });
-    return { adjustment: true };
-  }
-
-  // Still reviewable — hold it so an admin regenerates or re-approves.
-  await db.from("payouts").update({ status: "held" }).eq("id", payoutId);
-  return { adjustment: false };
-}
-
-export async function refreshOrderPaymentStatus(db: Db, orderId: string) {
-  const { data: order } = await db
-    .from("orders")
-    .select("total, payment_status")
-    .eq("id", orderId)
-    .maybeSingle();
-  const total = Number((order as { total?: number } | null)?.total ?? 0);
-  const { data: refunds } = await db
-    .from("refund_records")
-    .select("amount, status")
-    .eq("order_id", orderId)
-    .eq("status", "refunded");
-  const refunded = ((refunds ?? []) as Array<{ amount: number }>).reduce(
-    (s, r) => s + Number(r.amount ?? 0),
-    0,
-  );
-  if (refunded <= 0) return;
-  const fullyRefunded = round2(refunded) >= round2(total);
-  const next = fullyRefunded ? "refunded" : "partially_refunded";
-  await db.from("orders").update({ payment_status: next }).eq("id", orderId);
-
-  if (fullyRefunded) {
-    await db.rpc("mark_order_promotion_refunded", { _order_id: orderId });
-  }
 }

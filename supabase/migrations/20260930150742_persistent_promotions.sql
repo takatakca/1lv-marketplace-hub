@@ -1182,3 +1182,273 @@ COMMENT ON FUNCTION public.reserve_order_promotion(
   uuid, text, uuid, text, numeric
 ) IS
   'Validates promotion window, limits, first-order rule, include/exclude targets and computes trusted savings for an order.';
+
+
+-- Finalize successful Stripe refunds as one financial transaction.
+ALTER TABLE public.payout_adjustments
+  ADD COLUMN IF NOT EXISTS refund_id uuid
+  REFERENCES public.refund_records(id) ON DELETE SET NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS payout_adjustments_refund_unique
+  ON public.payout_adjustments(refund_id)
+  WHERE refund_id IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION public.finalize_refund_accounting(
+  _refund_id uuid,
+  _stripe_refund_id text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_refund public.refund_records%ROWTYPE;
+  v_vendor_order public.vendor_orders%ROWTYPE;
+  v_order_total numeric;
+  v_reserved_total numeric := 0;
+  v_refunded_total numeric := 0;
+  v_payout_id uuid;
+  v_payout_status public.payout_status;
+  v_adjustment boolean := false;
+  v_fully_refunded boolean := false;
+  v_has_other_open_dispute boolean := false;
+BEGIN
+  IF _refund_id IS NULL
+     OR _stripe_refund_id IS NULL
+     OR btrim(_stripe_refund_id) = '' THEN
+    RAISE EXCEPTION 'Refund id and Stripe refund id are required'
+      USING ERRCODE = '22023';
+  END IF;
+
+  SELECT *
+  INTO v_refund
+  FROM public.refund_records
+  WHERE id = _refund_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Refund record not found'
+      USING ERRCODE = 'P0002';
+  END IF;
+
+  SELECT total
+  INTO v_order_total
+  FROM public.orders
+  WHERE id = v_refund.order_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Refund order not found'
+      USING ERRCODE = 'P0002';
+  END IF;
+
+  IF v_refund.status = 'refunded'::public.refund_status THEN
+    IF v_refund.stripe_refund_id IS DISTINCT FROM _stripe_refund_id THEN
+      RAISE EXCEPTION 'Refund is already linked to a different Stripe refund'
+        USING ERRCODE = '23505';
+    END IF;
+
+    SELECT COALESCE(sum(amount), 0)
+    INTO v_refunded_total
+    FROM public.refund_records
+    WHERE order_id = v_refund.order_id
+      AND status = 'refunded'::public.refund_status;
+
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.payout_adjustments
+      WHERE refund_id = v_refund.id
+    )
+    INTO v_adjustment;
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'already_finalized', true,
+      'adjustment', v_adjustment,
+      'fully_refunded', round(v_refunded_total, 2) >= round(v_order_total, 2)
+    );
+  END IF;
+
+  IF v_refund.status NOT IN (
+    'approved'::public.refund_status,
+    'processing'::public.refund_status,
+    'failed'::public.refund_status
+  ) THEN
+    RAISE EXCEPTION 'Refund is not eligible for finalization'
+      USING ERRCODE = '22023';
+  END IF;
+
+  IF v_refund.amount <= 0 THEN
+    RAISE EXCEPTION 'Refund amount must be greater than zero'
+      USING ERRCODE = '22023';
+  END IF;
+
+  SELECT COALESCE(sum(amount), 0)
+  INTO v_reserved_total
+  FROM public.refund_records
+  WHERE order_id = v_refund.order_id
+    AND id <> v_refund.id
+    AND status IN (
+      'approved'::public.refund_status,
+      'processing'::public.refund_status,
+      'refunded'::public.refund_status
+    );
+
+  IF round(v_reserved_total + v_refund.amount, 2) > round(v_order_total, 2) THEN
+    RAISE EXCEPTION 'Refund would exceed order total'
+      USING ERRCODE = '22023';
+  END IF;
+
+  IF v_refund.vendor_order_id IS NOT NULL THEN
+    SELECT *
+    INTO v_vendor_order
+    FROM public.vendor_orders
+    WHERE id = v_refund.vendor_order_id
+    FOR UPDATE;
+
+    IF FOUND THEN
+      SELECT COALESCE(sum(amount), 0)
+      INTO v_reserved_total
+      FROM public.refund_records
+      WHERE vendor_order_id = v_refund.vendor_order_id
+        AND id <> v_refund.id
+        AND status IN (
+          'approved'::public.refund_status,
+          'processing'::public.refund_status,
+          'refunded'::public.refund_status
+        );
+
+      IF round(v_reserved_total + v_refund.amount, 2)
+         > round(v_vendor_order.subtotal, 2) THEN
+        RAISE EXCEPTION 'Refund would exceed vendor order subtotal'
+          USING ERRCODE = '22023';
+      END IF;
+    END IF;
+  END IF;
+
+  UPDATE public.refund_records
+  SET status = 'refunded'::public.refund_status,
+      stripe_refund_id = _stripe_refund_id,
+      processed_at = now(),
+      failure_reason = NULL,
+      updated_at = now()
+  WHERE id = v_refund.id;
+
+  IF v_refund.vendor_order_id IS NOT NULL AND v_vendor_order.id IS NOT NULL THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.disputes
+      WHERE vendor_order_id = v_refund.vendor_order_id
+        AND id IS DISTINCT FROM v_refund.dispute_id
+        AND status IN (
+          'open'::public.dispute_status,
+          'under_review'::public.dispute_status,
+          'waiting_customer'::public.dispute_status,
+          'waiting_vendor'::public.dispute_status
+        )
+    )
+    INTO v_has_other_open_dispute;
+
+    UPDATE public.vendor_orders
+    SET refund_amount = round(
+          (COALESCE(refund_amount, 0) + v_refund.amount)::numeric,
+          2
+        ),
+        dispute_hold_amount = CASE
+          WHEN v_has_other_open_dispute THEN dispute_hold_amount
+          ELSE 0
+        END,
+        updated_at = now()
+    WHERE id = v_refund.vendor_order_id;
+
+    SELECT payout_id
+    INTO v_payout_id
+    FROM public.payout_items
+    WHERE vendor_order_id = v_refund.vendor_order_id
+    LIMIT 1;
+
+    IF v_payout_id IS NOT NULL THEN
+      SELECT status
+      INTO v_payout_status
+      FROM public.payouts
+      WHERE id = v_payout_id
+      FOR UPDATE;
+
+      IF v_payout_status IN (
+        'paid'::public.payout_status,
+        'processing'::public.payout_status
+      ) THEN
+        INSERT INTO public.payout_adjustments (
+          vendor_id,
+          vendor_order_id,
+          payout_id,
+          refund_id,
+          kind,
+          amount,
+          note
+        )
+        VALUES (
+          v_vendor_order.vendor_id,
+          v_refund.vendor_order_id,
+          v_payout_id,
+          v_refund.id,
+          'refund_clawback',
+          -round(v_refund.amount::numeric, 2),
+          'Stripe refund ' || _stripe_refund_id
+        )
+        ON CONFLICT (refund_id)
+          WHERE refund_id IS NOT NULL
+        DO NOTHING;
+
+        SELECT EXISTS (
+          SELECT 1
+          FROM public.payout_adjustments
+          WHERE refund_id = v_refund.id
+        )
+        INTO v_adjustment;
+      ELSIF v_payout_status IS NOT NULL
+            AND v_payout_status <> 'cancelled'::public.payout_status THEN
+        UPDATE public.payouts
+        SET status = 'held'::public.payout_status,
+            updated_at = now()
+        WHERE id = v_payout_id;
+      END IF;
+    END IF;
+  END IF;
+
+  SELECT COALESCE(sum(amount), 0)
+  INTO v_refunded_total
+  FROM public.refund_records
+  WHERE order_id = v_refund.order_id
+    AND status = 'refunded'::public.refund_status;
+
+  v_fully_refunded :=
+    round(v_refunded_total, 2) >= round(v_order_total, 2);
+
+  UPDATE public.orders
+  SET payment_status = CASE
+        WHEN v_fully_refunded
+          THEN 'refunded'::public.payment_status
+        ELSE 'partially_refunded'::public.payment_status
+      END,
+      updated_at = now()
+  WHERE id = v_refund.order_id;
+
+  IF v_fully_refunded THEN
+    PERFORM public.mark_order_promotion_refunded(v_refund.order_id);
+  END IF;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'already_finalized', false,
+    'adjustment', v_adjustment,
+    'fully_refunded', v_fully_refunded
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.finalize_refund_accounting(uuid, text)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.finalize_refund_accounting(uuid, text)
+  TO service_role;
