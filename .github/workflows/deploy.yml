@@ -152,6 +152,7 @@ jobs:
 
           supabase db start
           supabase db reset --local --no-seed
+          supabase db lint --local --schema public --level warning --fail-on error
 
           cleanup
           trap - EXIT
@@ -245,6 +246,64 @@ jobs:
 
           echo "enabled=$SHOULD_DEPLOY" >> "$GITHUB_OUTPUT"
           echo "Deployment enabled: $SHOULD_DEPLOY"
+
+      # ------------------------------------------------------------
+      # Validate every deploy-time secret/variable before SSH.
+      # Values are never printed.
+      # ------------------------------------------------------------
+      - name: Validate production deployment configuration
+        if: steps.deployment.outputs.enabled == 'true'
+        shell: bash
+        env:
+          HOST: ${{ secrets.MOCHAHOST_HOST }}
+          PORT: ${{ secrets.MOCHAHOST_SSH_PORT }}
+          USER: ${{ secrets.MOCHAHOST_USER }}
+          APP_ROOT: ${{ secrets.MOCHAHOST_APP_ROOT }}
+          SSH_PRIVATE_KEY: ${{ secrets.MOCHAHOST_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.MOCHAHOST_KNOWN_HOSTS }}
+          SITE_URL: ${{ vars.PRODUCTION_URL }}
+        run: |
+          set -euo pipefail
+
+          missing=0
+          for name in HOST PORT USER APP_ROOT SSH_PRIVATE_KEY SSH_KNOWN_HOSTS SITE_URL; do
+            if [ -z "${!name:-}" ]; then
+              echo "ERROR: required deployment configuration $name is missing."
+              missing=1
+            fi
+          done
+
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+          if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+            echo "ERROR: MOCHAHOST_SSH_PORT must be a valid TCP port."
+            exit 1
+          fi
+
+          case "$APP_ROOT" in
+            /*) ;;
+            *)
+              echo "ERROR: MOCHAHOST_APP_ROOT must be an absolute path."
+              exit 1
+              ;;
+          esac
+
+          case "$SITE_URL" in
+            https://*) ;;
+            *)
+              echo "ERROR: PRODUCTION_URL must use HTTPS."
+              exit 1
+              ;;
+          esac
+
+          if ! printf '%s' "$SSH_PRIVATE_KEY" | grep -q "PRIVATE KEY"; then
+            echo "ERROR: MOCHAHOST_SSH_PRIVATE_KEY does not look like a private key."
+            exit 1
+          fi
+
+          echo "Production deployment configuration passed preflight."
 
       # ------------------------------------------------------------
       # 10. Configure SSH
