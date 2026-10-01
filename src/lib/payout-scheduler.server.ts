@@ -14,6 +14,7 @@ import type { Database } from "@/integrations/supabase/types";
  */
 
 type Db = SupabaseClient<Database>;
+type PayoutDbStatus = Database["public"]["Enums"]["payout_status"];
 
 const STRIPE_API = "https://api.stripe.com/v1";
 
@@ -321,7 +322,7 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
   const payout = row as {
     id: string;
     vendor_id: string;
-    status: string;
+    status: PayoutDbStatus;
     net_amount: number;
     currency: string;
     stripe_transfer_id: string | null;

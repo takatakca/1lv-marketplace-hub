@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { Database } from "@/integrations/supabase/types";
 
 /**
  * Payout engine server functions (admin only).
@@ -75,7 +76,10 @@ export const setPayoutStatus = createServerFn({ method: "POST" })
             ? "cancelled"
             : "pending_review";
 
-    const patch: Record<string, unknown> = { status: next, failure_reason: null };
+    const patch: Database["public"]["Tables"]["payouts"]["Update"] = {
+      status: next,
+      failure_reason: null,
+    };
     if (next === "approved") {
       patch.approved_by = context.userId;
       patch.approved_at = new Date().toISOString();
