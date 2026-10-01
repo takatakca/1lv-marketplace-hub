@@ -203,23 +203,9 @@ function ProductPage() {
               )}
             </div>
 
-            {/* Details on desktop under gallery */}
+            {/* Detailed product information remains close to the gallery on desktop. */}
             <div className="mt-6 hidden lg:block">
-              <h1 className="font-display text-2xl font-extrabold tracking-tight text-navy">{product.title}</h1>
-              <div className="mt-2 flex flex-wrap items-center gap-3">
-                {product.rating > 0 && (
-                  <RatingStars rating={product.rating} reviews={product.reviews} />
-                )}
-                {product.sold > 0 && (
-                  <span className="text-xs text-muted-foreground">
-                    {product.sold.toLocaleString()} sold
-                  </span>
-                )}
-                {product.tags.includes("local") && (
-                  <span className="rounded-md bg-success/10 px-2 py-0.5 text-[11px] font-bold text-success">🇨🇦 Ships from Canada</span>
-                )}
-              </div>
-              <div className="mt-4 rounded-xl border border-border bg-card">
+              <div className="rounded-xl border border-border bg-card">
                 <div className="px-4">
                   <Accordion title="Product details" defaultOpen>
                     {product.description}
@@ -227,9 +213,11 @@ function ProductPage() {
                   <Accordion title="Specifications">
                     <ul className="space-y-1">
                       <li>Category: {category?.name ?? product.category}</li>
-                      <li>Seller: {vendor?.name}</li>
+                      {vendor?.name && <li>Seller: {vendor.name}</li>}
                       <li>Product ID: {product.id}</li>
-                      {product.variants?.map((v) => <li key={v.name}>{v.name}: {v.options.join(", ")}</li>)}
+                      {product.variants?.map((v) => (
+                        <li key={v.name}>{v.name}: {v.options.join(", ")}</li>
+                      ))}
                     </ul>
                   </Accordion>
                   <Accordion title="Shipping & delivery">
@@ -271,6 +259,36 @@ function ProductPage() {
             </div>
 
             <div className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-merch">
+              <div className="hidden border-b border-border pb-4 lg:block">
+                <h1 className="font-display text-2xl font-extrabold leading-tight tracking-tight text-navy">
+                  {product.title}
+                </h1>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                  {product.rating > 0 && (
+                    <RatingStars rating={product.rating} reviews={product.reviews} />
+                  )}
+                  {product.sold > 0 && (
+                    <span className="font-semibold text-deal">
+                      {product.sold.toLocaleString()} sold
+                    </span>
+                  )}
+                  {vendor?.country === "CA" && (
+                    <span className="rounded-md bg-success/10 px-2 py-0.5 font-bold text-success">
+                      🇨🇦 Canadian seller
+                    </span>
+                  )}
+                </div>
+                {vendor?.name && (
+                  <Link
+                    to="/store/$slug"
+                    params={{ slug: vendor.slug }}
+                    className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-electric hover:underline"
+                  >
+                    <Store size={12} /> Sold by {vendor.name}
+                  </Link>
+                )}
+              </div>
+
               <div>
                 <div className="flex flex-wrap items-baseline gap-2">
                   <span className="font-display text-3xl font-extrabold tracking-tight text-deal">{formatCAD(product.price)}</span>
@@ -403,19 +421,15 @@ function ProductPage() {
                 <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-gradient-electric text-white"><Store size={18} /></div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-bold text-navy">{vendor.name} {vendor.country === "CA" && "🇨🇦"}</div>
-                  {(vendor.rating > 0 || vendor.city || vendor.yearsActive > 0) && (
-                    <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                      {vendor.rating > 0 && (
-                        <>
-                          <Star size={10} className="fill-warning text-warning" /> {vendor.rating}
-                        </>
-                      )}
-                      {vendor.city && <span>{vendor.city}</span>}
-                      {vendor.yearsActive > 0 && (
-                        <span>{vendor.yearsActive}y on 1LV</span>
-                      )}
-                    </div>
-                  )}
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                    {vendor.country === "CA" && <span>Canadian seller</span>}
+                    {vendor.city && <span>· {vendor.city}</span>}
+                    {demo && vendor.rating > 0 && (
+                      <span className="inline-flex items-center gap-1">
+                        · <Star size={10} className="fill-warning text-warning" /> {vendor.rating}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <span className="shrink-0 text-xs font-bold text-electric">Visit store</span>
               </Link>
@@ -449,7 +463,7 @@ function ProductPage() {
               </div>
               <RatingStars rating={product.rating} size={16} />
               <p className="mt-1 text-xs text-muted-foreground">
-                {product.reviews.toLocaleString()} verified reviews
+                {product.reviews.toLocaleString()} reviews
               </p>
             </div>
           </section>
@@ -464,7 +478,7 @@ function ProductPage() {
 
         {related.length > 0 && (
           <section className="mt-10">
-            <SectionHead eyebrow="Similar items" title="Customers also viewed" />
+            <SectionHead eyebrow="More choices" title="Similar products" />
             <ProductGrid products={related} cols={6} />
           </section>
         )}
