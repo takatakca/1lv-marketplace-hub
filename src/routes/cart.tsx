@@ -72,7 +72,7 @@ function CartPage() {
 
                   <ul className="divide-y divide-border">
                     {group.map((item) => (
-                      <li key={item.productId} className="flex gap-4 p-4">
+                      <li key={item.lineId} className="flex gap-4 p-4">
                         <Link to="/product/$slug" params={{ slug: item.slug }}>
                           <img
                             src={item.image}
@@ -101,19 +101,19 @@ function CartPage() {
 
                           <div className="mt-auto flex items-center justify-between gap-3 pt-3">
                             <div className="flex items-center gap-2">
-                              <label className="sr-only" htmlFor={`qty-${item.productId}`}>
+                              <label className="sr-only" htmlFor={`qty-${item.lineId}`}>
                                 Quantity for {item.title}
                               </label>
                               <input
-                                id={`qty-${item.productId}`}
+                                id={`qty-${item.lineId}`}
                                 type="number"
                                 min={1}
                                 value={item.qty}
-                                onChange={(event) => setQty(item.productId, Number(event.target.value) || 1)}
+                                onChange={(event) => setQty(item.lineId, Number(event.target.value) || 1)}
                                 className="w-16 rounded-md border border-border px-2 py-1 text-sm"
                               />
                               <button
-                                onClick={() => remove(item.productId)}
+                                onClick={() => remove(item.lineId)}
                                 className="rounded-md p-1 text-muted-foreground transition hover:bg-destructive/5 hover:text-destructive"
                                 aria-label={`Remove ${item.title}`}
                               >

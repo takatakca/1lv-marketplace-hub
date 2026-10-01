@@ -410,10 +410,17 @@ function OrderSummary({
       <h3 className="font-bold text-navy">Order summary</h3>
       <ul className="max-h-72 space-y-2 overflow-y-auto text-sm">
         {items.map((item) => (
-          <li key={item.productId} className="flex gap-3">
+          <li key={item.lineId} className="flex gap-3">
             <img src={item.image} alt={item.title} className="h-12 w-12 rounded-md object-cover" />
             <div className="flex-1 text-xs">
               <p className="line-clamp-2 font-medium text-navy">{item.title}</p>
+              {item.variant && (
+                <p className="text-muted-foreground">
+                  {Object.entries(item.variant)
+                    .map(([key, value]) => `${key}: ${value}`)
+                    .join(" · ")}
+                </p>
+              )}
               <p className="text-muted-foreground">Qty {item.qty}</p>
             </div>
             <span className="text-sm font-semibold">{formatCAD(item.price * item.qty)}</span>
