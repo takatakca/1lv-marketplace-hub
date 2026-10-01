@@ -455,7 +455,11 @@ jobs:
             then
               if node -e '
                 const payload = JSON.parse(process.argv[1]);
-                if (payload.ok !== true || payload.runtime !== "tanstack-start") process.exit(1);
+                if (
+                  payload.ok !== true ||
+                  payload.runtime !== "tanstack-start" ||
+                  payload.database !== "ready"
+                ) process.exit(1);
               ' "$HEALTH" && \
                  curl --fail --silent --show-error --location --max-time 20 "$SITE_URL/" > /dev/null
               then
