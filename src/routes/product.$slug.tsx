@@ -10,20 +10,96 @@ import { ProductImage } from "@/components/ProductImage";
 import { RatingStars } from "@/components/RatingStars";
 import { StickyBuyBar } from "@/components/StickyBuyBar";
 import { RecentlyViewed } from "@/components/RecentlyViewed";
-import { getProduct, getVendor, products, productsByCategory, formatCAD, getCategory, type Product } from "@/lib/data";
+import {
+  getProduct as getDemoProduct,
+  getVendor as getDemoVendor,
+  products as demoProducts,
+  productsByCategory as demoProductsByCategory,
+  formatCAD,
+  getCategory,
+  type Product,
+  type Vendor,
+} from "@/lib/data";
+import {
+  getPublicCatalogProductBySlug,
+  listPublicCatalogProducts,
+  listPublicCatalogVendors,
+} from "@/services/public-catalog";
+import { getPublicMarketplaceSettings } from "@/lib/public-marketplace-settings.functions";
 import { useCart } from "@/hooks/use-cart";
 import { useWishlist } from "@/hooks/use-wishlist";
 import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 import { toast } from "sonner";
 
-type LoaderData = { product: Product };
+type LoaderData = {
+  product: Product;
+  vendor: Vendor | null;
+  related: Product[];
+  fromStore: Product[];
+  demo: boolean;
+};
 
 export const Route = createFileRoute("/product/$slug")({
   component: ProductPage,
-  loader: ({ params }): LoaderData => {
-    const product = getProduct(params.slug);
-    if (!product) throw notFound();
-    return { product };
+  loader: async ({ params }): Promise<LoaderData> => {
+    const settings = await getPublicMarketplaceSettings().catch(() => null);
+
+    try {
+      const [liveProduct, liveProducts, liveVendors] = await Promise.all([
+        getPublicCatalogProductBySlug(params.slug),
+        listPublicCatalogProducts(),
+        listPublicCatalogVendors(),
+      ]);
+
+      if (liveProduct) {
+        return {
+          product: liveProduct,
+          vendor:
+            liveVendors.find((vendor) => vendor.slug === liveProduct.vendorSlug) ??
+            null,
+          related: liveProducts
+            .filter(
+              (item) =>
+                item.category === liveProduct.category &&
+                item.id !== liveProduct.id,
+            )
+            .slice(0, 6),
+          fromStore: liveProducts
+            .filter(
+              (item) =>
+                item.vendorSlug === liveProduct.vendorSlug &&
+                item.id !== liveProduct.id,
+            )
+            .slice(0, 8),
+          demo: false,
+        };
+      }
+    } catch (error) {
+      if (!settings?.demo_mode) throw error;
+    }
+
+    if (settings?.demo_mode) {
+      const demoProduct = getDemoProduct(params.slug);
+      if (demoProduct) {
+        return {
+          product: demoProduct,
+          vendor: getDemoVendor(demoProduct.vendorSlug) ?? null,
+          related: demoProductsByCategory(demoProduct.category)
+            .filter((item) => item.id !== demoProduct.id)
+            .slice(0, 6),
+          fromStore: demoProducts
+            .filter(
+              (item) =>
+                item.vendorSlug === demoProduct.vendorSlug &&
+                item.id !== demoProduct.id,
+            )
+            .slice(0, 8),
+          demo: true,
+        };
+      }
+    }
+
+    throw notFound();
   },
   head: ({ loaderData }) => {
     const data = loaderData as LoaderData | undefined;
@@ -59,11 +135,9 @@ function Accordion({ title, children, defaultOpen = false }: { title: string; ch
 }
 
 function ProductPage() {
-  const { product } = Route.useLoaderData() as LoaderData;
-  const vendor = getVendor(product.vendorSlug);
+  const { product, vendor, related, fromStore, demo } =
+    Route.useLoaderData() as LoaderData;
   const category = getCategory(product.category);
-  const related = productsByCategory(product.category).filter((p) => p.id !== product.id).slice(0, 6);
-  const fromStore = products.filter((p) => p.vendorSlug === product.vendorSlug && p.id !== product.id).slice(0, 8);
   const [activeImg, setActiveImg] = useState(0);
   const [qty, setQty] = useState(1);
   const initialVariant: Record<string, string> = {};
@@ -77,7 +151,12 @@ function ProductPage() {
   const off = product.compareAt && product.compareAt > product.price
     ? Math.round(((product.compareAt - product.price) / product.compareAt) * 100)
     : 0;
-  const eta = new Date(Date.now() + 1000 * 60 * 60 * 24 * (product.shipping === "fast" ? 2 : 6));
+  const eta = demo
+    ? new Date(
+        Date.now() +
+          1000 * 60 * 60 * 24 * (product.shipping === "fast" ? 2 : 6),
+      )
+    : null;
 
   return (
     <AppLayout>
@@ -124,8 +203,14 @@ function ProductPage() {
             <div className="mt-6 hidden lg:block">
               <h1 className="font-display text-2xl font-extrabold tracking-tight text-navy">{product.title}</h1>
               <div className="mt-2 flex flex-wrap items-center gap-3">
-                <RatingStars rating={product.rating} reviews={product.reviews} />
-                <span className="text-xs text-muted-foreground">{product.sold.toLocaleString()} sold</span>
+                {product.rating > 0 && (
+                  <RatingStars rating={product.rating} reviews={product.reviews} />
+                )}
+                {product.sold > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {product.sold.toLocaleString()} sold
+                  </span>
+                )}
                 {product.tags.includes("local") && (
                   <span className="rounded-md bg-success/10 px-2 py-0.5 text-[11px] font-bold text-success">🇨🇦 Ships from Canada</span>
                 )}
@@ -144,15 +229,20 @@ function ProductPage() {
                     </ul>
                   </Accordion>
                   <Accordion title="Shipping & delivery">
-                    {product.shipping === "fast"
-                      ? "Express 2-day delivery across Canada."
-                      : product.shipping === "free"
-                      ? "Free standard shipping, 4–8 business days."
-                      : "Standard shipping, 5–10 business days. Free over $49 CAD."}
+                    {demo
+                      ? product.shipping === "fast"
+                        ? "Express 2-day delivery across Canada."
+                        : product.shipping === "free"
+                          ? "Free standard shipping, 4–8 business days."
+                          : "Standard shipping, 5–10 business days."
+                      : vendor?.shippingPolicy ??
+                        "Shipping options and delivery estimates are confirmed at checkout."}
                   </Accordion>
                   <Accordion title="Returns & buyer protection">
-                    30-day returns on unused items. Every order is covered by 1LV buyer protection — if it doesn't arrive
-                    as described, you're refunded.
+                    {demo
+                      ? "30-day returns on unused items. Every order is covered by 1LV buyer protection."
+                      : vendor?.returnPolicy ??
+                        "Return eligibility follows the seller policy and 1LV buyer-protection terms shown at checkout."}
                   </Accordion>
                 </div>
               </div>
@@ -165,8 +255,14 @@ function ProductPage() {
             <div className="mb-3 lg:hidden">
               <h1 className="font-display text-xl font-extrabold tracking-tight text-navy">{product.title}</h1>
               <div className="mt-1.5 flex flex-wrap items-center gap-3">
-                <RatingStars rating={product.rating} reviews={product.reviews} />
-                <span className="text-xs text-muted-foreground">{product.sold.toLocaleString()} sold</span>
+                {product.rating > 0 && (
+                  <RatingStars rating={product.rating} reviews={product.reviews} />
+                )}
+                {product.sold > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {product.sold.toLocaleString()} sold
+                  </span>
+                )}
               </div>
             </div>
 
@@ -201,8 +297,24 @@ function ProductPage() {
               <div className="space-y-1.5 rounded-md bg-muted/50 px-3 py-2.5 text-xs">
                 <p className="flex items-center gap-2 text-navy">
                   <Truck size={14} className="text-electric" />
-                  {product.shipping === "free" ? "Free shipping" : product.shipping === "fast" ? "Express shipping" : "Standard shipping"} · arrives by{" "}
-                  <strong>{eta.toLocaleDateString("en-CA", { month: "short", day: "numeric" })}</strong>
+                  {demo && eta ? (
+                    <>
+                      {product.shipping === "free"
+                        ? "Free shipping"
+                        : product.shipping === "fast"
+                          ? "Express shipping"
+                          : "Standard shipping"}{" "}
+                      · arrives by{" "}
+                      <strong>
+                        {eta.toLocaleDateString("en-CA", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </strong>
+                    </>
+                  ) : (
+                    "Shipping method and delivery estimate confirmed at checkout"
+                  )}
                 </p>
                 <p className="flex items-center gap-2 text-muted-foreground">
                   <PackageCheck size={14} className="text-success" /> Free returns within 30 days
@@ -282,9 +394,19 @@ function ProductPage() {
                 <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-gradient-electric text-white"><Store size={18} /></div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-bold text-navy">{vendor.name} {vendor.country === "CA" && "🇨🇦"}</div>
-                  <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                    <Star size={10} className="fill-warning text-warning" /> {vendor.rating} · {vendor.city} · {vendor.yearsActive}y on 1LV
-                  </div>
+                  {(vendor.rating > 0 || vendor.city || vendor.yearsActive > 0) && (
+                    <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                      {vendor.rating > 0 && (
+                        <>
+                          <Star size={10} className="fill-warning text-warning" /> {vendor.rating}
+                        </>
+                      )}
+                      {vendor.city && <span>{vendor.city}</span>}
+                      {vendor.yearsActive > 0 && (
+                        <span>{vendor.yearsActive}y on 1LV</span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <span className="shrink-0 text-xs font-bold text-electric">Visit store</span>
               </Link>
@@ -295,34 +417,34 @@ function ProductPage() {
         {/* Mobile detail accordions */}
         <div className="mt-8 rounded-xl border border-border bg-card px-4 lg:hidden">
           <Accordion title="Product details" defaultOpen>{product.description}</Accordion>
-          <Accordion title="Shipping & delivery">Ships to all Canadian provinces. Free over $49 CAD.</Accordion>
-          <Accordion title="Returns & buyer protection">30-day returns on unused items, covered by 1LV buyer protection.</Accordion>
+          <Accordion title="Shipping & delivery">
+            {demo
+              ? "Ships to all Canadian provinces."
+              : vendor?.shippingPolicy ??
+                "Shipping options and delivery estimates are confirmed at checkout."}
+          </Accordion>
+          <Accordion title="Returns & buyer protection">
+            {demo
+              ? "30-day returns on unused items, covered by 1LV buyer protection."
+              : vendor?.returnPolicy ??
+                "Return eligibility follows the seller policy and 1LV buyer-protection terms shown at checkout."}
+          </Accordion>
         </div>
 
-        {/* Review summary */}
-        <section className="mt-10 rounded-xl border border-border bg-card p-5 shadow-merch">
-          <div className="grid gap-6 sm:grid-cols-[200px_1fr]">
+        {/* Review summary is shown only when a real/demo review source exists. */}
+        {product.rating > 0 && product.reviews > 0 && (
+          <section className="mt-10 rounded-xl border border-border bg-card p-5 shadow-merch">
             <div className="text-center sm:text-left">
-              <div className="font-display text-4xl font-extrabold text-navy">{product.rating.toFixed(1)}</div>
+              <div className="font-display text-4xl font-extrabold text-navy">
+                {product.rating.toFixed(1)}
+              </div>
               <RatingStars rating={product.rating} size={16} />
-              <p className="mt-1 text-xs text-muted-foreground">{product.reviews.toLocaleString()} verified reviews</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {product.reviews.toLocaleString()} verified reviews
+              </p>
             </div>
-            <div className="space-y-1.5">
-              {[5, 4, 3, 2, 1].map((s) => {
-                const pct = s === 5 ? 72 : s === 4 ? 18 : s === 3 ? 6 : s === 2 ? 2 : 2;
-                return (
-                  <div key={s} className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="w-8">{s}★</span>
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                      <div className="h-full rounded-full bg-warning" style={{ width: `${pct}%` }} />
-                    </div>
-                    <span className="w-9 text-right">{pct}%</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {fromStore.length > 0 && vendor && (
           <section className="mt-10">

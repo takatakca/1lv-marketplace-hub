@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { ShieldCheck, MapPin, Package } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { getPublicVendorBySlug, type PublicVendorRecord } from "@/services/vendors";
-import { listVendorProducts, type ProductRecord } from "@/services/products";
+import { listPublicCatalogProducts } from "@/services/public-catalog";
+import type { Product } from "@/lib/data";
 import { resolveAssetUrl } from "@/services/vendor-assets";
 import { formatCAD } from "@/lib/data";
 
@@ -11,8 +12,10 @@ export const Route = createFileRoute("/store/$slug")({
   loader: async ({ params }) => {
     const vendor = await getPublicVendorBySlug(params.slug);
     if (!vendor) throw notFound();
-    const products = await listVendorProducts(vendor.id);
-    return { vendor, products: products.filter((p) => p.status === "active") };
+    const products = (await listPublicCatalogProducts()).filter(
+      (product) => product.vendorSlug === vendor.slug,
+    );
+    return { vendor, products };
   },
   errorComponent: ({ error }) => (
     <AppLayout>
@@ -46,7 +49,10 @@ export const Route = createFileRoute("/store/$slug")({
 });
 
 function StorePage() {
-  const { vendor, products } = Route.useLoaderData() as { vendor: PublicVendorRecord; products: ProductRecord[] };
+  const { vendor, products } = Route.useLoaderData() as {
+    vendor: PublicVendorRecord;
+    products: Product[];
+  };
   const [logo, setLogo] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
 
