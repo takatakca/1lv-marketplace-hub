@@ -92,6 +92,7 @@ RETURNS TABLE (
   free_shipping_threshold numeric,
   standard_shipping_fee numeric,
   allow_guest_checkout boolean,
+  demo_mode boolean,
   require_vendor_approval boolean,
   require_product_approval boolean
 )
@@ -106,6 +107,7 @@ AS $$
     s.free_shipping_threshold,
     s.standard_shipping_fee,
     s.allow_guest_checkout,
+    s.demo_mode,
     s.require_vendor_approval,
     s.require_product_approval
   FROM public.marketplace_settings AS s

@@ -87,7 +87,7 @@ function Page() {
           ["require_vendor_approval", "Require vendor approval", "New vendor applications remain pending until reviewed."],
           ["require_product_approval", "Require product approval", "Submitted products require marketplace moderation."],
           ["allow_guest_checkout", "Allow guest checkout", "Customers may buy without creating an account."],
-          ["demo_mode", "Demo mode", "Permit demo fallbacks on supported non-financial screens."],
+          ["demo_mode", "Demo mode", "Allow signed-out admin/vendor preview with seed data. Keep disabled in production unless a preview is intentionally required."],
         ] as const).map(([key, label, description]) => (
           <label key={key} className="flex items-start gap-3 rounded-md border border-border bg-background p-3">
             <input type="checkbox" checked={settings[key]} onChange={(e) => set(key, e.target.checked)} className="mt-1" />

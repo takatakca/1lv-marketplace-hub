@@ -10,6 +10,7 @@ export type PublicMarketplaceSettings = {
   free_shipping_threshold: number;
   standard_shipping_fee: number;
   allow_guest_checkout: boolean;
+  demo_mode: boolean;
   require_vendor_approval: boolean;
   require_product_approval: boolean;
 };
@@ -20,6 +21,7 @@ export const PUBLIC_MARKETPLACE_DEFAULTS: PublicMarketplaceSettings = {
   free_shipping_threshold: FREE_SHIPPING_THRESHOLD_CAD,
   standard_shipping_fee: STANDARD_SHIPPING_FEE_CAD,
   allow_guest_checkout: true,
+  demo_mode: false,
   require_vendor_approval: true,
   require_product_approval: true,
 };
@@ -63,6 +65,10 @@ export const getPublicMarketplaceSettings = createServerFn({ method: "GET" }).ha
           typeof raw.allow_guest_checkout === "boolean"
             ? raw.allow_guest_checkout
             : PUBLIC_MARKETPLACE_DEFAULTS.allow_guest_checkout,
+        demo_mode:
+          typeof raw.demo_mode === "boolean"
+            ? raw.demo_mode
+            : PUBLIC_MARKETPLACE_DEFAULTS.demo_mode,
         require_vendor_approval:
           typeof raw.require_vendor_approval === "boolean"
             ? raw.require_vendor_approval
