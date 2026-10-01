@@ -157,6 +157,10 @@ function ProductPage() {
           1000 * 60 * 60 * 24 * (product.shipping === "fast" ? 2 : 6),
       )
     : null;
+  const maxQty =
+    product.trackInventory && typeof product.inventoryQuantity === "number"
+      ? Math.max(1, product.inventoryQuantity)
+      : 99;
 
   return (
     <AppLayout>
@@ -194,7 +198,7 @@ function ProductPage() {
               <ProductImage src={product.images[activeImg]} alt={product.title} eager />
               {off > 0 && (
                 <span className="absolute left-3 top-3 rounded-md bg-gradient-deal px-2 py-1 text-xs font-extrabold text-white shadow">
-                  -{off}% today
+                  -{off}% off
                 </span>
               )}
             </div>
@@ -224,7 +228,7 @@ function ProductPage() {
                     <ul className="space-y-1">
                       <li>Category: {category?.name ?? product.category}</li>
                       <li>Seller: {vendor?.name}</li>
-                      <li>SKU: {product.id.toUpperCase()}</li>
+                      <li>Product ID: {product.id}</li>
                       {product.variants?.map((v) => <li key={v.name}>{v.name}: {v.options.join(", ")}</li>)}
                     </ul>
                   </Accordion>
@@ -276,7 +280,7 @@ function ProductPage() {
                 </div>
                 {off > 0 && (
                   <p className="mt-1 text-xs font-semibold text-deal">
-                    You save {formatCAD((product.compareAt ?? 0) - product.price)} · limited-time price
+                    You save {formatCAD((product.compareAt ?? 0) - product.price)}
                   </p>
                 )}
               </div>
@@ -317,7 +321,7 @@ function ProductPage() {
                   )}
                 </p>
                 <p className="flex items-center gap-2 text-muted-foreground">
-                  <PackageCheck size={14} className="text-success" /> Free returns within 30 days
+                  <PackageCheck size={14} className="text-success" /> Return eligibility follows seller and marketplace terms
                 </p>
               </div>
 
@@ -349,7 +353,12 @@ function ProductPage() {
                     <Minus size={15} />
                   </button>
                   <span className="w-8 text-center text-sm font-bold text-navy">{qty}</span>
-                  <button onClick={() => setQty((q) => q + 1)} aria-label="Increase quantity" className="grid h-9 w-9 place-items-center text-muted-foreground hover:text-navy">
+                  <button
+                    onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
+                    disabled={qty >= maxQty}
+                    aria-label="Increase quantity"
+                    className="grid h-9 w-9 place-items-center text-muted-foreground hover:text-navy disabled:cursor-not-allowed disabled:opacity-35"
+                  >
                     <Plus size={15} />
                   </button>
                 </div>
@@ -379,9 +388,9 @@ function ProductPage() {
               </div>
 
               <div className="grid gap-1.5 border-t border-border pt-3 text-[11px] text-muted-foreground">
-                <span className="inline-flex items-center gap-2"><ShieldCheck size={13} className="text-success" /> 1LV buyer protection on every order</span>
-                <span className="inline-flex items-center gap-2"><Lock size={13} className="text-electric" /> Secure payment · Visa, Mastercard, Amex</span>
-                <span className="inline-flex items-center gap-2"><RefreshCw size={13} className="text-electric" /> 30-day returns, Canadian support</span>
+                <span className="inline-flex items-center gap-2"><ShieldCheck size={13} className="text-success" /> Order-linked buyer protection workflow</span>
+                <span className="inline-flex items-center gap-2"><Lock size={13} className="text-electric" /> Secure payment methods shown at checkout</span>
+                <span className="inline-flex items-center gap-2"><RefreshCw size={13} className="text-electric" /> Returns follow seller and marketplace terms</span>
               </div>
             </div>
 

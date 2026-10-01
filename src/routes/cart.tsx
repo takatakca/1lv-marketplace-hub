@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Trash2, ShoppingBag, ShieldCheck, Truck, RefreshCw, Ticket } from "lucide-react";
+import { Trash2, ShoppingBag, ShieldCheck, Lock, PackageCheck, Ticket } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { EmptyState } from "@/components/EmptyState";
 import { FreeShippingBar } from "@/components/FreeShippingBar";
@@ -177,10 +177,10 @@ function CartPage() {
                   <ShieldCheck size={14} className="text-success" /> Buyer protection
                 </div>
                 <div className="flex flex-col items-center gap-0.5 text-center">
-                  <Truck size={14} className="text-electric" /> Canadian delivery
+                  <Lock size={14} className="text-electric" /> Server-validated totals
                 </div>
                 <div className="flex flex-col items-center gap-0.5 text-center">
-                  <RefreshCw size={14} className="text-electric" /> 30-day returns
+                  <PackageCheck size={14} className="text-electric" /> Return terms apply
                 </div>
               </div>
 

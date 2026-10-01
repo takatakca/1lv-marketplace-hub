@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { Lock, MapPin } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
@@ -102,6 +102,8 @@ function Checkout() {
   const [province, setProvince] = useState<CanadianProvinceCode>("QC");
   const [paymentStep, setPaymentStep] = useState<PaymentStep | null>(null);
   const checkoutKeyRef = useRef<string | null>(null);
+  const guestBlocked =
+    !user && marketplaceSettings?.allow_guest_checkout === false;
 
   const preview = useMemo(
     () => marketplaceSettings
@@ -303,7 +305,11 @@ function Checkout() {
                   />
                 </div>
                 <p className="mt-2 text-xs text-muted-foreground">
-                  Signed-in customers keep this order in their account automatically. Guest checkout remains available.
+                  {user
+                    ? "This order will stay linked to your signed-in account."
+                    : guestBlocked
+                      ? "Current marketplace settings require you to sign in before checkout."
+                      : "Guest checkout is currently enabled; you can also sign in to keep orders in your account."}
                 </p>
               </section>
 
@@ -358,21 +364,30 @@ function Checkout() {
             </div>
 
             <OrderSummary items={items} pricing={previewPricing}>
-              <button
-                type="submit"
-                disabled={submitting || items.length === 0}
-                className="w-full rounded-md bg-electric px-4 py-3 text-sm font-bold text-electric-foreground shadow-glow transition hover:opacity-90 disabled:opacity-60"
-              >
-                {submitting
-                  ? "Processing…"
-                  : isStripeConfigured()
-                    ? preview
-                      ? `Continue to payment · ${formatCAD(preview.total)}`
-                      : "Continue to payment"
-                    : preview
-                      ? `Place order · ${formatCAD(preview.total)}`
-                      : "Place order"}
-              </button>
+              {guestBlocked ? (
+                <Link
+                  to="/login"
+                  className="block w-full rounded-md bg-navy px-4 py-3 text-center text-sm font-bold text-navy-foreground transition hover:bg-electric"
+                >
+                  Sign in to checkout
+                </Link>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={submitting || items.length === 0}
+                  className="w-full rounded-md bg-electric px-4 py-3 text-sm font-bold text-electric-foreground shadow-glow transition hover:opacity-90 disabled:opacity-60"
+                >
+                  {submitting
+                    ? "Processing…"
+                    : isStripeConfigured()
+                      ? preview
+                        ? `Continue to payment · ${formatCAD(preview.total)}`
+                        : "Continue to payment"
+                      : preview
+                        ? `Place order · ${formatCAD(preview.total)}`
+                        : "Place order"}
+                </button>
+              )}
             </OrderSummary>
           </form>
         )}
