@@ -110,3 +110,272 @@ $$;
 
 REVOKE ALL ON FUNCTION public.get_public_marketplace_settings() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_public_marketplace_settings() TO anon, authenticated, service_role;
+
+
+-- Enforce marketplace-controlled vendor and product lifecycle fields at the
+-- database boundary. Browser clients can still maintain their own profile and
+-- product content, but approval, subscription, commission, Stripe and TAKATAK
+-- operational state cannot be self-assigned.
+
+DROP POLICY IF EXISTS "Users can create their own vendor record" ON public.vendors;
+CREATE POLICY "Users can create their own vendor record"
+ON public.vendors FOR INSERT TO authenticated
+WITH CHECK (
+  (select auth.uid()) IS NOT NULL
+  AND (select auth.uid()) = user_id
+);
+
+DROP POLICY IF EXISTS "Vendors can update their own record" ON public.vendors;
+CREATE POLICY "Vendors can update their own record"
+ON public.vendors FOR UPDATE TO authenticated
+USING (
+  (select auth.uid()) IS NOT NULL
+  AND (select auth.uid()) = user_id
+)
+WITH CHECK (
+  (select auth.uid()) IS NOT NULL
+  AND (select auth.uid()) = user_id
+);
+
+DROP POLICY IF EXISTS "Vendors insert own products" ON public.products;
+CREATE POLICY "Vendors insert own products"
+ON public.products FOR INSERT TO authenticated
+WITH CHECK (
+  (select auth.uid()) IS NOT NULL
+  AND EXISTS (
+    SELECT 1
+    FROM public.vendors AS v
+    WHERE v.id = products.vendor_id
+      AND v.user_id = (select auth.uid())
+  )
+);
+
+DROP POLICY IF EXISTS "Vendors update own products" ON public.products;
+CREATE POLICY "Vendors update own products"
+ON public.products FOR UPDATE TO authenticated
+USING (
+  (select auth.uid()) IS NOT NULL
+  AND EXISTS (
+    SELECT 1
+    FROM public.vendors AS v
+    WHERE v.id = products.vendor_id
+      AND v.user_id = (select auth.uid())
+  )
+)
+WITH CHECK (
+  (select auth.uid()) IS NOT NULL
+  AND EXISTS (
+    SELECT 1
+    FROM public.vendors AS v
+    WHERE v.id = products.vendor_id
+      AND v.user_id = (select auth.uid())
+  )
+);
+
+DROP POLICY IF EXISTS "Vendors delete own products" ON public.products;
+CREATE POLICY "Vendors delete own products"
+ON public.products FOR DELETE TO authenticated
+USING (
+  (select auth.uid()) IS NOT NULL
+  AND EXISTS (
+    SELECT 1
+    FROM public.vendors AS v
+    WHERE v.id = products.vendor_id
+      AND v.user_id = (select auth.uid())
+  )
+);
+
+CREATE OR REPLACE FUNCTION public.enforce_vendor_marketplace_fields()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_uid uuid := auth.uid();
+  v_jwt_role text := COALESCE(current_setting('request.jwt.claim.role', true), '');
+  v_require_approval boolean;
+  v_default_commission numeric;
+BEGIN
+  IF session_user IN ('postgres', 'supabase_admin')
+     OR v_jwt_role = 'service_role'
+     OR (
+       v_uid IS NOT NULL
+       AND public.has_role(v_uid, 'admin'::public.app_role)
+     ) THEN
+    RETURN NEW;
+  END IF;
+
+  IF v_uid IS NULL OR NEW.user_id IS DISTINCT FROM v_uid THEN
+    RAISE EXCEPTION 'Vendor ownership mismatch'
+      USING ERRCODE = '42501';
+  END IF;
+
+  SELECT
+    s.require_vendor_approval,
+    s.default_commission_rate
+  INTO
+    v_require_approval,
+    v_default_commission
+  FROM public.marketplace_settings AS s
+  WHERE s.id = true;
+
+  IF v_require_approval IS NULL OR v_default_commission IS NULL THEN
+    RAISE EXCEPTION 'Marketplace vendor settings are unavailable'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    NEW.status := CASE
+      WHEN v_require_approval THEN 'pending'::public.vendor_status
+      ELSE 'active'::public.vendor_status
+    END;
+    NEW.commission_rate := v_default_commission;
+    NEW.subscription_status := 'none';
+    NEW.subscription_plan := NULL;
+    NEW.stripe_customer_id := NULL;
+    NEW.stripe_subscription_id := NULL;
+    NEW.stripe_connect_account_id := NULL;
+    NEW.payouts_enabled := false;
+    NEW.charges_enabled := false;
+    NEW.stripe_details_submitted := false;
+    NEW.stripe_connect_status := 'not_connected';
+    NEW.stripe_connect_last_checked_at := NULL;
+    NEW.takatak_company_id := NULL;
+    NEW.takatak_merchant_id := NULL;
+    NEW.takatak_sync_status := 'not_synced';
+    NEW.takatak_last_synced_at := NULL;
+    RETURN NEW;
+  END IF;
+
+  NEW.user_id := OLD.user_id;
+  NEW.status := OLD.status;
+  NEW.commission_rate := OLD.commission_rate;
+  NEW.subscription_status := OLD.subscription_status;
+  NEW.subscription_plan := OLD.subscription_plan;
+  NEW.stripe_customer_id := OLD.stripe_customer_id;
+  NEW.stripe_subscription_id := OLD.stripe_subscription_id;
+  NEW.stripe_connect_account_id := OLD.stripe_connect_account_id;
+  NEW.payouts_enabled := OLD.payouts_enabled;
+  NEW.charges_enabled := OLD.charges_enabled;
+  NEW.stripe_details_submitted := OLD.stripe_details_submitted;
+  NEW.stripe_connect_status := OLD.stripe_connect_status;
+  NEW.stripe_connect_last_checked_at := OLD.stripe_connect_last_checked_at;
+  NEW.takatak_company_id := OLD.takatak_company_id;
+  NEW.takatak_merchant_id := OLD.takatak_merchant_id;
+  NEW.takatak_sync_status := OLD.takatak_sync_status;
+  NEW.takatak_last_synced_at := OLD.takatak_last_synced_at;
+
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.enforce_vendor_marketplace_fields()
+FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS enforce_vendor_marketplace_fields_trigger ON public.vendors;
+CREATE TRIGGER enforce_vendor_marketplace_fields_trigger
+BEFORE INSERT OR UPDATE ON public.vendors
+FOR EACH ROW EXECUTE FUNCTION public.enforce_vendor_marketplace_fields();
+
+CREATE OR REPLACE FUNCTION public.enforce_product_marketplace_fields()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_uid uuid := auth.uid();
+  v_jwt_role text := COALESCE(current_setting('request.jwt.claim.role', true), '');
+  v_require_approval boolean;
+  v_vendor_status text;
+  v_subscription_status text;
+BEGIN
+  IF session_user IN ('postgres', 'supabase_admin')
+     OR v_jwt_role = 'service_role'
+     OR (
+       v_uid IS NOT NULL
+       AND public.has_role(v_uid, 'admin'::public.app_role)
+     ) THEN
+    RETURN NEW;
+  END IF;
+
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Authentication required'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF TG_OP = 'UPDATE' THEN
+    NEW.vendor_id := OLD.vendor_id;
+  END IF;
+
+  SELECT
+    v.status::text,
+    v.subscription_status
+  INTO
+    v_vendor_status,
+    v_subscription_status
+  FROM public.vendors AS v
+  WHERE v.id = NEW.vendor_id
+    AND v.user_id = v_uid;
+
+  IF v_vendor_status IS NULL THEN
+    RAISE EXCEPTION 'Vendor ownership mismatch'
+      USING ERRCODE = '42501';
+  END IF;
+
+  SELECT s.require_product_approval
+  INTO v_require_approval
+  FROM public.marketplace_settings AS s
+  WHERE s.id = true;
+
+  IF v_require_approval IS NULL THEN
+    RAISE EXCEPTION 'Marketplace product settings are unavailable'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  IF TG_OP = 'INSERT' AND NEW.status IN (
+    'rejected'::public.product_status,
+    'archived'::public.product_status
+  ) THEN
+    NEW.status := 'draft'::public.product_status;
+  END IF;
+
+  IF NEW.status IN (
+    'active'::public.product_status,
+    'pending_review'::public.product_status
+  ) THEN
+    IF v_vendor_status <> 'active'
+       OR v_subscription_status NOT IN ('active', 'trialing') THEN
+      RAISE EXCEPTION 'Vendor must be approved with an active subscription before publishing'
+        USING ERRCODE = '42501';
+    END IF;
+
+    IF v_require_approval THEN
+      IF TG_OP = 'UPDATE'
+         AND OLD.status = 'active'::public.product_status
+         AND NEW.status = 'active'::public.product_status THEN
+        NEW.status := 'active'::public.product_status;
+      ELSE
+        NEW.status := 'pending_review'::public.product_status;
+      END IF;
+    ELSE
+      NEW.status := 'active'::public.product_status;
+    END IF;
+  ELSIF TG_OP = 'UPDATE'
+        AND NEW.status = 'rejected'::public.product_status
+        AND OLD.status <> 'rejected'::public.product_status THEN
+    NEW.status := OLD.status;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.enforce_product_marketplace_fields()
+FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS enforce_product_marketplace_fields_trigger ON public.products;
+CREATE TRIGGER enforce_product_marketplace_fields_trigger
+BEFORE INSERT OR UPDATE ON public.products
+FOR EACH ROW EXECUTE FUNCTION public.enforce_product_marketplace_fields();
