@@ -29,16 +29,16 @@ export function AuthShell({
               for everything.
             </h2>
             <p className="mt-3 max-w-sm text-sm text-white/70">
-              Shop millions of products from trusted Canadian and global vendors.
-              Fast CAD checkout, buyer protection, and easy returns.
+              Browse live marketplace products from Canadian and global vendors.
+              Secure CAD checkout, buyer protection, and returns on eligible items.
             </p>
           </div>
 
           <ul className="grid gap-4">
-            <Benefit icon={<ShieldCheck size={18} />} title="Secure account" desc="Encrypted login, optional 2FA via SMS." />
-            <Benefit icon={<BadgeCheck size={18} />} title="Buyer protection" desc="Refunds on items not as described." />
-            <Benefit icon={<Truck size={18} />} title="Fast Canadian shipping" desc="Free over $49 from Canadian vendors." />
-            <Benefit icon={<Store size={18} />} title="Vendor-ready marketplace" desc="Open a store and start selling in minutes." />
+            <Benefit icon={<ShieldCheck size={18} />} title="Secure account" desc="Protected account and checkout flows." />
+            <Benefit icon={<BadgeCheck size={18} />} title="Buyer protection" desc="Order-linked dispute and refund workflows." />
+            <Benefit icon={<Truck size={18} />} title="Canada-wide shipping" desc="Shipping rates and eligibility are confirmed at checkout." />
+            <Benefit icon={<Store size={18} />} title="Vendor-ready marketplace" desc="Guided store onboarding, product approval and order management." />
           </ul>
 
           <p className="text-xs text-white/50">© {new Date().getFullYear()} 1LV.CA — Canadian marketplace</p>
