@@ -738,3 +738,82 @@ DROP TRIGGER IF EXISTS order_items_enforce_vendor_update ON public.order_items;
 CREATE TRIGGER order_items_enforce_vendor_update
 BEFORE UPDATE ON public.order_items
 FOR EACH ROW EXECUTE FUNCTION public.enforce_order_item_update();
+
+
+-- Stripe webhook claims are atomic and retryable. Existing event-log rows are
+-- treated as already processed; new webhook deliveries transition through
+-- processing -> processed/failed.
+ALTER TABLE public.stripe_event_log
+  ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'processed',
+  ADD COLUMN IF NOT EXISTS attempt_count integer NOT NULL DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS last_error text,
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+
+DO $$ BEGIN
+  ALTER TABLE public.stripe_event_log
+    ADD CONSTRAINT stripe_event_log_status_check
+    CHECK (status IN ('processing', 'processed', 'failed'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE INDEX IF NOT EXISTS stripe_event_log_status_updated_idx
+  ON public.stripe_event_log (status, updated_at);
+
+CREATE OR REPLACE FUNCTION public.claim_stripe_event(
+  _id text,
+  _type text,
+  _payload jsonb
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_claimed boolean;
+BEGIN
+  IF _id IS NULL OR length(_id) < 3 OR length(_id) > 255 THEN
+    RAISE EXCEPTION 'Invalid Stripe event id'
+      USING ERRCODE = '22023';
+  END IF;
+
+  INSERT INTO public.stripe_event_log (
+    id,
+    type,
+    payload,
+    status,
+    attempt_count,
+    processed_at,
+    updated_at
+  )
+  VALUES (
+    _id,
+    _type,
+    _payload,
+    'processing',
+    1,
+    now(),
+    now()
+  )
+  ON CONFLICT (id) DO UPDATE
+  SET type = EXCLUDED.type,
+      payload = EXCLUDED.payload,
+      status = 'processing',
+      attempt_count = public.stripe_event_log.attempt_count + 1,
+      last_error = NULL,
+      updated_at = now()
+  WHERE public.stripe_event_log.status = 'failed'
+     OR (
+       public.stripe_event_log.status = 'processing'
+       AND public.stripe_event_log.updated_at < now() - interval '10 minutes'
+     )
+  RETURNING true INTO v_claimed;
+
+  RETURN COALESCE(v_claimed, false);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.claim_stripe_event(text, text, jsonb)
+FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_stripe_event(text, text, jsonb)
+TO service_role;
