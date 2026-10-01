@@ -621,3 +621,120 @@ DROP TRIGGER IF EXISTS vendor_orders_enforce_vendor_update ON public.vendor_orde
 CREATE TRIGGER vendor_orders_enforce_vendor_update
 BEFORE UPDATE ON public.vendor_orders
 FOR EACH ROW EXECUTE FUNCTION public.enforce_vendor_order_update();
+
+
+DROP POLICY IF EXISTS "Vendors update own order items" ON public.order_items;
+CREATE POLICY "Vendors update own order items"
+ON public.order_items FOR UPDATE TO authenticated
+USING (
+  (select auth.uid()) IS NOT NULL
+  AND EXISTS (
+    SELECT 1
+    FROM public.vendors AS v
+    WHERE v.id = order_items.vendor_id
+      AND v.user_id = (select auth.uid())
+  )
+)
+WITH CHECK (
+  (select auth.uid()) IS NOT NULL
+  AND EXISTS (
+    SELECT 1
+    FROM public.vendors AS v
+    WHERE v.id = order_items.vendor_id
+      AND v.user_id = (select auth.uid())
+  )
+);
+
+CREATE OR REPLACE FUNCTION public.enforce_order_item_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_uid uuid := auth.uid();
+  v_jwt_role text := COALESCE(current_setting('request.jwt.claim.role', true), '');
+  v_owned boolean;
+BEGIN
+  IF session_user IN ('postgres', 'supabase_admin')
+     OR v_jwt_role = 'service_role'
+     OR (
+       v_uid IS NOT NULL
+       AND public.has_role(v_uid, 'admin'::public.app_role)
+     ) THEN
+    RETURN NEW;
+  END IF;
+
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Authentication required'
+      USING ERRCODE = '42501';
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.vendors AS v
+    WHERE v.id = OLD.vendor_id
+      AND v.user_id = v_uid
+  )
+  INTO v_owned;
+
+  IF NOT v_owned THEN
+    RAISE EXCEPTION 'Order item access denied'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF NEW.order_id IS DISTINCT FROM OLD.order_id
+     OR NEW.product_id IS DISTINCT FROM OLD.product_id
+     OR NEW.vendor_id IS DISTINCT FROM OLD.vendor_id
+     OR NEW.title IS DISTINCT FROM OLD.title
+     OR NEW.quantity IS DISTINCT FROM OLD.quantity
+     OR NEW.unit_price IS DISTINCT FROM OLD.unit_price
+     OR NEW.inventory_reserved IS DISTINCT FROM OLD.inventory_reserved
+     OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+    RAISE EXCEPTION 'Order item commercial fields are immutable'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF NEW.status IS DISTINCT FROM OLD.status THEN
+    CASE OLD.status
+      WHEN 'pending'::public.fulfillment_status THEN
+        IF NEW.status NOT IN (
+          'processing'::public.fulfillment_status,
+          'cancelled'::public.fulfillment_status
+        ) THEN
+          RAISE EXCEPTION 'Invalid order item transition: pending -> %', NEW.status
+            USING ERRCODE = '22023';
+        END IF;
+      WHEN 'processing'::public.fulfillment_status THEN
+        IF NEW.status NOT IN (
+          'shipped'::public.fulfillment_status,
+          'cancelled'::public.fulfillment_status
+        ) THEN
+          RAISE EXCEPTION 'Invalid order item transition: processing -> %', NEW.status
+            USING ERRCODE = '22023';
+        END IF;
+      WHEN 'shipped'::public.fulfillment_status THEN
+        IF NEW.status <> 'delivered'::public.fulfillment_status THEN
+          RAISE EXCEPTION 'Invalid order item transition: shipped -> %', NEW.status
+            USING ERRCODE = '22023';
+        END IF;
+      WHEN 'delivered'::public.fulfillment_status THEN
+        RAISE EXCEPTION 'Delivered order items are final'
+          USING ERRCODE = '22023';
+      WHEN 'cancelled'::public.fulfillment_status THEN
+        RAISE EXCEPTION 'Cancelled order items are final'
+          USING ERRCODE = '22023';
+    END CASE;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.enforce_order_item_update()
+FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS order_items_enforce_vendor_update ON public.order_items;
+CREATE TRIGGER order_items_enforce_vendor_update
+BEFORE UPDATE ON public.order_items
+FOR EACH ROW EXECUTE FUNCTION public.enforce_order_item_update();
