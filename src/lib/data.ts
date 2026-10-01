@@ -8,12 +8,18 @@ export type Category = {
 };
 
 export type Vendor = {
+  id?: string;
   slug: string;
   name: string;
   rating: number;
   city: string;
   country: string;
   yearsActive: number;
+  description?: string | null;
+  logoUrl?: string | null;
+  bannerUrl?: string | null;
+  shippingPolicy?: string | null;
+  returnPolicy?: string | null;
 };
 
 export type Product = {
@@ -32,6 +38,11 @@ export type Product = {
   shipping: "fast" | "free" | "standard";
   variants?: { name: string; options: string[] }[];
   description: string;
+  vendorName?: string;
+  vendorCountry?: string;
+  createdAt?: string;
+  inventoryQuantity?: number;
+  trackInventory?: boolean;
 };
 
 export const categories: Category[] = [

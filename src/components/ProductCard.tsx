@@ -9,7 +9,9 @@ import { useCart } from "@/hooks/use-cart";
 import { toast } from "sonner";
 
 export function ProductCard({ product, rank }: { product: Product; rank?: number }) {
-  const vendor = vendors.find((v) => v.slug === product.vendorSlug);
+  const fallbackVendor = vendors.find((v) => v.slug === product.vendorSlug);
+  const vendorName = product.vendorName ?? fallbackVendor?.name;
+  const vendorCountry = product.vendorCountry ?? fallbackVendor?.country;
   const { toggle, has } = useWishlist();
   const { add } = useCart();
   const wished = has(product.id);
@@ -92,15 +94,21 @@ export function ProductCard({ product, rank }: { product: Product; rank?: number
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <RatingStars rating={product.rating} size={12} />
-          <span className="text-[11px] text-muted-foreground">{product.sold.toLocaleString()} sold</span>
-        </div>
+        {(product.rating > 0 || product.sold > 0) && (
+          <div className="flex items-center gap-2">
+            {product.rating > 0 && <RatingStars rating={product.rating} size={12} />}
+            {product.sold > 0 && (
+              <span className="text-[11px] text-muted-foreground">
+                {product.sold.toLocaleString()} sold
+              </span>
+            )}
+          </div>
+        )}
 
         <div className="mt-auto flex items-center justify-between gap-2 pt-1 text-[11px] text-muted-foreground">
-          {vendor && (
+          {vendorName && (
             <span className="truncate">
-              {vendor.name} {vendor.country === "CA" && "🇨🇦"}
+              {vendorName} {vendorCountry === "CA" && "🇨🇦"}
             </span>
           )}
           {product.shipping !== "standard" && (
