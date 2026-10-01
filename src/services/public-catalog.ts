@@ -66,7 +66,9 @@ export function mapPublicProduct(row: PublicCatalogProductRow): Product {
     vendorName: row.vendor_name,
     vendorCountry: row.vendor_country,
     price,
-    ...(Number.isFinite(compareAt) && compareAt > 0 ? { compareAt } : {}),
+    ...(compareAt !== undefined && Number.isFinite(compareAt) && compareAt > 0
+      ? { compareAt }
+      : {}),
     rating: 0,
     reviews: 0,
     sold: Number(row.sold_count ?? 0),
