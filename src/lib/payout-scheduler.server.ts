@@ -190,7 +190,7 @@ export async function generatePayoutsCore(
     .in("id", Array.from(new Set(rows.map((r) => r.order_id))));
   const paidOrders = new Set(
     ((orders ?? []) as Array<{ id: string; payment_status: string }>)
-      .filter((o) => o.payment_status === "paid")
+      .filter((o) => ["paid", "partially_refunded"].includes(o.payment_status))
       .map((o) => o.id),
   );
 
@@ -327,12 +327,29 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
     transfer_attempt_count: number | null;
   } | null;
 
-  if (!payout) return { ok: false, status: "draft", reason: "Payout not found" };
+  if (!payout) {
+    return { ok: false, status: "draft", reason: "Payout not found" };
+  }
   if (payout.stripe_transfer_id) {
-    return { ok: false, status: payout.status, reason: "A transfer already exists for this payout." };
+    return {
+      ok: false,
+      status: payout.status,
+      reason: "A transfer already exists for this payout.",
+    };
+  }
+  if (!["approved", "failed"].includes(payout.status)) {
+    return {
+      ok: false,
+      status: payout.status,
+      reason: "Payout is not eligible for transfer.",
+    };
   }
   if (Number(payout.net_amount) <= 0) {
-    return { ok: false, status: payout.status, reason: "Net amount must be greater than zero." };
+    return {
+      ok: false,
+      status: payout.status,
+      reason: "Net amount must be greater than zero.",
+    };
   }
 
   const { data: vRow } = await db
@@ -340,17 +357,29 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
     .select("id, payouts_enabled, stripe_connect_account_id")
     .eq("id", payout.vendor_id)
     .maybeSingle();
-  const vendor = vRow as { payouts_enabled: boolean; stripe_connect_account_id: string | null } | null;
+  const vendor = vRow as {
+    payouts_enabled: boolean;
+    stripe_connect_account_id: string | null;
+  } | null;
   if (!vendor?.payouts_enabled || !vendor.stripe_connect_account_id) {
-    return { ok: false, status: payout.status, reason: "Vendor payout account is not ready." };
+    return {
+      ok: false,
+      status: payout.status,
+      reason: "Vendor payout account is not ready.",
+    };
   }
 
   if (!stripeConfigured()) {
-    return { ok: false, status: payout.status, setupRequired: true, reason: "Stripe setup required" };
+    return {
+      ok: false,
+      status: payout.status,
+      setupRequired: true,
+      reason: "Stripe setup required",
+    };
   }
 
   const attempt = Number(payout.transfer_attempt_count ?? 0) + 1;
-  await db
+  const { data: claimed, error: claimError } = await db
     .from("payouts")
     .update({
       status: "processing",
@@ -359,22 +388,41 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
       last_transfer_attempt_at: new Date().toISOString(),
       next_retry_at: null,
     })
-    .eq("id", payout.id);
+    .eq("id", payout.id)
+    .eq("status", payout.status)
+    .is("stripe_transfer_id", null)
+    .select("id")
+    .maybeSingle();
+
+  if (claimError) {
+    return { ok: false, status: payout.status, reason: claimError.message };
+  }
+  if (!claimed) {
+    return {
+      ok: false,
+      status: payout.status,
+      reason: "Payout changed before the transfer could be claimed.",
+    };
+  }
 
   try {
     const key = process.env.STRIPE_SECRET_KEY!;
+    const expectedAmount = Math.round(Number(payout.net_amount) * 100);
+    const expectedCurrency = (payout.currency ?? "CAD").toLowerCase();
+    const destination = vendor.stripe_connect_account_id;
     const res = await fetch(`${STRIPE_API}/transfers`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${key}`,
         "Content-Type": "application/x-www-form-urlencoded",
-        // Idempotent per payout+attempt: a network retry cannot double-send.
-        "Idempotency-Key": `payout_${payout.id}_${attempt}`,
+        // Stable for the lifetime of the payout: retries after a network or DB
+        // failure resolve to the original Stripe transfer instead of sending twice.
+        "Idempotency-Key": `1lv_payout_${payout.id}_v1`,
       },
       body: new URLSearchParams({
-        amount: String(Math.round(Number(payout.net_amount) * 100)),
-        currency: (payout.currency ?? "CAD").toLowerCase(),
-        destination: vendor.stripe_connect_account_id,
+        amount: String(expectedAmount),
+        currency: expectedCurrency,
+        destination,
         "metadata[payout_id]": payout.id,
         "metadata[vendor_id]": payout.vendor_id,
         "metadata[period_start]": payout.period_start,
@@ -383,18 +431,65 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
     });
     const json = (await res.json()) as Record<string, unknown>;
     if (!res.ok) {
-      throw new Error((json.error as { message?: string } | undefined)?.message ?? "Stripe error");
+      throw new Error(
+        (json.error as { message?: string } | undefined)?.message ?? "Stripe error",
+      );
     }
-    await db
+
+    const transferId =
+      typeof json.id === "string" && json.id.startsWith("tr_") ? json.id : null;
+    if (!transferId) {
+      throw new Error("Stripe did not return a valid transfer id.");
+    }
+
+    const actualAmount = Number(json.amount ?? expectedAmount);
+    const actualCurrency = String(json.currency ?? expectedCurrency).toLowerCase();
+    const actualDestination =
+      typeof json.destination === "string"
+        ? json.destination
+        : ((json.destination as { id?: string } | undefined)?.id ?? null);
+
+    if (
+      actualAmount !== expectedAmount ||
+      actualCurrency !== expectedCurrency ||
+      (actualDestination && actualDestination !== destination)
+    ) {
+      await db
+        .from("payouts")
+        .update({
+          status: "failed",
+          stripe_transfer_id: transferId,
+          failure_reason: "Stripe transfer response does not match the approved payout.",
+          next_retry_at: null,
+        })
+        .eq("id", payout.id)
+        .eq("status", "processing");
+      await notifyAdmins(
+        db,
+        "payout_transfer_mismatch",
+        "Payout transfer mismatch",
+        `Payout ${payout.id.slice(0, 8)} requires reconciliation before any retry.`,
+      );
+      return {
+        ok: false,
+        status: "failed",
+        reason: "Stripe transfer response does not match the approved payout.",
+      };
+    }
+
+    const { error: paidError } = await db
       .from("payouts")
       .update({
         status: "paid",
-        stripe_transfer_id: json.id as string,
+        stripe_transfer_id: transferId,
         paid_at: new Date().toISOString(),
         failure_reason: null,
         next_retry_at: null,
       })
-      .eq("id", payout.id);
+      .eq("id", payout.id)
+      .eq("status", "processing");
+
+    if (paidError) throw new Error(paidError.message);
     return { ok: true, status: "paid" };
   } catch (err) {
     const reason = err instanceof Error ? err.message : "Transfer failed";
@@ -407,11 +502,15 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
         failure_reason: reason,
         next_retry_at: exhausted ? null : nextRetryAt(attempt),
       })
-      .eq("id", payout.id);
+      .eq("id", payout.id)
+      .eq("status", "processing")
+      .is("stripe_transfer_id", null);
     await notifyAdmins(
       db,
       exhausted ? "payout_retry_exhausted" : "payout_transfer_failed",
-      exhausted ? "Payout transfer failed after all retries" : "Payout transfer failed",
+      exhausted
+        ? "Payout transfer failed after all retries"
+        : "Payout transfer failed",
       `Payout ${payout.id.slice(0, 8)} — ${reason}`,
     );
     return { ok: false, status: "failed", reason };
