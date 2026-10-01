@@ -493,3 +493,131 @@ REVOKE ALL ON FUNCTION public.get_admin_marketplace_overview()
 FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_admin_marketplace_overview()
 TO authenticated, service_role;
+
+
+-- Vendors may manage fulfillment state and shipping metadata, but marketplace
+-- financial/ownership fields are immutable from authenticated browser sessions.
+DROP POLICY IF EXISTS "Vendors update own vendor orders" ON public.vendor_orders;
+CREATE POLICY "Vendors update own vendor orders"
+ON public.vendor_orders FOR UPDATE TO authenticated
+USING (
+  (select auth.uid()) IS NOT NULL
+  AND EXISTS (
+    SELECT 1
+    FROM public.vendors AS v
+    WHERE v.id = vendor_orders.vendor_id
+      AND v.user_id = (select auth.uid())
+  )
+)
+WITH CHECK (
+  (select auth.uid()) IS NOT NULL
+  AND EXISTS (
+    SELECT 1
+    FROM public.vendors AS v
+    WHERE v.id = vendor_orders.vendor_id
+      AND v.user_id = (select auth.uid())
+  )
+);
+
+CREATE OR REPLACE FUNCTION public.enforce_vendor_order_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_uid uuid := auth.uid();
+  v_jwt_role text := COALESCE(current_setting('request.jwt.claim.role', true), '');
+  v_owned boolean;
+BEGIN
+  IF session_user IN ('postgres', 'supabase_admin')
+     OR v_jwt_role = 'service_role'
+     OR (
+       v_uid IS NOT NULL
+       AND public.has_role(v_uid, 'admin'::public.app_role)
+     ) THEN
+    RETURN NEW;
+  END IF;
+
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Authentication required'
+      USING ERRCODE = '42501';
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.vendors AS v
+    WHERE v.id = OLD.vendor_id
+      AND v.user_id = v_uid
+  )
+  INTO v_owned;
+
+  IF NOT v_owned THEN
+    RAISE EXCEPTION 'Vendor order access denied'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF NEW.order_id IS DISTINCT FROM OLD.order_id
+     OR NEW.vendor_id IS DISTINCT FROM OLD.vendor_id
+     OR NEW.subtotal IS DISTINCT FROM OLD.subtotal
+     OR NEW.commission_amount IS DISTINCT FROM OLD.commission_amount
+     OR NEW.vendor_payout_amount IS DISTINCT FROM OLD.vendor_payout_amount
+     OR NEW.refund_amount IS DISTINCT FROM OLD.refund_amount
+     OR NEW.dispute_hold_amount IS DISTINCT FROM OLD.dispute_hold_amount
+     OR NEW.delivered_at IS DISTINCT FROM OLD.delivered_at
+     OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+    RAISE EXCEPTION 'Vendor order financial and ownership fields are immutable'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF NEW.status IS DISTINCT FROM OLD.status THEN
+    CASE OLD.status
+      WHEN 'pending'::public.vendor_order_status THEN
+        IF NEW.status NOT IN (
+          'accepted'::public.vendor_order_status,
+          'cancelled'::public.vendor_order_status
+        ) THEN
+          RAISE EXCEPTION 'Invalid vendor order transition: pending -> %', NEW.status
+            USING ERRCODE = '22023';
+        END IF;
+      WHEN 'accepted'::public.vendor_order_status THEN
+        IF NEW.status NOT IN (
+          'processing'::public.vendor_order_status,
+          'cancelled'::public.vendor_order_status
+        ) THEN
+          RAISE EXCEPTION 'Invalid vendor order transition: accepted -> %', NEW.status
+            USING ERRCODE = '22023';
+        END IF;
+      WHEN 'processing'::public.vendor_order_status THEN
+        IF NEW.status NOT IN (
+          'shipped'::public.vendor_order_status,
+          'cancelled'::public.vendor_order_status
+        ) THEN
+          RAISE EXCEPTION 'Invalid vendor order transition: processing -> %', NEW.status
+            USING ERRCODE = '22023';
+        END IF;
+      WHEN 'shipped'::public.vendor_order_status THEN
+        IF NEW.status <> 'delivered'::public.vendor_order_status THEN
+          RAISE EXCEPTION 'Invalid vendor order transition: shipped -> %', NEW.status
+            USING ERRCODE = '22023';
+        END IF;
+      WHEN 'delivered'::public.vendor_order_status THEN
+        RAISE EXCEPTION 'Delivered vendor orders are final'
+          USING ERRCODE = '22023';
+      WHEN 'cancelled'::public.vendor_order_status THEN
+        RAISE EXCEPTION 'Cancelled vendor orders are final'
+          USING ERRCODE = '22023';
+    END CASE;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.enforce_vendor_order_update()
+FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS vendor_orders_enforce_vendor_update ON public.vendor_orders;
+CREATE TRIGGER vendor_orders_enforce_vendor_update
+BEFORE UPDATE ON public.vendor_orders
+FOR EACH ROW EXECUTE FUNCTION public.enforce_vendor_order_update();
