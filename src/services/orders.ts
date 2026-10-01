@@ -151,46 +151,4 @@ export async function listAllOrdersWithSplits() {
  */
 export async function backfillVendorOrders(): Promise<{ created: number; skipped: number }> {
   return await backfillVendorOrdersServer();
-}> {
-  const { data: orders, error } = await supabase
-    .from("orders")
-    .select("id, order_items(vendor_id, quantity, unit_price), vendor_orders(id)");
-  if (error) throw error;
-
-  let created = 0;
-  let skipped = 0;
-  for (const o of (orders ?? []) as Array<{
-    id: string;
-    order_items: Array<{ vendor_id: string; quantity: number; unit_price: number }>;
-    vendor_orders: Array<{ id: string }>;
-  }>) {
-    if ((o.vendor_orders ?? []).length > 0 || (o.order_items ?? []).length === 0) {
-      skipped++;
-      continue;
-    }
-    const byVendor = new Map<string, number>();
-    for (const it of o.order_items) {
-      byVendor.set(it.vendor_id, (byVendor.get(it.vendor_id) ?? 0) + Number(it.unit_price) * it.quantity);
-    }
-    const vendorIds = Array.from(byVendor.keys());
-    const { data: vs } = await supabase
-      .from("vendors").select("id, commission_rate").in("id", vendorIds);
-    const rateBy = new Map<string, number>(
-      (vs ?? []).map((r) => [r.id, Number((r as { commission_rate?: number }).commission_rate ?? 0.1)]),
-    );
-    const rows = vendorIds.map((vid) => {
-      const sub = byVendor.get(vid)!;
-      const rate = rateBy.get(vid) ?? 0.1;
-      const commission = +(sub * rate).toFixed(2);
-      return {
-        order_id: o.id, vendor_id: vid, subtotal: sub,
-        commission_amount: commission, vendor_payout_amount: +(sub - commission).toFixed(2),
-        status: "pending" as const,
-      };
-    });
-    const { error: insErr } = await supabase.from("vendor_orders" as never).insert(rows as never);
-    if (insErr) throw insErr;
-    created += rows.length;
-  }
-  return { created, skipped };
 }
