@@ -1,3 +1,6 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
+
 /**
  * Payout scheduler / retry / reconciliation internals. Server-only.
  *
@@ -10,7 +13,7 @@
  * - Stripe secrets and connected-account ids never leave the server.
  */
 
-type Db = { from: (t: string) => any };
+type Db = SupabaseClient<Database>;
 
 const STRIPE_API = "https://api.stripe.com/v1";
 
@@ -22,7 +25,7 @@ export function stripeConfigured() {
 
 export async function adminDb(): Promise<Db> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin as unknown as Db;
+  return supabaseAdmin;
 }
 
 async function stripeGet(path: string): Promise<Record<string, unknown>> {
@@ -629,7 +632,10 @@ export async function reconcileOne(db: Db, payoutId: string): Promise<ReconResul
 // ---------------- authorisation ----------------
 
 /** Throws unless the caller holds the admin role (checked through the RLS-scoped client). */
-export async function assertAdmin(context: { supabase: any; userId: string }) {
+export async function assertAdmin(context: {
+  supabase: SupabaseClient<Database>;
+  userId: string;
+}) {
   const { data, error } = await context.supabase.rpc("has_role", {
     _user_id: context.userId,
     _role: "admin",
