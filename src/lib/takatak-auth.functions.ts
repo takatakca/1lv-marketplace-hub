@@ -98,7 +98,7 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
     }
 
     let loginEmail: string | null = null;
-    let expectedUserId: string | null = linkedProfile?.id ?? null;
+    const expectedUserId: string | null = linkedProfile?.id ?? null;
 
     if (expectedUserId) {
       const { data, error } =
