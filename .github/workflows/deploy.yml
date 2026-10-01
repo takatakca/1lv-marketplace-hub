@@ -57,7 +57,17 @@ jobs:
           fi
 
       # ------------------------------------------------------------
-      # 4. Build website on GitHub
+      # 4. Re-run repository lint before any production build
+      # Protects production even if main is updated outside the normal PR path.
+      # ------------------------------------------------------------
+      - name: Lint entire repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx eslint . --max-warnings=0 --rule "prettier/prettier: off"
+
+      # ------------------------------------------------------------
+      # 5. Build website on GitHub
       # ------------------------------------------------------------
       - name: Build website on GitHub
         shell: bash
@@ -89,7 +99,7 @@ jobs:
           npm run build
 
       # ------------------------------------------------------------
-      # 5. Verify build
+      # 6. Verify build
       # ------------------------------------------------------------
       - name: Verify production build
         shell: bash
@@ -111,7 +121,45 @@ jobs:
           echo "Full-stack production build verified."
 
       # ------------------------------------------------------------
-      # 6. Remove development packages
+      # 7. TypeScript after route generation/build
+      # ------------------------------------------------------------
+      - name: TypeScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx tsc --noEmit
+
+      # ------------------------------------------------------------
+      # 8. Replay every Supabase migration locally before packaging
+      # No remote database is modified by this validation.
+      # ------------------------------------------------------------
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Rebuild Supabase migrations locally
+        shell: bash
+        env:
+          SUPABASE_TELEMETRY_DISABLED: "1"
+        run: |
+          set -euo pipefail
+
+          cleanup() {
+            supabase stop --no-backup >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          supabase db start
+          supabase db reset --local --no-seed
+
+          cleanup
+          trap - EXIT
+
+          echo "All Supabase migrations replayed successfully."
+
+      # ------------------------------------------------------------
+      # 9. Remove development packages
       # ------------------------------------------------------------
       - name: Prepare production dependencies
         shell: bash
@@ -121,7 +169,7 @@ jobs:
           npm prune --omit=dev
 
       # ------------------------------------------------------------
-      # 7. Create production release directory
+      # 10. Create production release directory
       # ------------------------------------------------------------
       - name: Create release directory
         shell: bash
@@ -151,7 +199,7 @@ jobs:
           printf '%s\n' "$GITHUB_SHA" > .release/REVISION
 
       # ------------------------------------------------------------
-      # 8. Create compressed production archive
+      # 11. Create compressed production archive
       # ------------------------------------------------------------
       - name: Create deployment archive
         shell: bash
@@ -164,7 +212,7 @@ jobs:
           ls -lh "1lv-${GITHUB_SHA}.tar.gz"
 
       # ------------------------------------------------------------
-      # 9. Keep recovery artifact on GitHub
+      # 12. Keep recovery artifact on GitHub
       # ------------------------------------------------------------
       - name: Save Linux production artifact
         uses: actions/upload-artifact@v4
