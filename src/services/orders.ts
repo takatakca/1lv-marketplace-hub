@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { signalVendorOrderDelivered } from "./takatak-sync";
+import { backfillVendorOrdersServer } from "@/lib/admin-marketplace.functions";
 
 export type OrderRecord = {
   id: string;
@@ -149,6 +150,8 @@ export async function listAllOrdersWithSplits() {
  * no vendor_orders rows yet. Uses vendor.commission_rate (default 10%).
  */
 export async function backfillVendorOrders(): Promise<{ created: number; skipped: number }> {
+  return await backfillVendorOrdersServer();
+}> {
   const { data: orders, error } = await supabase
     .from("orders")
     .select("id, order_items(vendor_id, quantity, unit_price), vendor_orders(id)");
