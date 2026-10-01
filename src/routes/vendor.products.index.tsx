@@ -72,7 +72,10 @@ function Page() {
   });
 
   const toggle = (id: string) => {
-    const next = new Set(selected); next.has(id) ? next.delete(id) : next.add(id); setSelected(next);
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelected(next);
   };
 
   const subActive = vendor?.subscription_status === "active" || vendor?.subscription_status === "trialing";
