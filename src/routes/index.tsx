@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Zap, TrendingUp, ShieldCheck, Truck, RefreshCw, Store, Star, ArrowRight } from "lucide-react";
+import { Zap, TrendingUp, ShieldCheck, Truck, RefreshCw, Store, Star, ArrowRight, BadgePercent, Sparkles, MapPin, PackageCheck } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
 import { ProductRail, SectionHead } from "@/components/ProductRail";
@@ -58,7 +58,9 @@ function Home() {
       new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime(),
   );
   const best = trending;
-  const under10 = products.filter((p) => p.price < 25).slice(0, 4);
+  const under25 = products.filter((p) => p.price < 25).slice(0, 4);
+  const soldProducts = trending.filter((product) => product.sold > 0);
+  const freshProducts = newArrivals.filter((product) => product.tags.includes("new"));
   const heroDeal = flash[0] ?? trending[0] ?? products[0];
   const tiles = products.slice(0, 3);
   const featuredVendors = vendors.slice(0, 4).map((vendor) => ({
@@ -180,6 +182,66 @@ function Home() {
         </div>
       </section>
 
+      {/* ---------- MARKETPLACE COMMAND DECK ---------- */}
+      <section className="border-b border-border bg-white">
+        <div className="mx-auto max-w-7xl px-4 py-5">
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-electric">Live marketplace</p>
+              <h2 className="font-display text-xl font-extrabold tracking-tight text-navy md:text-2xl">Shop your way</h2>
+            </div>
+            <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+              <span className="rounded-full bg-muted px-2.5 py-1">{products.length.toLocaleString()} live products</span>
+              <span className="rounded-full bg-muted px-2.5 py-1">{vendors.length.toLocaleString()} active stores</span>
+              <span className="rounded-full bg-muted px-2.5 py-1">CAD checkout</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+            <Link to="/deals" className="group rounded-xl border border-border bg-card p-4 shadow-merch transition hover:-translate-y-0.5 hover:border-deal/40 hover:shadow-merch-hover">
+              <div className="flex items-center justify-between">
+                <span className="grid h-9 w-9 place-items-center rounded-lg bg-deal/10 text-deal"><BadgePercent size={18} /></span>
+                <ArrowRight size={15} className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-deal" />
+              </div>
+              <div className="mt-3 text-sm font-extrabold text-navy">Current deals</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">{discounted.length} active markdown{discounted.length === 1 ? "" : "s"}</div>
+            </Link>
+
+            <Link to="/trending" className="group rounded-xl border border-border bg-card p-4 shadow-merch transition hover:-translate-y-0.5 hover:border-electric/40 hover:shadow-merch-hover">
+              <div className="flex items-center justify-between">
+                <span className="grid h-9 w-9 place-items-center rounded-lg bg-electric/10 text-electric"><TrendingUp size={18} /></span>
+                <ArrowRight size={15} className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-electric" />
+              </div>
+              <div className="mt-3 text-sm font-extrabold text-navy">Best sellers</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">{soldProducts.length} products with recorded sales</div>
+            </Link>
+
+            <Link to="/new-arrivals" className="group rounded-xl border border-border bg-card p-4 shadow-merch transition hover:-translate-y-0.5 hover:border-electric/40 hover:shadow-merch-hover">
+              <div className="flex items-center justify-between">
+                <span className="grid h-9 w-9 place-items-center rounded-lg bg-electric/10 text-electric"><Sparkles size={18} /></span>
+                <ArrowRight size={15} className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-electric" />
+              </div>
+              <div className="mt-3 text-sm font-extrabold text-navy">New arrivals</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">{freshProducts.length} recently published</div>
+            </Link>
+
+            <Link to="/search" className="group rounded-xl border border-border bg-card p-4 shadow-merch transition hover:-translate-y-0.5 hover:border-success/40 hover:shadow-merch-hover">
+              <div className="flex items-center justify-between">
+                <span className="grid h-9 w-9 place-items-center rounded-lg bg-success/10 text-success"><MapPin size={18} /></span>
+                <ArrowRight size={15} className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-success" />
+              </div>
+              <div className="mt-3 text-sm font-extrabold text-navy">Canadian sellers</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">{local.length} products from Canadian vendors</div>
+            </Link>
+          </div>
+
+          <div className="mt-3 flex items-center gap-2 rounded-lg bg-navy px-3 py-2 text-[11px] text-white/80">
+            <PackageCheck size={14} className="shrink-0 text-electric" />
+            <span>Marketplace orders use server-validated pricing, inventory and payment totals before payment.</span>
+          </div>
+        </div>
+      </section>
+
       <CouponStrip />
 
       {/* ---------- FLASH DEALS ---------- */}
@@ -217,7 +279,7 @@ function Home() {
               </Link>
             ))}
           </div>
-          <ProductGrid products={under10} cols={4} />
+          <ProductGrid products={under25} cols={4} />
         </div>
       </section>
 
@@ -271,7 +333,7 @@ function Home() {
               </div>
               <div className="flex items-center justify-between border-t border-border px-3 py-2">
                 <span className="text-[11px] text-muted-foreground">
-                  {items.length} products · {vendor.yearsActive}y on 1LV
+                  {items.length} products
                 </span>
                 <Link
                   to="/store/$slug"
