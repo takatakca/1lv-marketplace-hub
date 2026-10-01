@@ -577,9 +577,13 @@ jobs:
                   payload.runtime !== "tanstack-start" ||
                   payload.database !== "ready"
                 ) process.exit(1);
-              ' "$HEALTH" && \
-                 curl --fail --silent --show-error --location --max-time 20 "$SITE_URL/" > /dev/null
+              ' "$HEALTH"
               then
+                for route in / /search /categories /deals /login /vendor-pricing /help /privacy /terms; do
+                  echo "Production route check: $route"
+                  curl --fail --silent --show-error --location --max-time 20 "$SITE_URL$route" > /dev/null
+                done
+
                 echo "Production frontend and TanStack server are healthy:"
                 echo "$SITE_URL"
                 exit 0
@@ -592,6 +596,85 @@ jobs:
 
           echo "ERROR: Production health check failed."
           exit 1
+
+      # ------------------------------------------------------------
+      # Prune stale releases only after the new release is healthy.
+      # Always preserve CURRENT, PREVIOUS and the three newest additional releases.
+      # ------------------------------------------------------------
+      - name: Prune old MochaHost releases
+        if: >
+          steps.deployment.outputs.enabled == 'true' &&
+          steps.health.outcome == 'success'
+        shell: bash
+        env:
+          HOST: ${{ secrets.MOCHAHOST_HOST }}
+          PORT: ${{ secrets.MOCHAHOST_SSH_PORT }}
+          USER: ${{ secrets.MOCHAHOST_USER }}
+          APP_ROOT: ${{ secrets.MOCHAHOST_APP_ROOT }}
+        run: |
+          set -euo pipefail
+
+          ssh -tt \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o ConnectTimeout=30 \
+            -o ConnectionAttempts=3 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=4 \
+            -o TCPKeepAlive=no \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -p "$PORT" \
+            "$USER@$HOST" \
+            "bash -s -- '$APP_ROOT'" <<'REMOTE'
+          set -Eeuo pipefail
+
+          APP_ROOT="$1"
+          RELEASES="$APP_ROOT/releases"
+
+          CURRENT=""
+          PREVIOUS=""
+          [ -s "$APP_ROOT/CURRENT" ] && CURRENT="$(tr -d '\r\n' < "$APP_ROOT/CURRENT")"
+          [ -s "$APP_ROOT/PREVIOUS" ] && PREVIOUS="$(tr -d '\r\n' < "$APP_ROOT/PREVIOUS")"
+
+          extra_kept=0
+
+          while IFS= read -r name; do
+            [ -n "$name" ] || continue
+
+            if [ "$name" = "$CURRENT" ] || [ "$name" = "$PREVIOUS" ]; then
+              echo "Keeping protected release: $name"
+              continue
+            fi
+
+            extra_kept=$((extra_kept + 1))
+            if [ "$extra_kept" -le 3 ]; then
+              echo "Keeping recent recovery release: $name"
+              continue
+            fi
+
+            if [[ "$name" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Removing stale release: $name"
+              rm -rf -- "$RELEASES/$name"
+            else
+              echo "Skipping unexpected release directory name: $name"
+            fi
+          done < <(
+            find "$RELEASES" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %f\n' \
+              | sort -nr \
+              | awk '{print $2}'
+          )
+
+          find "$APP_ROOT/incoming" \
+            -maxdepth 1 \
+            -type f \
+            -name '1lv-*.tar.gz' \
+            -mtime +7 \
+            -print \
+            -delete || true
+
+          echo "Release pruning complete."
+          REMOTE
 
       # ------------------------------------------------------------
       # 15. Automatic rollback

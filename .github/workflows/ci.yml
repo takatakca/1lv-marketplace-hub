@@ -111,7 +111,23 @@ jobs:
                   payload.database !== "skipped"
                 ) process.exit(1);
               ' "$HEALTH"
-              curl --fail --silent --show-error --max-time 5 "http://127.0.0.1:$PORT/" > /dev/null
+              for route in / /search /categories /deals /trending /new-arrivals /cart /login /signup /vendor-pricing /help /privacy /terms /returns /shipping; do
+                echo "Smoke testing public route: $route"
+                curl --fail --silent --show-error --max-time 5 "http://127.0.0.1:$PORT$route" > /dev/null
+              done
+
+              TAKATAK_STATUS="$(curl                 --silent                 --output /dev/null                 --write-out '%{http_code}'                 --max-time 5                 --request POST                 "http://127.0.0.1:$PORT/api/internal/takatak/drain")"
+              test "$TAKATAK_STATUS" = "401" || {
+                echo "Expected unauthenticated TAKATAK drain to return 401, got $TAKATAK_STATUS"
+                exit 1
+              }
+
+              STRIPE_STATUS="$(curl                 --silent                 --output /dev/null                 --write-out '%{http_code}'                 --max-time 5                 --request POST                 --data '{}'                 "http://127.0.0.1:$PORT/api/public/webhooks/stripe")"
+              test "$STRIPE_STATUS" = "401" || {
+                echo "Expected unsigned Stripe webhook to return 401, got $STRIPE_STATUS"
+                exit 1
+              }
+
               exit 0
             fi
 
