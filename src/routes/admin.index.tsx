@@ -72,7 +72,7 @@ function Page() {
     : s.recentOrders.map((order) => ({
         order: order.order,
         customer: order.customer,
-        vendor: "Marketplace",
+        vendor: order.vendor,
         total: formatCAD(order.total),
         status: order.status,
       }));

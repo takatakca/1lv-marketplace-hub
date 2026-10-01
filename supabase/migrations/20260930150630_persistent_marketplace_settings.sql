@@ -385,3 +385,111 @@ DROP TRIGGER IF EXISTS enforce_product_marketplace_fields_trigger ON public.prod
 CREATE TRIGGER enforce_product_marketplace_fields_trigger
 BEFORE INSERT OR UPDATE ON public.products
 FOR EACH ROW EXECUTE FUNCTION public.enforce_product_marketplace_fields();
+
+
+CREATE OR REPLACE FUNCTION public.get_admin_marketplace_overview()
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_uid uuid := auth.uid();
+  v_recent_orders jsonb;
+BEGIN
+  IF v_uid IS NULL
+     OR NOT public.has_role(v_uid, 'admin'::public.app_role) THEN
+    RAISE EXCEPTION 'Forbidden'
+      USING ERRCODE = '42501';
+  END IF;
+
+  SELECT COALESCE(
+    jsonb_agg(
+      jsonb_build_object(
+        'order', recent.order_number,
+        'customer', COALESCE(recent.customer_email, '—'),
+        'vendor', COALESCE(recent.vendor_names, 'Marketplace'),
+        'total', recent.total,
+        'status', recent.payment_status,
+        'createdAt', recent.created_at
+      )
+      ORDER BY recent.created_at DESC
+    ),
+    '[]'::jsonb
+  )
+  INTO v_recent_orders
+  FROM (
+    SELECT
+      o.id,
+      o.order_number,
+      o.customer_email,
+      o.total,
+      o.payment_status,
+      o.created_at,
+      string_agg(DISTINCT v.store_name, ', ' ORDER BY v.store_name) AS vendor_names
+    FROM public.orders AS o
+    LEFT JOIN public.vendor_orders AS vo ON vo.order_id = o.id
+    LEFT JOIN public.vendors AS v ON v.id = vo.vendor_id
+    GROUP BY
+      o.id,
+      o.order_number,
+      o.customer_email,
+      o.total,
+      o.payment_status,
+      o.created_at
+    ORDER BY o.created_at DESC
+    LIMIT 6
+  ) AS recent;
+
+  RETURN jsonb_build_object(
+    'gmv',
+      COALESCE((
+        SELECT sum(o.total)
+        FROM public.orders AS o
+        WHERE o.payment_status = 'paid'
+      ), 0),
+    'orderCount',
+      (SELECT count(*) FROM public.orders),
+    'pendingVendors',
+      (SELECT count(*) FROM public.vendors AS v WHERE v.status = 'pending'::public.vendor_status),
+    'activeVendors',
+      (SELECT count(*) FROM public.vendors AS v WHERE v.status = 'active'::public.vendor_status),
+    'pendingProducts',
+      (SELECT count(*) FROM public.products AS p WHERE p.status = 'pending_review'::public.product_status),
+    'activeProducts',
+      (SELECT count(*) FROM public.products AS p WHERE p.status = 'active'::public.product_status),
+    'unpaidVendors',
+      (
+        SELECT count(*)
+        FROM public.vendors AS v
+        WHERE v.subscription_status IN ('past_due', 'unpaid')
+      ),
+    'commissionRevenue',
+      COALESCE((SELECT sum(vo.commission_amount) FROM public.vendor_orders AS vo), 0),
+    'payoutLiability',
+      COALESCE((
+        SELECT sum(vo.vendor_payout_amount)
+        FROM public.vendor_orders AS vo
+        WHERE vo.status NOT IN ('delivered', 'cancelled')
+      ), 0),
+    'openDisputes',
+      (
+        SELECT count(*)
+        FROM public.disputes AS d
+        WHERE d.status IN ('open', 'under_review', 'waiting_customer', 'waiting_vendor')
+      ),
+    'hasData',
+      EXISTS (SELECT 1 FROM public.orders)
+      OR EXISTS (SELECT 1 FROM public.vendors)
+      OR EXISTS (SELECT 1 FROM public.products),
+    'recentOrders',
+      v_recent_orders
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_admin_marketplace_overview()
+FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_admin_marketplace_overview()
+TO authenticated, service_role;
