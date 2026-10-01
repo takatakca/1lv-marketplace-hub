@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ShoppingCart, User, Heart, Menu, X, ChevronDown } from "lucide-react";
+import { ShoppingCart, User, Heart, Menu, X, ChevronDown, MapPin, PackageSearch, Store } from "lucide-react";
 import { useState } from "react";
 import { Logo } from "./Logo";
 import { LanguageToggle } from "./LanguageToggle";
@@ -28,8 +28,10 @@ export function Header() {
       {/* Top promo strip */}
       <div className="bg-navy text-navy-foreground">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-1.5 text-xs">
-          <span className="hidden sm:inline">{"Free shipping on Canadian orders over $" + freeShippingThreshold + " CAD · 30-day returns"}</span>
-          <span className="sm:hidden">{"Free CA shipping over $" + freeShippingThreshold}</span>
+          <span className="hidden sm:inline">
+            Canada marketplace · CAD checkout · Free shipping from {"$" + freeShippingThreshold + " CAD"} where eligible
+          </span>
+          <span className="sm:hidden">CAD checkout · Buyer protection</span>
           <div className="flex items-center gap-3">
             <Link to="/become-a-vendor" className="hidden font-medium hover:text-electric sm:inline">
               Sell on 1LV
@@ -55,6 +57,14 @@ export function Header() {
 
           <Logo />
 
+          <div className="hidden items-center gap-2 rounded-md px-2 py-1 text-navy xl:flex">
+            <MapPin size={18} className="text-electric" />
+            <div className="leading-tight">
+              <div className="text-[10px] text-muted-foreground">Shopping in</div>
+              <div className="text-xs font-bold">Canada · CAD</div>
+            </div>
+          </div>
+
           <div className="ml-2 hidden flex-1 md:block">
             <AISearchBar />
           </div>
@@ -65,6 +75,9 @@ export function Header() {
               <div className="hidden items-center gap-1 md:flex">
                 <Link to="/account" className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium text-navy hover:bg-muted">
                   <User size={16} /> Account
+                </Link>
+                <Link to="/orders" className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium text-navy hover:bg-muted">
+                  <PackageSearch size={16} /> Orders
                 </Link>
                 {showVendor && (
                   <Link to="/vendor" className="rounded-md px-2 py-1.5 text-sm font-medium text-electric hover:bg-muted">Vendor</Link>
@@ -78,11 +91,18 @@ export function Header() {
               </div>
             ) : (
               <div className="hidden items-center gap-1 md:flex">
-                <Link to="/login" className="rounded-md px-3 py-1.5 text-sm font-medium text-navy hover:bg-muted">
-                  Sign in
+                <Link
+                  to="/login"
+                  className="rounded-md px-3 py-1.5 text-left leading-tight text-navy hover:bg-muted"
+                >
+                  <span className="block text-[10px] text-muted-foreground">Hello, sign in</span>
+                  <span className="block text-xs font-bold">Account & orders</span>
                 </Link>
-                <Link to="/signup" className="rounded-md bg-navy px-3 py-1.5 text-sm font-medium text-navy-foreground hover:opacity-90">
-                  Sign up
+                <Link
+                  to="/signup"
+                  className="rounded-md bg-navy px-3 py-2 text-xs font-bold text-navy-foreground hover:opacity-90"
+                >
+                  Join 1LV
                 </Link>
               </div>
             )}
@@ -127,8 +147,8 @@ export function Header() {
               </Link>
             ))}
             <Link to="/deals" onMouseEnter={() => setMegaOpen(false)} className="px-3 py-2.5 text-sm font-semibold text-deal hover:underline">⚡ Deals</Link>
-            <Link to="/trending" onMouseEnter={() => setMegaOpen(false)} className="px-3 py-2.5 text-sm text-navy/80 hover:text-electric">Trending</Link>
-            <Link to="/new-arrivals" onMouseEnter={() => setMegaOpen(false)} className="px-3 py-2.5 text-sm text-navy/80 hover:text-electric">New</Link>
+            <Link to="/trending" onMouseEnter={() => setMegaOpen(false)} className="px-3 py-2.5 text-sm text-navy/80 hover:text-electric">Best sellers</Link>
+            <Link to="/new-arrivals" onMouseEnter={() => setMegaOpen(false)} className="px-3 py-2.5 text-sm text-navy/80 hover:text-electric">New arrivals</Link>
             <Link to="/coupons" onMouseEnter={() => setMegaOpen(false)} className="px-3 py-2.5 text-sm text-navy/80 hover:text-electric">Coupons</Link>
             <Link to="/become-a-vendor" className="ml-auto px-3 py-2.5 text-sm font-medium text-deal hover:underline">
               Become a vendor →
@@ -170,7 +190,16 @@ export function Header() {
                 </Link>
               ))}
               <div className="my-2 border-t border-border" />
-              <Link to="/become-a-vendor" className="block rounded-md px-3 py-2 font-medium text-deal">Become a vendor</Link>
+              <p className="px-3 pt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Shop</p>
+              <Link to="/deals" className="block rounded-md px-3 py-2 text-sm font-semibold text-deal hover:bg-muted">⚡ Current deals</Link>
+              <Link to="/trending" className="block rounded-md px-3 py-2 text-sm text-navy hover:bg-muted">Best sellers</Link>
+              <Link to="/new-arrivals" className="block rounded-md px-3 py-2 text-sm text-navy hover:bg-muted">New arrivals</Link>
+              <Link to="/wishlist" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-navy hover:bg-muted"><Heart size={15} /> Wishlist</Link>
+              {user && (
+                <Link to="/orders" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-navy hover:bg-muted"><PackageSearch size={15} /> Orders</Link>
+              )}
+              <div className="my-2 border-t border-border" />
+              <Link to="/become-a-vendor" className="flex items-center gap-2 rounded-md px-3 py-2 font-medium text-deal"><Store size={15} /> Become a vendor</Link>
               <Link to="/help" className="block rounded-md px-3 py-2 text-sm text-navy hover:bg-muted">Help center</Link>
             </nav>
           </div>
