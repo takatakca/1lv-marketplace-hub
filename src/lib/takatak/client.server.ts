@@ -111,6 +111,12 @@ export type TakatakVerifiedIdentity = {
   locale: string | null;
 };
 
+export type TakatakOtpMetadata = {
+  email?: string | null;
+  fullName?: string | null;
+  preferredLanguage?: string | null;
+};
+
 export type TakatakOtpResult =
   | { ok: true }
   | { ok: false; setupRequired?: boolean; error: string };
@@ -161,6 +167,13 @@ async function callOtp(
       return { ok: false, error: error.slice(0, 300) };
     }
 
+    if (json["authority"] !== "takatak_supabase_phone") {
+      return {
+        ok: false,
+        error: "TAKATAK returned an unexpected authentication authority.",
+      };
+    }
+
     return { ok: true, json };
   } catch (error) {
     return {
@@ -175,8 +188,16 @@ async function callOtp(
 
 export async function requestTakatakPhoneOtp(
   phone: string,
+  metadata: TakatakOtpMetadata = {},
 ): Promise<TakatakOtpResult> {
-  const result = await callOtp("/v1/auth/otp/send", { phone });
+  const result = await callOtp("/v1/auth/otp/send", {
+    phone,
+    ...(metadata.email ? { email: metadata.email } : {}),
+    ...(metadata.fullName ? { full_name: metadata.fullName } : {}),
+    ...(metadata.preferredLanguage
+      ? { preferred_language: metadata.preferredLanguage }
+      : {}),
+  });
   if (!result.ok) return result;
   return { ok: true };
 }
