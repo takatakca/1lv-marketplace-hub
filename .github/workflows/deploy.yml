@@ -57,7 +57,16 @@ jobs:
           fi
 
       # ------------------------------------------------------------
-      # 4. Re-run repository lint before any production build
+      # 4. Block high/critical production dependency vulnerabilities
+      # ------------------------------------------------------------
+      - name: Audit production dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm audit --omit=dev --audit-level=high
+
+      # ------------------------------------------------------------
+      # 5. Re-run repository lint before any production build
       # Protects production even if main is updated outside the normal PR path.
       # ------------------------------------------------------------
       - name: Lint entire repository
@@ -67,7 +76,7 @@ jobs:
           npx eslint . --max-warnings=0 --rule "prettier/prettier: off"
 
       # ------------------------------------------------------------
-      # 5. Build website on GitHub
+      # 6. Build website on GitHub
       # ------------------------------------------------------------
       - name: Build website on GitHub
         shell: bash
@@ -99,7 +108,7 @@ jobs:
           npm run build
 
       # ------------------------------------------------------------
-      # 6. Verify build
+      # 7. Verify build
       # ------------------------------------------------------------
       - name: Verify production build
         shell: bash
@@ -121,7 +130,7 @@ jobs:
           echo "Full-stack production build verified."
 
       # ------------------------------------------------------------
-      # 7. TypeScript after route generation/build
+      # 8. TypeScript after route generation/build
       # ------------------------------------------------------------
       - name: TypeScript
         shell: bash
@@ -130,7 +139,7 @@ jobs:
           npx tsc --noEmit
 
       # ------------------------------------------------------------
-      # 8. Replay every Supabase migration locally before packaging
+      # 9. Replay every Supabase migration locally before packaging
       # No remote database is modified by this validation.
       # ------------------------------------------------------------
       - name: Setup Supabase CLI
@@ -161,7 +170,7 @@ jobs:
           echo "All Supabase migrations replayed successfully."
 
       # ------------------------------------------------------------
-      # 9. Remove development packages
+      # 10. Remove development packages
       # ------------------------------------------------------------
       - name: Prepare production dependencies
         shell: bash
@@ -171,7 +180,7 @@ jobs:
           npm prune --omit=dev
 
       # ------------------------------------------------------------
-      # 10. Create production release directory
+      # 11. Create production release directory
       # ------------------------------------------------------------
       - name: Create release directory
         shell: bash
@@ -201,7 +210,7 @@ jobs:
           printf '%s\n' "$GITHUB_SHA" > .release/REVISION
 
       # ------------------------------------------------------------
-      # 11. Create compressed production archive
+      # 12. Create compressed production archive
       # ------------------------------------------------------------
       - name: Create deployment archive
         shell: bash
@@ -214,7 +223,7 @@ jobs:
           ls -lh "1lv-${GITHUB_SHA}.tar.gz"
 
       # ------------------------------------------------------------
-      # 12. Keep recovery artifact on GitHub
+      # 13. Keep recovery artifact on GitHub
       # ------------------------------------------------------------
       - name: Save Linux production artifact
         uses: actions/upload-artifact@v4
