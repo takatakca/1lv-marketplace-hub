@@ -518,7 +518,17 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
     };
   }
 
-  const attempt = Number(payout.transfer_attempt_count ?? 0) + 1;
+  const settings = await readSettings(db);
+  const previousAttempts = Number(payout.transfer_attempt_count ?? 0);
+  if (previousAttempts >= settings.maxTransferAttempts) {
+    return {
+      ok: false,
+      status: payout.status,
+      reason: `Transfer retry limit reached (${settings.maxTransferAttempts}).`,
+    };
+  }
+
+  const attempt = previousAttempts + 1;
   const { data: claimed, error: claimError } = await db
     .from("payouts")
     .update({
@@ -633,7 +643,6 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
     return { ok: true, status: "paid" };
   } catch (err) {
     const reason = err instanceof Error ? err.message : "Transfer failed";
-    const settings = await readSettings(db);
     const exhausted = attempt >= settings.maxTransferAttempts;
     await db
       .from("payouts")

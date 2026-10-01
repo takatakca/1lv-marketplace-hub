@@ -133,34 +133,90 @@ export async function remainingRefundable(db: Db, orderId: string, excludeRefund
  * - In a payout already paid -> nothing here; a negative adjustment is created
  *   when a refund is actually approved.
  */
-export async function setVendorOrderHold(db: Db, vendorOrderId: string, amount: number) {
-  await db
-    .from("vendor_orders")
-    .update({ dispute_hold_amount: round2(Math.max(0, amount)) })
-    .eq("id", vendorOrderId);
+export async function setVendorOrderHold(
+  db: Db,
+  vendorOrderId: string,
+  amount: number,
+) {
+  if (!vendorOrderId) return { payoutId: null as string | null, paid: false };
 
-  const { data: item } = await db
+  const holdAmount = round2(Math.max(0, amount));
+  const { error: holdError } = await db
+    .from("vendor_orders")
+    .update({ dispute_hold_amount: holdAmount })
+    .eq("id", vendorOrderId);
+  if (holdError) throw new Error(holdError.message);
+
+  const { data: item, error: itemError } = await db
     .from("payout_items")
     .select("payout_id")
     .eq("vendor_order_id", vendorOrderId)
     .maybeSingle();
+  if (itemError) throw new Error(itemError.message);
+
   const payoutId = (item as { payout_id?: string } | null)?.payout_id;
   if (!payoutId) return { payoutId: null as string | null, paid: false };
 
-  const { data: payout } = await db
+  const { data: payout, error: payoutError } = await db
     .from("payouts")
     .select("id, status")
     .eq("id", payoutId)
     .maybeSingle();
+  if (payoutError) throw new Error(payoutError.message);
+
   const status = (payout as { status?: string } | null)?.status;
   if (!status) return { payoutId, paid: false };
 
-  if (status === "paid" || status === "processing") return { payoutId, paid: true };
-
-  if (amount > 0 && status !== "held") {
-    await db.from("payouts").update({ status: "held" }).eq("id", payoutId);
-  } else if (amount === 0 && status === "held") {
-    await db.from("payouts").update({ status: "pending_review" }).eq("id", payoutId);
+  if (status === "paid" || status === "processing") {
+    return { payoutId, paid: true };
   }
+
+  if (holdAmount > 0) {
+    if (status !== "held") {
+      const { error } = await db
+        .from("payouts")
+        .update({ status: "held" })
+        .eq("id", payoutId);
+      if (error) throw new Error(error.message);
+    }
+    return { payoutId, paid: false };
+  }
+
+  if (status === "held") {
+    const { data: payoutItems, error: payoutItemsError } = await db
+      .from("payout_items")
+      .select("vendor_order_id")
+      .eq("payout_id", payoutId);
+    if (payoutItemsError) throw new Error(payoutItemsError.message);
+
+    const ids = ((payoutItems ?? []) as Array<{ vendor_order_id: string }>).map(
+      (row) => row.vendor_order_id,
+    );
+    let anotherHoldExists = false;
+    for (let i = 0; i < ids.length; i += 200) {
+      const batch = ids.slice(i, i + 200);
+      const { data: held, error } = await db
+        .from("vendor_orders")
+        .select("id")
+        .in("id", batch)
+        .gt("dispute_hold_amount", 0)
+        .limit(1);
+      if (error) throw new Error(error.message);
+      if ((held ?? []).length > 0) {
+        anotherHoldExists = true;
+        break;
+      }
+    }
+
+    if (!anotherHoldExists) {
+      const { error } = await db
+        .from("payouts")
+        .update({ status: "pending_review" })
+        .eq("id", payoutId)
+        .eq("status", "held");
+      if (error) throw new Error(error.message);
+    }
+  }
+
   return { payoutId, paid: false };
 }
