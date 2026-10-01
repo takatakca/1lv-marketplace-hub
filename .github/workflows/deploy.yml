@@ -388,6 +388,11 @@ jobs:
           rm -rf "$APP_ROOT/dist"
           mv "$APP_ROOT/dist.new" "$APP_ROOT/dist"
 
+          rm -rf "$APP_ROOT/node_modules.new"
+          ln -s "$RELEASE/node_modules" "$APP_ROOT/node_modules.new"
+          rm -rf "$APP_ROOT/node_modules"
+          mv "$APP_ROOT/node_modules.new" "$APP_ROOT/node_modules"
+
           printf '%s\n' "$SHA" > "$APP_ROOT/CURRENT.new"
           mv -f "$APP_ROOT/CURRENT.new" "$APP_ROOT/CURRENT"
 
@@ -539,6 +544,11 @@ jobs:
           ln -s "$PREVIOUS_RELEASE/dist" "$APP_ROOT/dist.new"
           rm -rf "$APP_ROOT/dist"
           mv "$APP_ROOT/dist.new" "$APP_ROOT/dist"
+
+          rm -rf "$APP_ROOT/node_modules.new"
+          ln -s "$PREVIOUS_RELEASE/node_modules" "$APP_ROOT/node_modules.new"
+          rm -rf "$APP_ROOT/node_modules"
+          mv "$APP_ROOT/node_modules.new" "$APP_ROOT/node_modules"
 
           printf '%s\n' "$PREVIOUS" > "$APP_ROOT/CURRENT.new"
           mv -f "$APP_ROOT/CURRENT.new" "$APP_ROOT/CURRENT"
