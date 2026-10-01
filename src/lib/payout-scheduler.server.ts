@@ -159,93 +159,202 @@ type EligibleRow = {
   order_id: string;
 };
 
+function dateOnlyUtc(value: string, label: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error(`${label} must use YYYY-MM-DD format.`);
+  }
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.toISOString().slice(0, 10) !== value
+  ) {
+    throw new Error(`${label} is not a valid calendar date.`);
+  }
+  return date;
+}
+
+function batches<T>(values: T[], size = 200): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < values.length; i += size) {
+    out.push(values.slice(i, i + size));
+  }
+  return out;
+}
+
 export async function generatePayoutsCore(
   db: Db,
   periodStart: string,
   periodEnd: string,
 ): Promise<GenerateResult> {
+  const startDate = dateOnlyUtc(periodStart, "Payout period start");
+  const endDate = dateOnlyUtc(periodEnd, "Payout period end");
+  if (startDate.getTime() > endDate.getTime()) {
+    throw new Error("Payout period start must be on or before period end.");
+  }
+
   const settings = await readSettings(db);
-  const cutoff = new Date(Date.now() - settings.holdDays * 24 * 60 * 60 * 1000).toISOString();
-
-  const { data: vos, error } = await db
-    .from("vendor_orders")
-    .select(
-      "id, vendor_id, subtotal, commission_amount, vendor_payout_amount, refund_amount, dispute_hold_amount, delivered_at, order_id",
-    )
-    .eq("status", "delivered")
-    .not("delivered_at", "is", null)
-    .lte("delivered_at", cutoff)
-    .gte("delivered_at", `${periodStart}T00:00:00.000Z`)
-    .lte("delivered_at", `${periodEnd}T23:59:59.999Z`);
-  if (error) throw new Error(error.message);
-
-  const rows = (vos ?? []) as EligibleRow[];
-  if (rows.length === 0) return { ok: true, created: 0, skipped: 0, vendors: 0 };
-
-  const { data: taken } = await db
-    .from("payout_items")
-    .select("vendor_order_id")
-    .in("vendor_order_id", rows.map((r) => r.id));
-  const takenSet = new Set(((taken ?? []) as Array<{ vendor_order_id: string }>).map((t) => t.vendor_order_id));
-
-  const { data: orders } = await db
-    .from("orders")
-    .select("id, payment_status")
-    .in("id", Array.from(new Set(rows.map((r) => r.order_id))));
-  const paidOrders = new Set(
-    ((orders ?? []) as Array<{ id: string; payment_status: string }>)
-      .filter((o) => ["paid", "partially_refunded"].includes(o.payment_status))
-      .map((o) => o.id),
+  const cutoffDate = new Date(
+    Date.now() - settings.holdDays * 24 * 60 * 60 * 1000,
   );
+  const requestedEnd = new Date(endDate);
+  requestedEnd.setUTCHours(23, 59, 59, 999);
+  const eligibleThrough = new Date(
+    Math.min(cutoffDate.getTime(), requestedEnd.getTime()),
+  ).toISOString();
 
-  const { data: vendors } = await db
-    .from("vendors")
-    .select("id, payouts_enabled")
-    .in("id", Array.from(new Set(rows.map((r) => r.vendor_id))));
-  const payable = new Set(
-    ((vendors ?? []) as Array<{ id: string; payouts_enabled: boolean }>)
-      .filter((v) => v.payouts_enabled)
-      .map((v) => v.id),
-  );
+  // Include eligible backlog from earlier cycles. A vendor that was on hold,
+  // unpaid, or not payout-ready must not lose those earnings when the calendar
+  // moves into the next payout period.
+  const rows: EligibleRow[] = [];
+  const pageSize = 500;
+  let offset = 0;
+  while (true) {
+    const { data, error } = await db
+      .from("vendor_orders")
+      .select(
+        "id, vendor_id, subtotal, commission_amount, vendor_payout_amount, refund_amount, dispute_hold_amount, delivered_at, order_id",
+      )
+      .eq("status", "delivered")
+      .not("delivered_at", "is", null)
+      .lte("delivered_at", eligibleThrough)
+      .order("delivered_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw new Error(error.message);
+
+    const page = (data ?? []) as EligibleRow[];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  if (rows.length === 0) {
+    return { ok: true, created: 0, skipped: 0, vendors: 0 };
+  }
+
+  const takenSet = new Set<string>();
+  for (const ids of batches(rows.map((row) => row.id))) {
+    const { data, error } = await db
+      .from("payout_items")
+      .select("vendor_order_id")
+      .in("vendor_order_id", ids);
+    if (error) throw new Error(error.message);
+    for (const item of data ?? []) {
+      takenSet.add(item.vendor_order_id);
+    }
+  }
+
+  const paidOrders = new Set<string>();
+  const orderIds = Array.from(new Set(rows.map((row) => row.order_id)));
+  for (const ids of batches(orderIds)) {
+    const { data, error } = await db
+      .from("orders")
+      .select("id, payment_status")
+      .in("id", ids);
+    if (error) throw new Error(error.message);
+    for (const order of data ?? []) {
+      if (["paid", "partially_refunded"].includes(order.payment_status)) {
+        paidOrders.add(order.id);
+      }
+    }
+  }
+
+  const payable = new Set<string>();
+  const vendorIds = Array.from(new Set(rows.map((row) => row.vendor_id)));
+  for (const ids of batches(vendorIds)) {
+    const { data, error } = await db
+      .from("vendors")
+      .select("id, payouts_enabled")
+      .in("id", ids);
+    if (error) throw new Error(error.message);
+    for (const vendor of data ?? []) {
+      if (vendor.payouts_enabled) payable.add(vendor.id);
+    }
+  }
 
   const groups = new Map<string, EligibleRow[]>();
   let skipped = 0;
-  for (const r of rows) {
+  for (const row of rows) {
     const eligible =
-      !takenSet.has(r.id) &&
-      paidOrders.has(r.order_id) &&
-      payable.has(r.vendor_id) &&
-      Number(r.dispute_hold_amount ?? 0) === 0;
+      !takenSet.has(row.id) &&
+      paidOrders.has(row.order_id) &&
+      payable.has(row.vendor_id) &&
+      Number(row.dispute_hold_amount ?? 0) === 0;
+
     if (!eligible) {
       skipped++;
       continue;
     }
-    const list = groups.get(r.vendor_id) ?? [];
-    list.push(r);
-    groups.set(r.vendor_id, list);
+
+    const list = groups.get(row.vendor_id) ?? [];
+    list.push(row);
+    groups.set(row.vendor_id, list);
   }
 
   let created = 0;
   for (const [vendorId, items] of groups) {
-    const gross = round2(items.reduce((s, i) => s + Number(i.subtotal ?? 0), 0));
-    const commission = round2(items.reduce((s, i) => s + Number(i.commission_amount ?? 0), 0));
-    const refunds = round2(items.reduce((s, i) => s + Number(i.refund_amount ?? 0), 0));
-    const holds = round2(items.reduce((s, i) => s + Number(i.dispute_hold_amount ?? 0), 0));
+    const gross = round2(
+      items.reduce((sum, item) => sum + Number(item.subtotal ?? 0), 0),
+    );
+    const commission = round2(
+      items.reduce(
+        (sum, item) => sum + Number(item.commission_amount ?? 0),
+        0,
+      ),
+    );
+    const refunds = round2(
+      items.reduce((sum, item) => sum + Number(item.refund_amount ?? 0), 0),
+    );
+    const holds = round2(
+      items.reduce(
+        (sum, item) => sum + Number(item.dispute_hold_amount ?? 0),
+        0,
+      ),
+    );
 
-    const { data: adj } = await db
-      .from("payout_adjustments")
-      .select("id, amount")
-      .eq("vendor_id", vendorId)
-      .is("applied_payout_id", null);
+    const adjustmentRows: Array<{ id: string; amount: number }> = [];
+    let adjustmentOffset = 0;
+    while (true) {
+      const { data, error } = await db
+        .from("payout_adjustments")
+        .select("id, amount")
+        .eq("vendor_id", vendorId)
+        .is("applied_payout_id", null)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(adjustmentOffset, adjustmentOffset + pageSize - 1);
+      if (error) throw new Error(error.message);
+
+      const page = (data ?? []) as Array<{ id: string; amount: number }>;
+      adjustmentRows.push(...page);
+      if (page.length < pageSize) break;
+      adjustmentOffset += pageSize;
+    }
+
     const adjustments = round2(
-      ((adj ?? []) as Array<{ amount: number }>).reduce((s, a) => s + Number(a.amount ?? 0), 0),
+      adjustmentRows.reduce(
+        (sum, adjustment) => sum + Number(adjustment.amount ?? 0),
+        0,
+      ),
     );
-
-    const net = round2(
-      items.reduce((s, i) => s + Number(i.vendor_payout_amount ?? 0), 0) - refunds - holds + adjustments,
+    const baseNet = round2(
+      items.reduce(
+        (sum, item) => sum + Number(item.vendor_payout_amount ?? 0),
+        0,
+      ) -
+        refunds -
+        holds,
     );
+    const net = round2(baseNet + adjustments);
 
-    const { data: payout, error: pErr } = await db
+    // Do not consume earnings or clawbacks into a payout Stripe can never send.
+    // Both remain unapplied and the backlog is reconsidered on the next cycle.
+    if (net <= 0) {
+      skipped += items.length;
+      continue;
+    }
+
+    const { data: payout, error: payoutError } = await db
       .from("payouts")
       .insert({
         vendor_id: vendorId,
@@ -260,36 +369,63 @@ export async function generatePayoutsCore(
       })
       .select("id")
       .single();
-    if (pErr || !payout) {
+
+    if (payoutError || !payout) {
       skipped += items.length;
       continue;
     }
-    const payoutId = (payout as { id: string }).id;
 
-    const { error: iErr } = await db.from("payout_items").insert(
-      items.map((i) => ({
-        payout_id: payoutId,
-        vendor_order_id: i.id,
-        gross_amount: Number(i.subtotal ?? 0),
-        commission_amount: Number(i.commission_amount ?? 0),
-        refund_amount: Number(i.refund_amount ?? 0),
-        net_amount: Number(i.vendor_payout_amount ?? 0) - Number(i.refund_amount ?? 0),
-      })),
-    );
-    if (iErr) {
-      // Unique-index violation means one of these orders is already in a payout.
+    const payoutId = payout.id;
+    let itemInsertFailed = false;
+    for (const chunk of batches(items, 250)) {
+      const { error } = await db.from("payout_items").insert(
+        chunk.map((item) => ({
+          payout_id: payoutId,
+          vendor_order_id: item.id,
+          gross_amount: Number(item.subtotal ?? 0),
+          commission_amount: Number(item.commission_amount ?? 0),
+          refund_amount: Number(item.refund_amount ?? 0),
+          net_amount:
+            Number(item.vendor_payout_amount ?? 0) -
+            Number(item.refund_amount ?? 0),
+        })),
+      );
+      if (error) {
+        itemInsertFailed = true;
+        break;
+      }
+    }
+
+    if (itemInsertFailed) {
+      // Deleting the payout cascades any chunks inserted before a concurrent
+      // uniqueness conflict or transient failure.
       await db.from("payouts").delete().eq("id", payoutId);
       skipped += items.length;
       continue;
     }
 
-    if (adjustments !== 0) {
-      await db
-        .from("payout_adjustments")
-        .update({ applied_payout_id: payoutId })
-        .eq("vendor_id", vendorId)
-        .is("applied_payout_id", null);
+    if (adjustmentRows.length > 0) {
+      const adjustmentIds = adjustmentRows.map((adjustment) => adjustment.id);
+      let adjustmentFailed = false;
+      for (const ids of batches(adjustmentIds)) {
+        const { error } = await db
+          .from("payout_adjustments")
+          .update({ applied_payout_id: payoutId })
+          .in("id", ids)
+          .is("applied_payout_id", null);
+        if (error) {
+          adjustmentFailed = true;
+          break;
+        }
+      }
+
+      if (adjustmentFailed) {
+        await db.from("payouts").delete().eq("id", payoutId);
+        skipped += items.length;
+        continue;
+      }
     }
+
     created++;
   }
 
