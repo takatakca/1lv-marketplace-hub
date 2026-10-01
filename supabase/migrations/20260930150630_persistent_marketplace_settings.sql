@@ -820,3 +820,347 @@ REVOKE ALL ON FUNCTION public.claim_stripe_event(text, text, jsonb)
 FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.claim_stripe_event(text, text, jsonb)
 TO service_role;
+
+
+-- Public catalog hardening.
+-- The base products/vendors tables contain private merchant data (costs,
+-- supplier metadata, addresses, Stripe ids and commission fields). Public
+-- browsing therefore goes through fixed-column SECURITY DEFINER RPCs while
+-- authenticated base-table SELECT remains limited to owners/admins.
+
+DROP POLICY IF EXISTS "Authenticated can view active products" ON public.products;
+DROP POLICY IF EXISTS "Authenticated can view active vendors" ON public.vendors;
+
+DROP POLICY IF EXISTS "Vendors can view own record" ON public.vendors;
+CREATE POLICY "Vendors can view own record"
+ON public.vendors FOR SELECT TO authenticated
+USING (
+  (select auth.uid()) IS NOT NULL
+  AND (select auth.uid()) = user_id
+);
+
+DROP POLICY IF EXISTS "Anon can view active products" ON public.products;
+DROP POLICY IF EXISTS "Anon can view active vendors" ON public.vendors;
+
+REVOKE SELECT ON public.products FROM anon;
+REVOKE SELECT ON public.vendors FROM anon;
+REVOKE SELECT ON public.public_products FROM anon, authenticated;
+REVOKE SELECT ON public.public_vendors FROM anon, authenticated;
+
+REVOKE SELECT (
+  id, vendor_id, slug, title, description, short_description, category_slug,
+  price, compare_at_price, inventory_quantity, track_inventory, images,
+  status, created_at, updated_at
+) ON public.products FROM anon;
+
+REVOKE SELECT (
+  id, user_id, slug, store_name, description, logo_url, banner_url,
+  return_policy, shipping_policy, country, status, created_at, updated_at
+) ON public.vendors FROM anon;
+
+CREATE OR REPLACE FUNCTION public.get_public_product_by_slug(_slug text)
+RETURNS TABLE (
+  id uuid,
+  vendor_id uuid,
+  slug text,
+  title text,
+  description text,
+  short_description text,
+  category_slug text,
+  price numeric,
+  compare_at_price numeric,
+  inventory_quantity integer,
+  track_inventory boolean,
+  images jsonb,
+  status public.product_status,
+  created_at timestamptz,
+  updated_at timestamptz
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT
+    p.id,
+    p.vendor_id,
+    p.slug,
+    p.title,
+    p.description,
+    p.short_description,
+    p.category_slug,
+    p.price,
+    p.compare_at_price,
+    p.inventory_quantity,
+    p.track_inventory,
+    p.images,
+    p.status,
+    p.created_at,
+    p.updated_at
+  FROM public.products AS p
+  WHERE p.slug = _slug
+    AND p.status = 'active'::public.product_status
+  LIMIT 1;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_public_product_by_slug(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_public_product_by_slug(text)
+TO anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.list_public_products(_limit integer DEFAULT 100)
+RETURNS TABLE (
+  id uuid,
+  vendor_id uuid,
+  slug text,
+  title text,
+  description text,
+  short_description text,
+  category_slug text,
+  price numeric,
+  compare_at_price numeric,
+  inventory_quantity integer,
+  track_inventory boolean,
+  images jsonb,
+  status public.product_status,
+  created_at timestamptz,
+  updated_at timestamptz
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT
+    p.id,
+    p.vendor_id,
+    p.slug,
+    p.title,
+    p.description,
+    p.short_description,
+    p.category_slug,
+    p.price,
+    p.compare_at_price,
+    p.inventory_quantity,
+    p.track_inventory,
+    p.images,
+    p.status,
+    p.created_at,
+    p.updated_at
+  FROM public.products AS p
+  WHERE p.status = 'active'::public.product_status
+  ORDER BY p.updated_at DESC, p.id
+  LIMIT LEAST(GREATEST(COALESCE(_limit, 100), 1), 200);
+$$;
+
+REVOKE ALL ON FUNCTION public.list_public_products(integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.list_public_products(integer)
+TO anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.get_public_vendor_by_slug(_slug text)
+RETURNS TABLE (
+  id uuid,
+  slug text,
+  store_name text,
+  description text,
+  logo_url text,
+  banner_url text,
+  return_policy text,
+  shipping_policy text,
+  country text,
+  status public.vendor_status,
+  created_at timestamptz,
+  updated_at timestamptz
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT
+    v.id,
+    v.slug,
+    v.store_name,
+    v.description,
+    v.logo_url,
+    v.banner_url,
+    v.return_policy,
+    v.shipping_policy,
+    v.country,
+    v.status,
+    v.created_at,
+    v.updated_at
+  FROM public.vendors AS v
+  WHERE v.slug = _slug
+    AND v.status = 'active'::public.vendor_status
+  LIMIT 1;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_public_vendor_by_slug(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_public_vendor_by_slug(text)
+TO anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.list_public_vendors(_limit integer DEFAULT 100)
+RETURNS TABLE (
+  id uuid,
+  slug text,
+  store_name text,
+  description text,
+  logo_url text,
+  banner_url text,
+  return_policy text,
+  shipping_policy text,
+  country text,
+  status public.vendor_status,
+  created_at timestamptz,
+  updated_at timestamptz
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT
+    v.id,
+    v.slug,
+    v.store_name,
+    v.description,
+    v.logo_url,
+    v.banner_url,
+    v.return_policy,
+    v.shipping_policy,
+    v.country,
+    v.status,
+    v.created_at,
+    v.updated_at
+  FROM public.vendors AS v
+  WHERE v.status = 'active'::public.vendor_status
+  ORDER BY v.updated_at DESC, v.id
+  LIMIT LEAST(GREATEST(COALESCE(_limit, 100), 1), 200);
+$$;
+
+REVOKE ALL ON FUNCTION public.list_public_vendors(integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.list_public_vendors(integer)
+TO anon, authenticated, service_role;
+
+-- Supplier credentials are service-role-only. Browser users can work with
+-- integration metadata but can neither read nor write credentials_encrypted.
+REVOKE SELECT, INSERT, UPDATE, DELETE
+ON public.supplier_integrations
+FROM authenticated;
+
+GRANT SELECT (
+  id, vendor_id, owner_id, provider_type, provider_name, status, settings,
+  created_at, updated_at
+) ON public.supplier_integrations TO authenticated;
+
+GRANT INSERT (
+  vendor_id, owner_id, provider_type, provider_name, status, settings
+) ON public.supplier_integrations TO authenticated;
+
+GRANT UPDATE (
+  vendor_id, provider_type, provider_name, status, settings
+) ON public.supplier_integrations TO authenticated;
+
+GRANT DELETE ON public.supplier_integrations TO authenticated;
+
+DROP POLICY IF EXISTS "supplier_integrations owner insert"
+ON public.supplier_integrations;
+CREATE POLICY "supplier_integrations owner insert"
+ON public.supplier_integrations FOR INSERT TO authenticated
+WITH CHECK (
+  (select auth.uid()) IS NOT NULL
+  AND owner_id = (select auth.uid())
+  AND (
+    vendor_id IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM public.vendors AS v
+      WHERE v.id = supplier_integrations.vendor_id
+        AND v.user_id = (select auth.uid())
+    )
+  )
+);
+
+DROP POLICY IF EXISTS "supplier_integrations owner update"
+ON public.supplier_integrations;
+CREATE POLICY "supplier_integrations owner update"
+ON public.supplier_integrations FOR UPDATE TO authenticated
+USING (
+  owner_id = (select auth.uid())
+  OR public.has_role((select auth.uid()), 'admin'::public.app_role)
+)
+WITH CHECK (
+  (
+    owner_id = (select auth.uid())
+    AND (
+      vendor_id IS NULL
+      OR EXISTS (
+        SELECT 1
+        FROM public.vendors AS v
+        WHERE v.id = supplier_integrations.vendor_id
+          AND v.user_id = (select auth.uid())
+      )
+    )
+  )
+  OR public.has_role((select auth.uid()), 'admin'::public.app_role)
+);
+
+DROP POLICY IF EXISTS "import_jobs owner insert"
+ON public.product_import_jobs;
+CREATE POLICY "import_jobs owner insert"
+ON public.product_import_jobs FOR INSERT TO authenticated
+WITH CHECK (
+  (select auth.uid()) IS NOT NULL
+  AND owner_id = (select auth.uid())
+  AND (
+    vendor_id IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM public.vendors AS v
+      WHERE v.id = product_import_jobs.vendor_id
+        AND v.user_id = (select auth.uid())
+    )
+  )
+  AND (
+    integration_id IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM public.supplier_integrations AS si
+      WHERE si.id = product_import_jobs.integration_id
+        AND si.owner_id = (select auth.uid())
+    )
+  )
+);
+
+DROP POLICY IF EXISTS "import_jobs owner update"
+ON public.product_import_jobs;
+CREATE POLICY "import_jobs owner update"
+ON public.product_import_jobs FOR UPDATE TO authenticated
+USING (
+  owner_id = (select auth.uid())
+  OR public.has_role((select auth.uid()), 'admin'::public.app_role)
+)
+WITH CHECK (
+  (
+    owner_id = (select auth.uid())
+    AND (
+      vendor_id IS NULL
+      OR EXISTS (
+        SELECT 1
+        FROM public.vendors AS v
+        WHERE v.id = product_import_jobs.vendor_id
+          AND v.user_id = (select auth.uid())
+      )
+    )
+    AND (
+      integration_id IS NULL
+      OR EXISTS (
+        SELECT 1
+        FROM public.supplier_integrations AS si
+        WHERE si.id = product_import_jobs.integration_id
+          AND si.owner_id = (select auth.uid())
+      )
+    )
+  )
+  OR public.has_role((select auth.uid()), 'admin'::public.app_role)
+);
