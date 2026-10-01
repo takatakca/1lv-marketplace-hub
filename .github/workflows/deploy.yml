@@ -143,9 +143,9 @@ jobs:
       # No remote database is modified by this validation.
       # ------------------------------------------------------------
       - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@v3.0.1
         with:
-          version: latest
+          version: "2.118.0"
 
       - name: Rebuild Supabase migrations locally
         shell: bash

@@ -213,9 +213,9 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@v3.0.1
         with:
-          version: latest
+          version: "2.118.0"
 
       - name: Start local Supabase database
         run: supabase db start
