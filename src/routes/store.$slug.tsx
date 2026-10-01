@@ -3,6 +3,11 @@ import { useEffect, useState } from "react";
 import { ShieldCheck, MapPin, Package } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { getPublicVendorBySlug, type PublicVendorRecord } from "@/services/vendors";
+import {
+  getVendor as getDemoVendor,
+  products as demoProducts,
+} from "@/lib/data";
+import { getPublicMarketplaceSettings } from "@/lib/public-marketplace-settings.functions";
 import { listPublicCatalogProducts } from "@/services/public-catalog";
 import type { Product } from "@/lib/data";
 import { resolveAssetUrl } from "@/services/vendor-assets";
@@ -10,12 +15,52 @@ import { formatCAD } from "@/lib/data";
 
 export const Route = createFileRoute("/store/$slug")({
   loader: async ({ params }) => {
-    const vendor = await getPublicVendorBySlug(params.slug);
-    if (!vendor) throw notFound();
-    const products = (await listPublicCatalogProducts()).filter(
-      (product) => product.vendorSlug === vendor.slug,
-    );
-    return { vendor, products };
+    const settings = await getPublicMarketplaceSettings().catch(() => null);
+
+    try {
+      const vendor = await getPublicVendorBySlug(params.slug);
+      if (vendor) {
+        const products = (await listPublicCatalogProducts()).filter(
+          (product) => product.vendorSlug === vendor.slug,
+        );
+        return { vendor, products };
+      }
+    } catch (error) {
+      if (!settings?.demo_mode) throw error;
+    }
+
+    if (settings?.demo_mode) {
+      const demoVendor = getDemoVendor(params.slug);
+      if (demoVendor) {
+        const createdAt = new Date(
+          Date.now() - demoVendor.yearsActive * 365.25 * 24 * 60 * 60 * 1000,
+        ).toISOString();
+
+        const vendor: PublicVendorRecord = {
+          id: `demo-${demoVendor.slug}`,
+          slug: demoVendor.slug,
+          store_name: demoVendor.name,
+          description: "Preview storefront data.",
+          logo_url: null,
+          banner_url: null,
+          return_policy: "Preview return policy.",
+          shipping_policy: "Preview shipping policy.",
+          country: demoVendor.country,
+          status: "active",
+          created_at: createdAt,
+          updated_at: createdAt,
+        };
+
+        return {
+          vendor,
+          products: demoProducts.filter(
+            (product) => product.vendorSlug === demoVendor.slug,
+          ),
+        };
+      }
+    }
+
+    throw notFound();
   },
   errorComponent: ({ error }) => (
     <AppLayout>

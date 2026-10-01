@@ -12,9 +12,9 @@ export const Route = createFileRoute("/deals")({
   head: () => ({
     meta: [
       { title: "Daily Deals & Flash Sales — 1LV.CA" },
-      { name: "description", content: "Flash sales, daily markdowns and limited-time discounts in CAD. Free shipping over $49, 30-day returns." },
-      { property: "og:title", content: "Daily Deals & Flash Sales — 1LV.CA" },
-      { property: "og:description", content: "Up to 60% off daily deals from Canadian and global sellers." },
+      { name: "description", content: "Browse active marketplace markdowns and verified promotions in CAD on 1LV.CA." },
+      { property: "og:title", content: "Daily Deals & Marketplace Savings — 1LV.CA" },
+      { property: "og:description", content: "Current product markdowns from active 1LV.CA marketplace sellers." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -23,10 +23,18 @@ export const Route = createFileRoute("/deals")({
 
 
 function DealsPage() {
-  const { products } = usePublicCatalog();
+  const { products, demo } = usePublicCatalog();
   const discounted = products
     .filter((p) => p.compareAt && p.compareAt > p.price)
     .sort((a, b) => ((b.compareAt! - b.price) / b.compareAt!) - ((a.compareAt! - a.price) / a.compareAt!));
+  const maxDiscount = discounted.reduce((max, product) => {
+    const compareAt = product.compareAt ?? product.price;
+    if (compareAt <= product.price) return max;
+    return Math.max(
+      max,
+      Math.round(((compareAt - product.price) / compareAt) * 100),
+    );
+  }, 0);
   const under10 = products.filter((p) => p.price < 10);
   const under25 = products.filter((p) => p.price < 25);
   const halfOff = discounted.filter((p) => (p.compareAt! - p.price) / p.compareAt! >= 0.4);
@@ -38,14 +46,20 @@ function DealsPage() {
         <div className="relative mx-auto flex max-w-7xl flex-wrap items-end justify-between gap-4 px-4 py-8">
           <div>
             <p className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-widest">
-              <Zap size={12} className="deal-pulse" /> Today only
+              <Zap size={12} className="deal-pulse" /> {demo ? "Preview event" : "Current markdowns"}
             </p>
-            <h1 className="mt-2 font-display text-3xl font-extrabold tracking-tight md:text-4xl">Flash deals up to 60% off</h1>
-            <p className="mt-1 text-sm text-white/85">{discounted.length} products marked down · restocked every morning</p>
+            <h1 className="mt-2 font-display text-3xl font-extrabold tracking-tight md:text-4xl">
+              {maxDiscount > 0 ? `Current deals up to ${maxDiscount}% off` : "Current marketplace deals"}
+            </h1>
+            <p className="mt-1 text-sm text-white/85">
+              {discounted.length} active markdown{discounted.length === 1 ? "" : "s"} in the live catalog
+            </p>
           </div>
-          <div className="rounded-lg bg-white/15 px-3 py-2 backdrop-blur">
-            <CountdownTimer label="Ends in" />
-          </div>
+          {demo && (
+            <div className="rounded-lg bg-white/15 px-3 py-2 backdrop-blur">
+              <CountdownTimer label="Preview ends in" />
+            </div>
+          )}
         </div>
       </section>
 

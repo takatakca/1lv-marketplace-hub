@@ -11,9 +11,9 @@ export const Route = createFileRoute("/trending")({
   head: () => ({
     meta: [
       { title: "Trending Now — Best Sellers on 1LV.CA" },
-      { name: "description", content: "The products Canadian shoppers are buying most this week, ranked by units sold. Updated hourly." },
-      { property: "og:title", content: "Trending Now — Best Sellers on 1LV.CA" },
-      { property: "og:description", content: "Ranked best sellers across the 1LV.CA marketplace, updated hourly." },
+      { name: "description", content: "Products ranked by recorded paid marketplace unit sales on 1LV.CA." },
+      { property: "og:title", content: "Trending Marketplace Products — 1LV.CA" },
+      { property: "og:description", content: "Live marketplace products ranked from recorded paid unit sales." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -39,12 +39,12 @@ function TrendingPage() {
     <AppLayout>
       <section className="bg-gradient-hero text-white">
         <div className="mx-auto max-w-7xl px-4 py-8">
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/70">Updated hourly</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/70">Live marketplace data</p>
           <h1 className="mt-1 flex items-center gap-2 font-display text-3xl font-extrabold tracking-tight md:text-4xl">
             <TrendingUp size={26} /> Trending on 1LV.CA
           </h1>
           <p className="mt-2 max-w-xl text-sm text-white/80">
-            Ranked by units sold this week across every seller on the marketplace.
+            Ranked from recorded paid unit sales across active marketplace products.
           </p>
         </div>
       </section>
@@ -60,14 +60,14 @@ function TrendingPage() {
               className="flex shrink-0 items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-navy shadow-merch hover:border-electric hover:text-electric"
             >
               <span>{c.emoji}</span> {c.name}
-              <span className="text-[10px] font-bold text-deal">{(sold / 1000).toFixed(1)}k sold</span>
+              <span className="text-[10px] font-bold text-deal">{sold.toLocaleString()} sold</span>
             </Link>
           ))}
         </div>
       </section>
 
       <section className="mx-auto max-w-7xl px-4 py-7">
-        <SectionHead eyebrow="Top 12" title="Most ordered this week" />
+        <SectionHead eyebrow="Top 12" title="Most ordered products" />
         <ProductGrid products={top} cols={6} ranked />
       </section>
 

@@ -42,6 +42,14 @@ function Home() {
         ((b.compareAt ?? b.price) - b.price) / (b.compareAt ?? b.price) -
         (((a.compareAt ?? a.price) - a.price) / (a.compareAt ?? a.price)),
     );
+  const maxDiscount = discounted.reduce((max, product) => {
+    const compareAt = product.compareAt ?? product.price;
+    if (compareAt <= product.price) return max;
+    return Math.max(
+      max,
+      Math.round(((compareAt - product.price) / compareAt) * 100),
+    );
+  }, 0);
   const flash = discounted;
   const trending = [...products].sort((a, b) => b.sold - a.sold);
   const local = products.filter((p) => p.vendorCountry === "CA" || p.tags.includes("local"));
@@ -86,15 +94,22 @@ function Home() {
             >
               <div className="relative z-10 max-w-md">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider backdrop-blur">
-                  <Zap size={12} className="text-deal deal-pulse" /> Flash event live
+                  <Zap size={12} className="text-deal deal-pulse" />{" "}
+                  {demo
+                    ? "Preview deal event"
+                    : discounted.length > 0
+                      ? "Live marketplace savings"
+                      : "Live marketplace"}
                 </span>
                 <h1 className="mt-3 font-display text-3xl font-extrabold leading-[1.05] tracking-tight md:text-5xl">
-                  Up to 60% off
+                  {maxDiscount > 0 ? `Up to ${maxDiscount}% off` : "Daily marketplace picks"}
                   <br />
-                  daily deals in CAD
+                  in CAD
                 </h1>
                 <p className="mt-3 text-sm text-white/80">
-                  {"New markdowns every morning. Free shipping over $" + freeShippingThreshold + ", 30-day returns."}
+                  {discounted.length > 0
+                    ? `${discounted.length} active markdowns. Free shipping over ${freeShippingThreshold} where eligible.`
+                    : `Free shipping over ${freeShippingThreshold} where eligible, with protected checkout.`}
                 </p>
                 <span className="mt-5 inline-flex items-center gap-2 rounded-md bg-deal px-5 py-2.5 text-sm font-bold text-deal-foreground transition group-hover:opacity-90">
                   Shop the event <ArrowRight size={15} />
@@ -164,8 +179,13 @@ function Home() {
       {/* ---------- FLASH DEALS ---------- */}
       <section className="surface-2 border-y border-border">
         <div className="mx-auto max-w-7xl px-4 py-7">
-          <SectionHead eyebrow="Ends tonight" title="⚡ Flash deals" action="Shop all deals" actionTo="/deals">
-            <CountdownTimer />
+          <SectionHead
+            eyebrow={demo ? "Preview event" : "Active markdowns"}
+            title="⚡ Current deals"
+            action="Shop all deals"
+            actionTo="/deals"
+          >
+            {demo ? <CountdownTimer /> : null}
           </SectionHead>
           <ProductGrid products={flash.slice(0, 6)} cols={6} />
         </div>
@@ -200,7 +220,7 @@ function Home() {
         <div className="mx-auto max-w-7xl px-4 py-7">
           <SectionHead eyebrow="Rising fast" title="Trending now" action="See ranking" actionTo="/trending">
             <span className="hidden items-center gap-1 rounded-full bg-deal/10 px-2 py-1 text-[11px] font-bold text-deal sm:inline-flex">
-              <TrendingUp size={12} /> Updated hourly
+              <TrendingUp size={12} /> Based on marketplace sales
             </span>
           </SectionHead>
           <ProductGrid products={trending.slice(0, 6)} cols={6} ranked />
