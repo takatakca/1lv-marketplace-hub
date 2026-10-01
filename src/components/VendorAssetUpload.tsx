@@ -61,7 +61,6 @@ export function VendorAssetUpload({ kind, label, userId, value, onChange, aspect
       </div>
       <div className={`group relative overflow-hidden rounded-lg border border-dashed border-border bg-muted/30 ${ratio}`}>
         {url ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img src={url} alt={label} className="h-full w-full object-cover" />
         ) : (
           <div className="grid h-full place-items-center text-xs text-muted-foreground">
