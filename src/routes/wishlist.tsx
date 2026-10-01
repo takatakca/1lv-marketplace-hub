@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
 import { EmptyState } from "@/components/EmptyState";
 import { useWishlist } from "@/hooks/use-wishlist";
-import { products } from "@/lib/data";
+import { usePublicCatalog } from "@/hooks/use-public-catalog";
 
 export const Route = createFileRoute("/wishlist")({
   component: Wishlist,
@@ -13,7 +13,8 @@ export const Route = createFileRoute("/wishlist")({
 
 function Wishlist() {
   const { ids } = useWishlist();
-  const items = products.filter((p) => ids.includes(p.id));
+  const { products } = usePublicCatalog();
+  const items = products.filter((product) => ids.includes(product.id));
   return (
     <AppLayout>
       <div className="mx-auto max-w-7xl px-4 py-8">
