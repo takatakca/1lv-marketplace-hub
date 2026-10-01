@@ -48,9 +48,8 @@ jobs:
             npx eslint --max-warnings=0 --rule "prettier/prettier: off" "${files[@]}"
           fi
 
-      - name: Lint repository on manual runs
-        if: github.event_name != 'pull_request'
-        run: npm run lint
+      - name: Lint entire repository
+        run: npx eslint . --max-warnings=0 --rule "prettier/prettier: off"
 
       # TanStack Start regenerates src/routeTree.gen.ts during the Vite build.
       # Keep this before tsc so newly-added file routes are present in generated types.
