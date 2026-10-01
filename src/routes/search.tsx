@@ -63,6 +63,13 @@ function SearchPage() {
   const [saleOnly, setSaleOnly] = useState(sp.sale);
   const [category, setCategory] = useState(smartCategory);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const effectiveSort: Sort =
+    !demo && sort === "rating" ? "relevance" : sort;
+  const quickChips = demo
+    ? QUICK_CHIPS
+    : QUICK_CHIPS.filter(
+        (chip) => chip.label !== "Free shipping" && chip.label !== "Top rated",
+      );
 
   // Re-sync when the URL changes (new search submitted from the header).
   useEffect(() => {
@@ -90,14 +97,14 @@ function SearchPage() {
     }
     r = r.filter((p) => p.price <= maxPrice && p.price >= minPrice);
 
-    switch (sort) {
+    switch (effectiveSort) {
       case "price-asc": r = [...r].sort((a, b) => a.price - b.price); break;
       case "price-desc": r = [...r].sort((a, b) => b.price - a.price); break;
       case "rating": r = [...r].sort((a, b) => b.rating - a.rating); break;
       case "sold": r = [...r].sort((a, b) => b.sold - a.sold); break;
     }
     return r;
-  }, [products, demo, term, sort, maxPrice, minPrice, freeShip, minRating, caOnly, saleOnly, category]);
+  }, [products, demo, term, effectiveSort, maxPrice, minPrice, freeShip, minRating, caOnly, saleOnly, category]);
 
   const smartBits = [
     sp.q ? sp.q : null,
@@ -109,19 +116,19 @@ function SearchPage() {
         : sp.minPrice !== undefined
           ? `over $${sp.minPrice}`
           : null,
-    sp.freeShipping ? "with free shipping" : null,
+    demo && sp.freeShipping ? "with free shipping" : null,
     sp.canadian ? "from Canadian sellers" : null,
-    sp.rating ? `rated ${sp.rating}+ stars` : null,
+    demo && sp.rating ? `rated ${sp.rating}+ stars` : null,
     sp.sale ? "on sale" : null,
   ].filter(Boolean);
 
   const hasSmart =
     sp.maxPrice !== undefined ||
     sp.minPrice !== undefined ||
-    sp.freeShipping ||
+    (demo && sp.freeShipping) ||
     sp.canadian ||
     sp.sale ||
-    sp.rating > 0 ||
+    (demo && sp.rating > 0) ||
     !!smartCategory;
 
   const clearSmart = () =>
@@ -227,7 +234,7 @@ function SearchPage() {
         )}
 
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {QUICK_CHIPS.map((chip) => (
+          {quickChips.map((chip) => (
             <Link
               key={chip.label}
               to="/search"
@@ -251,14 +258,14 @@ function SearchPage() {
             <label className="inline-flex items-center gap-2 text-xs">
               <span className="text-muted-foreground">Sort:</span>
               <select
-                value={sort}
+                value={effectiveSort}
                 onChange={(e) => setSort(e.target.value as Sort)}
                 className="rounded-md border border-border bg-white px-2 py-1.5 text-xs font-medium text-navy outline-none focus:border-electric"
               >
                 <option value="relevance">Relevance</option>
                 <option value="price-asc">Price: Low to High</option>
                 <option value="price-desc">Price: High to Low</option>
-                <option value="rating">Top rated</option>
+                {demo && <option value="rating">Top rated</option>}
                 <option value="sold">Best sellers</option>
               </select>
             </label>

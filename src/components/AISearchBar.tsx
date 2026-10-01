@@ -14,6 +14,7 @@ import {
   toSearchNavigation,
   type Suggestion,
 } from "@/services/ai-search";
+import { usePublicCatalog } from "@/hooks/use-public-catalog";
 
 type SpeechRecognitionResultLike = {
   0: { transcript: string };
@@ -59,6 +60,8 @@ export function AISearchBar({
   className?: string;
 }) {
   const navigate = useNavigate();
+  const { products: catalogProducts, vendors: catalogVendors, demo } =
+    usePublicCatalog();
   const [q, setQ] = useState(initialQuery);
   const [open, setOpen] = useState(false);
   const [recent, setRecent] = useState<string[]>([]);
@@ -84,7 +87,15 @@ export function AISearchBar({
 
   useEffect(() => () => recognitionRef.current?.stop(), []);
 
-  const suggestions = useMemo(() => getSuggestions(q), [q]);
+  const suggestions = useMemo(
+    () => getSuggestions(q, 8, catalogProducts, catalogVendors),
+    [q, catalogProducts, catalogVendors],
+  );
+  const quickChips = demo
+    ? QUICK_CHIPS
+    : QUICK_CHIPS.filter(
+        (chip) => chip.label !== "Free shipping" && chip.label !== "Top rated",
+      );
 
   const runSearch = async (raw: string) => {
     const term = raw.trim();
@@ -92,7 +103,18 @@ export function AISearchBar({
     if (term) setRecent(pushRecentSearch(term));
     const intent = await enhanceSearchIntent(term);
     const params = intentToSearchParams(intent);
-    navigate({ to: "/search", search: toSearchNavigation(params, term || undefined) });
+    const supportedParams = demo
+      ? params
+      : {
+          ...params,
+          freeShipping: false,
+          rating: 0,
+          sort: params.sort === "rating" ? "relevance" : params.sort,
+        };
+    navigate({
+      to: "/search",
+      search: toSearchNavigation(supportedParams, term || undefined),
+    });
   };
 
   const onSubmit = (e: FormEvent) => {
@@ -153,10 +175,10 @@ export function AISearchBar({
     !!preview &&
     (preview.maxPrice !== undefined ||
       preview.minPrice !== undefined ||
-      preview.freeShipping ||
+      (demo && preview.freeShipping) ||
       preview.canadian ||
       preview.sale ||
-      preview.rating !== undefined);
+      (demo && preview.rating !== undefined));
 
   const go = (s: Suggestion) => {
     setOpen(false);
@@ -190,7 +212,7 @@ export function AISearchBar({
             aria-expanded={open}
             aria-controls="ai-search-suggestions"
             aria-label="Search products"
-            placeholder={listening ? "Listening…" : compact ? "Search products…" : "Try “wireless headphones under $50 free shipping”"}
+            placeholder={listening ? "Listening…" : compact ? "Search products…" : "Try “wireless headphones under $50 from Canada”"}
             className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground sm:px-4 [&::-webkit-search-cancel-button]:appearance-none"
           />
           {q && (
@@ -247,9 +269,9 @@ export function AISearchBar({
                   preview.query || "all products",
                   preview.maxPrice !== undefined ? `under $${preview.maxPrice}` : null,
                   preview.minPrice !== undefined ? `over $${preview.minPrice}` : null,
-                  preview.freeShipping ? "free shipping" : null,
+                  demo && preview.freeShipping ? "free shipping" : null,
                   preview.canadian ? "Canadian sellers" : null,
-                  preview.rating ? `${preview.rating}+ stars` : null,
+                  demo && preview.rating ? `${preview.rating}+ stars` : null,
                   preview.sale ? "on sale" : null,
                 ]
                   .filter(Boolean)
@@ -325,7 +347,7 @@ export function AISearchBar({
           )}
 
           <div className="flex flex-wrap gap-1.5 border-t border-border pt-2">
-            {QUICK_CHIPS.map((chip) => (
+            {quickChips.map((chip) => (
               <Link
                 key={chip.label}
                 to="/search"

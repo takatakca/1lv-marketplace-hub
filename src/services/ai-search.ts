@@ -1,5 +1,11 @@
 import { parseSearchIntent, type SearchIntent } from "@/lib/search-intent";
-import { categories, products, vendors } from "@/lib/data";
+import {
+  categories,
+  products as demoProducts,
+  vendors as demoVendors,
+  type Product,
+  type Vendor,
+} from "@/lib/data";
 
 const RECENT_KEY = "1lvca:recent-searches:v1";
 const MAX_RECENT = 8;
@@ -121,7 +127,12 @@ export const QUICK_CHIPS: QuickChip[] = [
   { label: "On sale", search: { sale: true } },
 ];
 
-export function getSuggestions(term: string, limit = 8): Suggestion[] {
+export function getSuggestions(
+  term: string,
+  limit = 8,
+  productSource: readonly Product[] = demoProducts,
+  vendorSource: readonly Vendor[] = demoVendors,
+): Suggestion[] {
   const t = (term ?? "").trim().toLowerCase();
   if (!t) return [];
 
@@ -130,12 +141,12 @@ export function getSuggestions(term: string, limit = 8): Suggestion[] {
     .slice(0, 3)
     .map((c) => ({ kind: "category", id: `c-${c.slug}`, label: c.name, slug: c.slug, emoji: c.emoji }));
 
-  const stores: Suggestion[] = vendors
+  const stores: Suggestion[] = vendorSource
     .filter((v) => v.name.toLowerCase().includes(t) || v.slug.includes(t))
     .slice(0, 3)
     .map((v) => ({ kind: "store", id: `v-${v.slug}`, label: v.name, slug: v.slug, country: v.country }));
 
-  const prods: Suggestion[] = products
+  const prods: Suggestion[] = productSource
     .filter((p) => p.title.toLowerCase().includes(t))
     .slice(0, limit)
     .map((p) => ({ kind: "product", id: p.id, label: p.title, slug: p.slug, price: p.price, image: p.images[0] }));
