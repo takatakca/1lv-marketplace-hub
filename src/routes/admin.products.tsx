@@ -57,17 +57,41 @@ function Page() {
   const vendorById = useMemo(() => new Map(vendors.map((v) => [v.id, v])), [vendors]);
 
   const useDemo = demo;
-  const source: ProductRecord[] = useDemo
-    ? demoProducts.slice(0, 12).map((p, i) => ({
-        id: "demo-" + i, vendor_id: p.vendorSlug, slug: p.slug, title: p.title,
-        description: null, short_description: null, category_slug: p.category,
-        price: p.price, compare_at_price: null, cost: null, sku: null,
-        inventory_quantity: 10, track_inventory: false, images: [],
-        supplier_source: null, supplier_product_id: null, supplier_url: null,
-        status: (["pending_review", "active", "pending_review", "rejected", "pending_review", "active"][i % 6]) as ProductStatus,
-        created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-      }))
-    : items ?? [];
+  const source: ProductRecord[] = useMemo(
+    () =>
+      useDemo
+        ? demoProducts.slice(0, 12).map((p, i) => ({
+            id: "demo-" + i,
+            vendor_id: p.vendorSlug,
+            slug: p.slug,
+            title: p.title,
+            description: null,
+            short_description: null,
+            category_slug: p.category,
+            price: p.price,
+            compare_at_price: null,
+            cost: null,
+            sku: null,
+            inventory_quantity: 10,
+            track_inventory: false,
+            images: [],
+            supplier_source: null,
+            supplier_product_id: null,
+            supplier_url: null,
+            status: ([
+              "pending_review",
+              "active",
+              "pending_review",
+              "rejected",
+              "pending_review",
+              "active",
+            ][i % 6]) as ProductStatus,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }))
+        : items ?? [],
+    [items, useDemo],
+  );
 
   const categories = useMemo(
     () => Array.from(new Set(source.map((p) => p.category_slug).filter(Boolean) as string[])),
