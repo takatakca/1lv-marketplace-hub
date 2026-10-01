@@ -1,5 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { Database } from "@/integrations/supabase/types";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * Stripe Connect (Express) server functions.
@@ -67,7 +69,7 @@ type VendorRow = {
 
 /** Load the caller's own vendor row through RLS and enforce ownership + active status. */
 async function loadOwnedVendor(
-  supabase: { from: (t: string) => any },
+  supabase: SupabaseClient<Database>,
   vendorId: string,
   userId: string,
   requireActive: boolean,
