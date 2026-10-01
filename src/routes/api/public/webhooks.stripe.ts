@@ -1,4 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 
 /**
  * Stripe webhook endpoint — verifies signature, then applies idempotent
@@ -58,9 +60,7 @@ type StripeEvent = {
   data: { object: Record<string, unknown> };
 };
 
-type AdminDb = Awaited<
-  ReturnType<typeof import("@/integrations/supabase/client.server")["supabaseAdmin"]>
->;
+type AdminDb = SupabaseClient<Database>;
 
 async function notifyAdmins(
   db: AdminDb,
@@ -73,7 +73,7 @@ async function notifyAdmins(
     .select("user_id")
     .eq("role", "admin");
 
-  const notifications = (adminRoles ?? []).map((row) => ({
+  const notifications = (adminRoles ?? []).map((row: { user_id: string }) => ({
     user_id: row.user_id,
     kind,
     title,
