@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import {
   getPublicMarketplaceSettings,
   type PublicMarketplaceSettings,
-} from "@/lib/marketplace-settings.functions";
+} from "@/lib/public-marketplace-settings.functions";
 
 export function usePublicMarketplaceSettings() {
   const [settings, setSettings] = useState<PublicMarketplaceSettings | null>(null);

@@ -17,39 +17,6 @@ export type MarketplaceSettings = {
   updated_at: string;
 };
 
-export type PublicMarketplaceSettings = Pick<
-  MarketplaceSettings,
-  | "marketplace_name"
-  | "support_email"
-  | "free_shipping_threshold"
-  | "standard_shipping_fee"
-  | "allow_guest_checkout"
->;
-
-function parsePublicMarketplaceSettings(value: unknown): PublicMarketplaceSettings {
-  const row = Array.isArray(value) ? value[0] : value;
-  if (!row || typeof row !== "object") throw new Error("Marketplace settings are unavailable.");
-
-  const record = row as Record<string, unknown>;
-  const freeShippingThreshold = Number(record.free_shipping_threshold);
-  const standardShippingFee = Number(record.standard_shipping_fee);
-
-  if (!Number.isFinite(freeShippingThreshold) || freeShippingThreshold < 0) {
-    throw new Error("Marketplace shipping threshold is invalid.");
-  }
-  if (!Number.isFinite(standardShippingFee) || standardShippingFee < 0) {
-    throw new Error("Marketplace shipping fee is invalid.");
-  }
-
-  return {
-    marketplace_name: String(record.marketplace_name ?? ""),
-    support_email: String(record.support_email ?? ""),
-    free_shipping_threshold: freeShippingThreshold,
-    standard_shipping_fee: standardShippingFee,
-    allow_guest_checkout: record.allow_guest_checkout === true,
-  };
-}
-
 function validateSettings(input: MarketplaceSettings): MarketplaceSettings {
   if (!input || typeof input !== "object") throw new Error("Invalid settings.");
   if (!input.marketplace_name?.trim() || input.marketplace_name.length > 80) throw new Error("Marketplace name is required.");
@@ -72,16 +39,6 @@ async function adminDb(context: {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
 }
-
-export const getPublicMarketplaceSettings = createServerFn({ method: "GET" })
-  .handler(async () => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await supabaseAdmin.rpc(
-      "get_public_marketplace_settings" as never,
-    );
-    if (error) throw new Error("Could not load marketplace settings.");
-    return parsePublicMarketplaceSettings(data);
-  });
 
 export const getMarketplaceSettings = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
