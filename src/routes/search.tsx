@@ -8,7 +8,7 @@ import { AISearchBar } from "@/components/AISearchBar";
 import { ProductGrid } from "@/components/ProductGrid";
 import { EmptyState } from "@/components/EmptyState";
 import { products, vendors, categories } from "@/lib/data";
-import { QUICK_CHIPS } from "@/services/ai-search";
+import { QUICK_CHIPS, toSearchNavigation } from "@/services/ai-search";
 
 const searchSchema = z.object({
   q: fallback(z.string(), "").default(""),
@@ -124,7 +124,20 @@ function SearchPage() {
     !!smartCategory;
 
   const clearSmart = () =>
-    navigate({ search: { q: sp.q, sort: "relevance", category: "", freeShipping: false, canadian: false, sale: false, rating: 0 } as any });
+    navigate({
+      search: {
+        q: sp.q,
+        raw: undefined,
+        sort: "relevance",
+        category: "",
+        minPrice: undefined,
+        maxPrice: undefined,
+        freeShipping: false,
+        canadian: false,
+        sale: false,
+        rating: 0,
+      },
+    });
 
   const FilterPanel = () => (
     <div className="space-y-5 text-sm">
@@ -213,7 +226,7 @@ function SearchPage() {
             <Link
               key={chip.label}
               to="/search"
-              search={chip.search as any}
+              search={toSearchNavigation(chip.search)}
               className="rounded-full border border-border bg-white px-2.5 py-1 text-xs text-navy hover:border-electric hover:text-electric"
             >
               {chip.label}
