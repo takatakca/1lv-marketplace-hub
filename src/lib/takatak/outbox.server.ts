@@ -68,7 +68,7 @@ export async function queueCustomerEvent(
   const client = await db();
   const { data: profile } = await client
     .from("profiles")
-    .select("id, display_name, locale, country, created_at")
+    .select("id, display_name, locale, country, created_at, takatak_person_id")
     .eq("id", profileId)
     .maybeSingle();
   if (!profile) return;
@@ -95,6 +95,7 @@ export async function queueCustomerEvent(
         country: profile.country,
         province: addr?.["province"] ?? null,
         created_at: profile.created_at,
+        takatak_person_id: profile.takatak_person_id,
       }),
     },
     // "created" is a one-time lifecycle event; "updated" may legitimately repeat.

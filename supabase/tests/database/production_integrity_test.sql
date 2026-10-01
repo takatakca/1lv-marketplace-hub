@@ -2,12 +2,22 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(14);
+select plan(16);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261001044500',
+  '20261001064000',
   'production schema marker is current'
+);
+
+select ok(
+  to_regclass('public.profiles_takatak_person_id_unique') is not null,
+  '1LV customer profiles enforce one unique TAKATAK master identity link'
+);
+
+select ok(
+  to_regclass('public.vendors_takatak_merchant_id_unique') is not null,
+  '1LV vendors enforce one unique TAKATAK merchant link'
 );
 
 select ok(

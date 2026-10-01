@@ -53,6 +53,7 @@ export type OutboxRow = {
 /** Normalized customer/person payload sent to TAKATAK. Never includes secrets. */
 export type TakatakCustomerPayload = {
   source_application: typeof SOURCE_APPLICATION;
+  master_identity_id: string | null;
   local_profile_id: string | null;
   local_guest_reference: string | null;
   is_guest: boolean;
