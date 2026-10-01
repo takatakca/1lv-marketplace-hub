@@ -11,8 +11,21 @@ import {
   getRecentSearches,
   getSuggestions,
   pushRecentSearch,
+  toSearchNavigation,
   type Suggestion,
 } from "@/services/ai-search";
+
+type SpeechRecognitionResultLike = {
+  0: { transcript: string };
+};
+
+type SpeechRecognitionEventLike = {
+  results: ArrayLike<SpeechRecognitionResultLike>;
+};
+
+type SpeechRecognitionErrorEventLike = {
+  error?: string;
+};
 
 type SpeechRecognitionLike = {
   lang: string;
@@ -20,14 +33,19 @@ type SpeechRecognitionLike = {
   continuous: boolean;
   start: () => void;
   stop: () => void;
-  onresult: ((e: any) => void) | null;
-  onerror: ((e: any) => void) | null;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
   onend: (() => void) | null;
+};
+
+type SpeechRecognitionWindow = Window & {
+  SpeechRecognition?: new () => SpeechRecognitionLike;
+  webkitSpeechRecognition?: new () => SpeechRecognitionLike;
 };
 
 function getRecognitionCtor(): (new () => SpeechRecognitionLike) | null {
   if (typeof window === "undefined") return null;
-  const w = window as any;
+  const w = window as SpeechRecognitionWindow;
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
@@ -74,7 +92,7 @@ export function AISearchBar({
     if (term) setRecent(pushRecentSearch(term));
     const intent = await enhanceSearchIntent(term);
     const params = intentToSearchParams(intent);
-    navigate({ to: "/search", search: { ...params, raw: term || undefined } as any });
+    navigate({ to: "/search", search: toSearchNavigation(params, term || undefined) });
   };
 
   const onSubmit = (e: FormEvent) => {
@@ -99,14 +117,14 @@ export function AISearchBar({
       rec.lang = typeof navigator !== "undefined" ? navigator.language || "en-CA" : "en-CA";
       rec.interimResults = true;
       rec.continuous = false;
-      rec.onresult = (e: any) => {
+      rec.onresult = (e) => {
         let transcript = "";
         for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript;
         // Only the text transcript enters app state — no audio is recorded or stored.
         setQ(transcript.trim().slice(0, 200));
         setOpen(true);
       };
-      rec.onerror = (e: any) => {
+      rec.onerror = (e) => {
         const code = e?.error;
         setVoiceError(
           code === "not-allowed" || code === "service-not-allowed"
@@ -311,7 +329,7 @@ export function AISearchBar({
               <Link
                 key={chip.label}
                 to="/search"
-                search={chip.search as any}
+                search={toSearchNavigation(chip.search)}
                 onClick={() => setOpen(false)}
                 className="rounded-full border border-border px-2.5 py-1 text-xs text-navy hover:border-electric hover:text-electric"
               >
