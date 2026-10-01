@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { DataTable } from "@/components/DataTable";
 import { products as demoProducts, formatCAD } from "@/lib/data";
 import { useAuth } from "@/hooks/use-auth";
+import { usePublicMarketplaceSettings } from "@/hooks/use-marketplace-settings";
 import { isDemoMode } from "@/lib/demo-mode";
 import { getMyVendor, type VendorRecord } from "@/services/vendors";
 import { listVendorProducts, setProductStatus, type ProductRecord, type ProductStatus } from "@/services/products";
@@ -24,6 +25,7 @@ function badge(s: string) {
 
 function Page() {
   const { user } = useAuth();
+  const { settings: marketplaceSettings } = usePublicMarketplaceSettings();
   const demo = isDemoMode(user);
   const [vendor, setVendor] = useState<VendorRecord | null>(null);
   const [items, setItems] = useState<ProductRecord[] | null>(null);
@@ -75,14 +77,26 @@ function Page() {
 
   const subActive = vendor?.subscription_status === "active" || vendor?.subscription_status === "trialing";
   const canPublish = vendor?.status === "active" && subActive;
+  const requiresProductApproval = marketplaceSettings?.require_product_approval ?? true;
 
   const bulkSubmit = async () => {
     if (useDemo) { toast.message("Demo mode — bulk submit simulated"); return; }
-    if (!canPublish) { toast.error("Vendor must be approved and subscribed to submit for review."); return; }
+    if (!canPublish) {
+      toast.error(
+        requiresProductApproval
+          ? "Vendor must be approved and subscribed to submit for review."
+          : "Vendor must be approved and subscribed to publish.",
+      );
+      return;
+    }
     setWorking(true);
     try {
       await Promise.all(Array.from(selected).map((id) => setProductStatus(id, "pending_review")));
-      toast.success(`Submitted ${selected.size} product(s) for review`);
+      toast.success(
+        requiresProductApproval
+          ? `Submitted ${selected.size} product(s) for review`
+          : `Published ${selected.size} product(s)`,
+      );
       setSelected(new Set());
       if (vendor) await reload(vendor.id);
     } catch (err) { toast.error((err as Error).message); }
@@ -131,7 +145,9 @@ function Page() {
       {selected.size > 0 && (
         <div className="mb-3 flex items-center gap-3 rounded-md border border-border bg-card px-3 py-2 text-sm">
           <span className="font-semibold">{selected.size} selected</span>
-          <button onClick={bulkSubmit} disabled={working} className="rounded-md bg-electric px-3 py-1.5 text-xs font-semibold text-electric-foreground disabled:opacity-50">Submit for review</button>
+          <button onClick={bulkSubmit} disabled={working} className="rounded-md bg-electric px-3 py-1.5 text-xs font-semibold text-electric-foreground disabled:opacity-50">
+            {requiresProductApproval ? "Submit for review" : "Publish"}
+          </button>
           <button onClick={bulkArchive} disabled={working} className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold">Archive</button>
           <button onClick={() => setSelected(new Set())} className="ml-auto text-xs text-muted-foreground">Clear</button>
         </div>

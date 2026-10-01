@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
+import { usePublicMarketplaceSettings } from "@/hooks/use-marketplace-settings";
 import {
   getMyVendor,
   setVendorAssetUrl,
@@ -53,6 +54,7 @@ const empty: FormState = {
 
 function Page() {
   const { user } = useAuth();
+  const { settings: marketplaceSettings } = usePublicMarketplaceSettings();
   const demo = isDemoMode(user);
   const [form, setForm] = useState<FormState>(empty);
   const [loading, setLoading] = useState(!demo);
@@ -139,7 +141,9 @@ function Page() {
       setBanner(saved.banner_url);
       toast.success(
         saved.status === "active"
-          ? "Vendor profile updated."
+          ? marketplaceSettings?.require_vendor_approval === false
+            ? "Vendor profile saved and activated."
+            : "Vendor profile updated."
           : "Vendor profile saved. Pending admin review.",
       );
     } catch (error) {

@@ -91,7 +91,9 @@ RETURNS TABLE (
   support_email text,
   free_shipping_threshold numeric,
   standard_shipping_fee numeric,
-  allow_guest_checkout boolean
+  allow_guest_checkout boolean,
+  require_vendor_approval boolean,
+  require_product_approval boolean
 )
 LANGUAGE sql
 STABLE
@@ -103,7 +105,9 @@ AS $$
     s.support_email,
     s.free_shipping_threshold,
     s.standard_shipping_fee,
-    s.allow_guest_checkout
+    s.allow_guest_checkout,
+    s.require_vendor_approval,
+    s.require_product_approval
   FROM public.marketplace_settings AS s
   WHERE s.id = true;
 $$;
