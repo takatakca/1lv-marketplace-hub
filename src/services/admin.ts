@@ -37,6 +37,7 @@ export type AdminOverview = {
   unpaidVendors: number;
   commissionRevenue: number;
   payoutLiability: number;
+  openDisputes: number;
   hasData: boolean;
   recentOrders: Array<{
     order: string;
@@ -48,7 +49,7 @@ export type AdminOverview = {
 };
 
 export async function getAdminOverview(): Promise<AdminOverview> {
-  const [orders, vendors, products, splits] = await Promise.all([
+  const [orders, vendors, products, splits, disputes] = await Promise.all([
     supabase
       .from("orders")
       .select("order_number, customer_email, total, payment_status, created_at")
@@ -60,6 +61,10 @@ export async function getAdminOverview(): Promise<AdminOverview> {
       .from("vendor_orders" as never)
       .select("commission_amount, vendor_payout_amount, status")
       .limit(2000),
+    supabase
+      .from("disputes")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["open", "under_review", "waiting_customer", "waiting_vendor"]),
   ]);
 
   const oRows = (orders.data ?? []) as Array<{
@@ -95,6 +100,7 @@ export async function getAdminOverview(): Promise<AdminOverview> {
     payoutLiability: sRows
       .filter((r) => r.status !== "delivered" && r.status !== "cancelled")
       .reduce((s, r) => s + Number(r.vendor_payout_amount ?? 0), 0),
+    openDisputes: disputes.count ?? 0,
     hasData: oRows.length + vRows.length + pRows.length > 0,
     recentOrders: oRows.slice(0, 6).map((order) => ({
       order: order.order_number,

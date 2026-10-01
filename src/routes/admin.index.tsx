@@ -48,6 +48,7 @@ function Page() {
         unpaidVendors: 4,
         commissionRevenue: 16580,
         payoutLiability: 38420,
+        openDisputes: 3,
         hasData: true,
         recentOrders: [],
       }
@@ -61,6 +62,7 @@ function Page() {
         unpaidVendors: 0,
         commissionRevenue: 0,
         payoutLiability: 0,
+        openDisputes: 0,
         hasData: false,
         recentOrders: [],
       };
@@ -91,7 +93,7 @@ function Page() {
         <StatCard label="Active products" value={s.activeProducts} icon={Package} accent="electric" />
         <StatCard label="Pending products" value={s.pendingProducts} icon={ShieldCheck} accent="deal" />
         <StatCard label="Unpaid / past_due" value={s.unpaidVendors} icon={CreditCard} accent="deal" />
-        <StatCard label="Open disputes" value={0} icon={AlertTriangle} accent="deal" />
+        <StatCard label="Open disputes" value={s.openDisputes} icon={AlertTriangle} accent="deal" />
         <StatCard label="Commission revenue" value={formatCAD(s.commissionRevenue)} icon={DollarSign} accent="success" />
         <StatCard label="Payout liability" value={formatCAD(s.payoutLiability)} icon={Wallet} />
       </div>
@@ -117,7 +119,7 @@ function Page() {
             <li className="flex justify-between"><span>Vendor applications waiting</span><span className="font-semibold text-navy">{s.pendingVendors}</span></li>
             <li className="flex justify-between"><span>Product submissions waiting</span><span className="font-semibold text-navy">{s.pendingProducts}</span></li>
             <li className="flex justify-between"><span>Vendors with billing issues</span><span className="font-semibold text-deal">{s.unpaidVendors}</span></li>
-            <li className="flex justify-between text-muted-foreground"><span>Disputes open</span><span>0 (placeholder)</span></li>
+            <li className="flex justify-between"><span>Disputes open</span><span className="font-semibold text-deal">{s.openDisputes}</span></li>
           </ul>
         </section>
       </div>
