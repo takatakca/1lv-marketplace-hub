@@ -479,7 +479,7 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
   const { data: row } = await db
     .from("payouts")
     .select(
-      "id, vendor_id, status, net_amount, currency, stripe_transfer_id, period_start, period_end, transfer_attempt_count",
+      "id, vendor_id, status, net_amount, currency, stripe_transfer_id, period_start, period_end, transfer_attempt_count, last_transfer_attempt_at",
     )
     .eq("id", payoutId)
     .maybeSingle();
@@ -493,6 +493,7 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
     period_start: string;
     period_end: string;
     transfer_attempt_count: number | null;
+    last_transfer_attempt_at: string | null;
   } | null;
 
   if (!payout) {
@@ -505,6 +506,59 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
       reason: "A transfer already exists for this payout.",
     };
   }
+
+  if (payout.status === "processing") {
+    const leaseCutoff = new Date(Date.now() - 10 * 60_000);
+    const attemptedAt = payout.last_transfer_attempt_at
+      ? new Date(payout.last_transfer_attempt_at)
+      : null;
+    const stale =
+      attemptedAt !== null &&
+      Number.isFinite(attemptedAt.getTime()) &&
+      attemptedAt.getTime() <= leaseCutoff.getTime();
+
+    if (!stale) {
+      return {
+        ok: false,
+        status: payout.status,
+        reason:
+          "This payout transfer is still within its processing lease. Reconcile it before retrying.",
+      };
+    }
+
+    const { data: recovered, error: recoverError } = await db
+      .from("payouts")
+      .update({
+        status: "failed",
+        failure_reason:
+          "Recovered a stale processing transfer lease for safe idempotent retry.",
+        next_retry_at: null,
+      })
+      .eq("id", payout.id)
+      .eq("status", "processing")
+      .is("stripe_transfer_id", null)
+      .lt("last_transfer_attempt_at", leaseCutoff.toISOString())
+      .select("id")
+      .maybeSingle();
+
+    if (recoverError) {
+      return {
+        ok: false,
+        status: payout.status,
+        reason: recoverError.message,
+      };
+    }
+    if (!recovered) {
+      return {
+        ok: false,
+        status: payout.status,
+        reason: "Payout processing state changed before it could be recovered.",
+      };
+    }
+
+    payout.status = "failed";
+  }
+
   if (!["approved", "failed"].includes(payout.status)) {
     return {
       ok: false,
