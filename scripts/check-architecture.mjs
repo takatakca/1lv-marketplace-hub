@@ -220,6 +220,21 @@ for (const [content, marker, label] of [
   ],
   [
     finalAuthMigration,
+    "CREATE OR REPLACE FUNCTION public.has_role",
+    "role helper is redefined inside the final TAKATAK auth boundary",
+  ],
+  [
+    finalAuthMigration,
+    "CREATE OR REPLACE FUNCTION public.owns_vendor",
+    "vendor ownership helper is redefined inside the final TAKATAK auth boundary",
+  ],
+  [
+    finalAuthMigration,
+    "CREATE OR REPLACE FUNCTION public.can_access_dispute",
+    "dispute helper is redefined inside the final TAKATAK auth boundary",
+  ],
+  [
+    finalAuthMigration,
     "normalized_email !~ '^takatak",
     "database user bootstrap only creates profiles for deterministic TAKATAK synthetic emails",
   ],
@@ -408,6 +423,35 @@ for (const [pattern, label] of [
 ]) {
   if (!pattern.test(supabaseConfig)) {
     violations.push("Missing Auth configuration guard: " + label);
+  }
+}
+
+
+for (const helperName of [
+  "public.has_role",
+  "public.owns_vendor",
+  "public.can_access_dispute",
+]) {
+  const helperStart = finalAuthMigration.indexOf(
+    "CREATE OR REPLACE FUNCTION " + helperName,
+  );
+  if (helperStart < 0) continue;
+  const nextFunction = finalAuthMigration.indexOf(
+    "CREATE OR REPLACE FUNCTION ",
+    helperStart + 1,
+  );
+  const helperBody = finalAuthMigration.slice(
+    helperStart,
+    nextFunction < 0 ? undefined : nextFunction,
+  );
+  if (
+    !helperBody.includes("_user_id = auth.uid()") ||
+    !helperBody.includes("public.is_takatak_authorized_session()")
+  ) {
+    violations.push(
+      helperName +
+        ": SECURITY DEFINER helper must bind the caller to auth.uid() and a verified TAKATAK session",
+    );
   }
 }
 
