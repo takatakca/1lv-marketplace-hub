@@ -159,6 +159,21 @@ WITH CHECK (
   )
 );
 
+DROP POLICY IF EXISTS "Vendors delete own products" ON public.products;
+CREATE POLICY "Vendors delete own products"
+ON public.products
+FOR DELETE
+TO authenticated
+USING (
+  status = 'draft'::public.product_status
+  AND EXISTS (
+    SELECT 1
+    FROM public.vendors AS v
+    WHERE v.id = products.vendor_id
+      AND v.user_id = auth.uid()
+  )
+);
+
 CREATE OR REPLACE FUNCTION public.get_1lv_schema_version()
 RETURNS text
 LANGUAGE sql
