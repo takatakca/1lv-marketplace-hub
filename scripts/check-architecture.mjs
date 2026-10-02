@@ -161,6 +161,10 @@ const checkoutCastSafetyMigration = readFileSync(
   join(root, "supabase/migrations/20261002094500_checkout_input_cast_safety.sql"),
   "utf8",
 );
+const vendorProductAuthorityMigration = readFileSync(
+  join(root, "supabase/migrations/20261002100000_vendor_product_publication_authority.sql"),
+  "utf8",
+);
 const ordersService = readFileSync(
   join(root, "src/services/orders.ts"),
   "utf8",
@@ -423,7 +427,32 @@ for (const [content, marker, label] of [
   [
     checkoutCastSafetyMigration,
     "SELECT '20261002094500'",
-    "final production schema marker includes checkout cast safety",
+    "checkout cast-safety migration retains its historical schema marker",
+  ],
+  [
+    vendorProductAuthorityMigration,
+    "SELECT '20261002100000'",
+    "final production schema marker includes vendor product publication authority",
+  ],
+  [
+    vendorProductAuthorityMigration,
+    "Only marketplace admins may approve or reject products",
+    "vendors cannot self-approve or reject marketplace products",
+  ],
+  [
+    vendorProductAuthorityMigration,
+    "NEW.status := 'pending_review'::public.product_status",
+    "commercial edits to active vendor products require marketplace re-review",
+  ],
+  [
+    vendorProductAuthorityMigration,
+    "WITH CHECK",
+    "vendor product update policy preserves ownership after updates",
+  ],
+  [
+    vendorProductAuthorityMigration,
+    "subscription_status IN ('active', 'trialing')",
+    "review submission requires an active subscribed vendor",
   ],
   [
     expiredOrderTerminalMigration,
@@ -1632,15 +1661,15 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002094500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002100000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002094500"')
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002100000"')
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002094500",
+    "production health/migration gates must track schema 20261002100000",
   );
 }
 
