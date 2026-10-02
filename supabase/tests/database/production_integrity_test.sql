@@ -2,12 +2,63 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(109);
+select plan(113);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002093000',
+  '20261002094500',
   'production schema marker is current'
+);
+
+select ok(
+  to_regprocedure('public.assert_checkout_items_safe(jsonb)') is not null,
+  'checkout JSON cast-safety validator exists'
+);
+
+select ok(
+  position(
+    'public.assert_checkout_items_safe(_items)'
+    in pg_get_functiondef(
+      'public.create_marketplace_order(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'public.assert_checkout_items_safe(_items)'
+    in pg_get_functiondef(
+      'public.create_marketplace_order_locked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'::regprocedure
+    )
+  ) > 0,
+  'both canonical checkout RPCs validate JSON before internal casts'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.assert_checkout_items_safe(jsonb)',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.assert_checkout_items_safe(jsonb)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.assert_checkout_items_safe(jsonb)',
+    'EXECUTE'
+  ),
+  'checkout cast-safety validator is service-role only'
+);
+
+select throws_ok(
+  $sql$
+    select public.assert_checkout_items_safe(
+      '[{"product_id":"11111111-1111-4111-8111-111111111111","quantity":"999999999999999999999999999999999"}]'::jsonb
+    )
+  $sql$,
+  '22023',
+  'Each checkout item must have a valid product and quantity',
+  'oversized numeric quantity is rejected before integer casting'
 );
 
 select ok(
