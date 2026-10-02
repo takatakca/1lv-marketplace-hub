@@ -1,10 +1,10 @@
 /**
  * TAKATAK Master Platform integration — shared types.
  *
- * 1LV.CA is ONE vertical inside TAKATAK. TAKATAK is the system of authority for
- * master identity (people, companies, merchants) and the cross-vertical
- * relationship graph. 1LV never resolves identity itself and never exposes
- * TAKATAK-wide data to vendors or customers.
+ * 1LV.CA is an independent marketplace connected to GROUPE TAKATAK.
+ * TAKATAK is the system of authority for master identity (people, companies,
+ * merchants) and the cross-application relationship graph. 1LV never resolves
+ * identity itself and never exposes TAKATAK-wide data to vendors or customers.
  */
 
 export const SOURCE_APPLICATION = "1lv" as const;
@@ -69,6 +69,7 @@ export type TakatakCustomerPayload = {
 export type TakatakMerchantPayload = {
   source_application: typeof SOURCE_APPLICATION;
   vertical: typeof SOURCE_VERTICAL;
+  master_merchant_id: string | null;
   local_vendor_id: string;
   local_owner_user_id: string;
   store_name: string;
