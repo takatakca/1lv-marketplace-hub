@@ -73,6 +73,14 @@ const masterOutbox = readFileSync(
   join(root, "src/lib/takatak/outbox.server.ts"),
   "utf8",
 );
+const orderMapper = readFileSync(
+  join(root, "src/lib/takatak/order-mapper.ts"),
+  "utf8",
+);
+const relationshipMapper = readFileSync(
+  join(root, "src/lib/takatak/relationship-mapper.ts"),
+  "utf8",
+);
 const authMiddleware = readFileSync(
   join(root, "src/integrations/supabase/auth-middleware.ts"),
   "utf8",
@@ -785,6 +793,60 @@ for (const helperName of [
         ": SECURITY DEFINER helper must bind the caller to auth.uid() and a verified TAKATAK session",
     );
   }
+}
+
+
+/* ------------------------------------------------------------------ */
+/* TAKATAK master-data boundary: 1LV retains financial responsibility. */
+/* ------------------------------------------------------------------ */
+
+if (
+  masterOutbox.includes('from "./order-mapper"') ||
+  masterOutbox.includes("mapOrder(")
+) {
+  violations.push(
+    "1LV order/financial projections must not be sent to GROUPE TAKATAK; sync customer and relationship context only.",
+  );
+}
+
+for (const marker of [
+  "payment_status",
+  "lifetimeValue",
+  "subtotal",
+]) {
+  if (masterOutbox.includes(marker)) {
+    violations.push(
+      `TAKATAK outbox must not include financial marker: ${marker}`,
+    );
+  }
+}
+
+for (const [content, marker, label] of [
+  [orderMapper, "payment_status", "order payment status"],
+  [orderMapper, "subtotal", "vendor subtotal"],
+  [orderMapper, "total:", "order total"],
+  [orderMapper, "currency:", "order currency"],
+  [relationshipMapper, "lifetime_value", "relationship lifetime value"],
+  [relationshipMapper, "lifetimeValue", "relationship lifetime value input"],
+  [relationshipMapper, "currency:", "relationship currency"],
+]) {
+  if (content.includes(marker)) {
+    violations.push(
+      `TAKATAK mapper contains forbidden financial field (${label}).`,
+    );
+  }
+}
+
+if (
+  !masterClient.includes('if (input.aggregateType === "order")') ||
+  !masterClient.includes(
+    "TAKATAK customer-data boundary rejected financial payload.",
+  ) ||
+  !masterClient.includes("MASTER_FINANCIAL_KEY")
+) {
+  violations.push(
+    "TAKATAK HTTP boundary must suppress historical order aggregates and reject financial payload keys.",
+  );
 }
 
 if (violations.length > 0) {
