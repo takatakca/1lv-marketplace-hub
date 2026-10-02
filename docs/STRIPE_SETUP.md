@@ -69,6 +69,7 @@ The endpoint verifies the `Stripe-Signature` header (HMAC-SHA256) and is idempot
 4. User is redirected to Stripe Checkout.
 5. On success, Stripe fires `checkout.session.completed` + `customer.subscription.created`; the webhook updates `vendors.subscription_status`, `stripe_customer_id`, `stripe_subscription_id`, `subscription_plan`.
 6. 1LV refuses to create a second Checkout Session while a non-terminal Stripe subscription already exists for the vendor. This prevents duplicate recurring billing; plan-change automation must update the existing subscription rather than silently creating another one.
+7. Subscription webhooks are bound to the currently linked subscription. Stale cancellation/update events from an older subscription are ignored and surfaced to admins instead of overwriting the active billing state.
 
 ## 6. Product publishing rule
 
