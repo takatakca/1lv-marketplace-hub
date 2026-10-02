@@ -804,6 +804,21 @@ for (const [content, marker, label] of [
     "stale PaymentIntent failure events cannot downgrade a paid or refunded order",
   ],
   [
+    stripeWebhook,
+    'case "payment_intent.canceled"',
+    "canceled PaymentIntents are handled explicitly",
+  ],
+  [
+    stripeWebhook,
+    "const checkoutClosed =",
+    "canceled PaymentIntent preserves a still-valid inventory reservation",
+  ],
+  [
+    stripeWebhook,
+    'status: "cancelled" as const',
+    "canceled PaymentIntent closes only an expired or already-released checkout",
+  ],
+  [
     stripeAccountingMigration,
     "public.claim_stripe_event",
     "Stripe webhook claim RPC exists in the production migration",
