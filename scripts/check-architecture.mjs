@@ -473,6 +473,16 @@ for (const [content, marker, label] of [
     "Stripe refunds reconcile through the atomic 1LV accounting RPC",
   ],
   [
+    stripeWebhook,
+    '["paid", "partially_refunded", "refunded"].includes',
+    "stale PaymentIntent success events cannot reactivate terminal paid/refunded order states",
+  ],
+  [
+    stripeWebhook,
+    '.in("payment_status", ["pending", "failed"])',
+    "stale PaymentIntent failure events cannot downgrade a paid or refunded order",
+  ],
+  [
     stripeAccountingMigration,
     "public.claim_stripe_event",
     "Stripe webhook claim RPC exists in the production migration",
