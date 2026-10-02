@@ -117,6 +117,10 @@ const vendorFulfillmentMigration = readFileSync(
   join(root, "supabase/migrations/20261002071500_vendor_fulfillment_authority.sql"),
   "utf8",
 );
+const vendorPaidVisibilityMigration = readFileSync(
+  join(root, "supabase/migrations/20261002073000_vendor_paid_order_visibility.sql"),
+  "utf8",
+);
 const ordersService = readFileSync(
   join(root, "src/services/orders.ts"),
   "utf8",
@@ -359,9 +363,19 @@ for (const [content, marker, label] of [
     "session grant lookup can enforce a private registry without exposing it",
   ],
   [
-    vendorFulfillmentMigration,
-    "SELECT '20261002071500'",
-    "final production schema marker includes server-authoritative vendor fulfillment",
+    vendorPaidVisibilityMigration,
+    "SELECT '20261002073000'",
+    "final production schema marker includes paid-order vendor privacy",
+  ],
+  [
+    vendorPaidVisibilityMigration,
+    "payment_status::text IN ('paid', 'partially_refunded')",
+    "vendor visibility begins only after confirmed payment",
+  ],
+  [
+    vendorPaidVisibilityMigration,
+    'policyname',
+    "vendor privacy migration owns explicit paid-order RLS policies",
   ],
   [
     vendorFulfillmentMigration,
