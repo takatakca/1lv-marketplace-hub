@@ -124,6 +124,16 @@ for (const [content, marker, label] of [
     "login requires recorded 1LV consent",
   ],
   [
+    authBridge,
+    'SIGNUP_CONSENT_REVISION = "1lv-terms-privacy-effective-2026-09-30"',
+    "server-authoritative 1LV consent audit",
+  ],
+  [
+    authBridge,
+    'MARKETING_CONSENT_REVISION = "1lv-casl-opt-in-2026-10-01"',
+    "versioned express marketing consent",
+  ],
+  [
     masterClient,
     "requestTakatakPhoneOtp",
     "phone-only TAKATAK OTP payload",
