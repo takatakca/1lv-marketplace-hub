@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(87);
+select plan(93);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002081500',
+  '20261002083000',
   'production schema marker is current'
 );
 
@@ -1134,6 +1134,124 @@ select results_eq(
   $sql$,
   array[0::bigint],
   'sold-out product persists with zero inventory instead of rolling back checkout'
+);
+
+
+select ok(
+  to_regprocedure('public.list_vendor_orders_for_current_user(uuid)') is not null
+  and to_regprocedure('public.get_vendor_order_for_current_user(uuid)') is not null,
+  'vendor-safe order projection RPCs exist'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.list_vendor_orders_for_current_user(uuid)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.list_vendor_orders_for_current_user(uuid)',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'service_role',
+    'public.list_vendor_orders_for_current_user(uuid)',
+    'EXECUTE'
+  ),
+  'vendor list projection is callable only by authenticated browser sessions'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.get_vendor_order_for_current_user(uuid)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.get_vendor_order_for_current_user(uuid)',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'service_role',
+    'public.get_vendor_order_for_current_user(uuid)',
+    'EXECUTE'
+  ),
+  'vendor detail projection is callable only by authenticated browser sessions'
+);
+
+select ok(
+  not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'orders'
+      and policyname = 'Vendors view related orders'
+  ),
+  'vendors cannot select the full parent orders row directly'
+);
+
+select ok(
+  position(
+    'public.is_takatak_authorized_session()'
+    in pg_get_functiondef(
+      'public.list_vendor_orders_for_current_user(uuid)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'o.inventory_committed_at IS NOT NULL'
+    in pg_get_functiondef(
+      'public.list_vendor_orders_for_current_user(uuid)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'partially_refunded'
+    in pg_get_functiondef(
+      'public.get_vendor_order_for_current_user(uuid)'::regprocedure
+    )
+  ) > 0,
+  'vendor order projections require TAKATAK auth, paid state, and committed inventory'
+);
+
+select ok(
+  position(
+    'stripe_payment_intent_id'
+    in pg_get_functiondef(
+      'public.get_vendor_order_for_current_user(uuid)'::regprocedure
+    )
+  ) = 0
+  and position(
+    'stripe_charge_id'
+    in pg_get_functiondef(
+      'public.get_vendor_order_for_current_user(uuid)'::regprocedure
+    )
+  ) = 0
+  and position(
+    'billing_address'
+    in pg_get_functiondef(
+      'public.get_vendor_order_for_current_user(uuid)'::regprocedure
+    )
+  ) = 0
+  and position(
+    'checkout_request_hash'
+    in pg_get_functiondef(
+      'public.get_vendor_order_for_current_user(uuid)'::regprocedure
+    )
+  ) = 0
+  and position(
+    'takatak_order_event_id'
+    in pg_get_functiondef(
+      'public.get_vendor_order_for_current_user(uuid)'::regprocedure
+    )
+  ) = 0
+  and position(
+    'o.total'
+    in pg_get_functiondef(
+      'public.get_vendor_order_for_current_user(uuid)'::regprocedure
+    )
+  ) = 0,
+  'vendor projection excludes marketplace-wide financial and internal linkage fields'
 );
 
 select * from finish();
