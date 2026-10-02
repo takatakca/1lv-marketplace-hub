@@ -7,7 +7,6 @@
 
 import { mapCustomer, mapGuestCustomer } from "./customer-mapper";
 import { mapMerchant } from "./merchant-mapper";
-import { mapOrder } from "./order-mapper";
 import { mapRelationship } from "./relationship-mapper";
 import {
   normalizeTakatakMasterApiBaseUrl,
@@ -156,22 +155,29 @@ export async function queueMerchantEvent(vendorId: string, eventType: TakatakEve
   await enqueue(eventType, "merchant", vendorId, { ...mapMerchant(vendor) }, key);
 }
 
-export async function queueOrderEvent(orderId: string, eventType: TakatakEventType) {
+export async function queueOrderEvent(
+  orderId: string,
+  eventType: TakatakEventType,
+) {
+  // 1LV owns orders, money, refunds, payouts and accounting. TAKATAK receives
+  // only customer/relationship context needed for master CRM administration.
+  if (eventType !== "order.created") return;
+
   const client = await db();
   const { data: order } = await client
     .from("orders")
-    .select(
-      "id, order_number, customer_id, total, currency, payment_status, status, created_at, vendor_orders(vendor_id, subtotal, status)",
-    )
+    .select("id, customer_id")
     .eq("id", orderId)
     .maybeSingle();
   if (!order) return;
-  await enqueue(eventType, "order", orderId, { ...mapOrder(order) }, `${eventType}:${orderId}`);
 
-  if (eventType === "order.created") {
-    await queueRelationshipEvents(orderId);
-    if (!order.customer_id) await queueGuestCustomerEvent(orderId);
+  if (order.customer_id) {
+    await queueCustomerEvent(order.customer_id, "customer.updated");
+  } else {
+    await queueGuestCustomerEvent(orderId);
   }
+
+  await queueRelationshipEvents(orderId);
 }
 
 /**
@@ -200,27 +206,25 @@ export async function queueRelationshipEvents(orderId: string) {
   const client = await db();
   const { data: order } = await client
     .from("orders")
-    .select("id, order_number, customer_id, created_at, vendor_orders(vendor_id, subtotal)")
+    .select("id, order_number, customer_id, created_at, vendor_orders(vendor_id)")
     .eq("id", orderId)
     .maybeSingle();
   if (!order) return;
   const customerRef = order.customer_id ?? `order:${order.order_number}`;
   const isGuest = !order.customer_id;
 
-  for (const split of (order.vendor_orders ?? []) as Array<{ vendor_id: string; subtotal: number }>) {
+  for (const split of (order.vendor_orders ?? []) as Array<{ vendor_id: string }>) {
     let orderCount: number | null = null;
-    let ltv: number | null = null;
     let firstSeen: string | null = order.created_at;
 
     if (order.customer_id) {
       const { data: history } = await client
         .from("vendor_orders")
-        .select("subtotal, created_at, orders!inner(customer_id)")
+        .select("created_at, orders!inner(customer_id)")
         .eq("vendor_id", split.vendor_id)
         .eq("orders.customer_id", order.customer_id);
-      const rows = (history ?? []) as Array<{ subtotal: number; created_at: string }>;
+      const rows = (history ?? []) as Array<{ created_at: string }>;
       orderCount = rows.length;
-      ltv = Math.round(rows.reduce((s, r) => s + Number(r.subtotal ?? 0), 0) * 100) / 100;
       firstSeen = rows.map((r) => r.created_at).sort()[0] ?? order.created_at;
     }
 
@@ -240,7 +244,6 @@ export async function queueRelationshipEvents(orderId: string) {
           firstSeenAt: firstSeen,
           lastSeenAt: order.created_at,
           orderCount,
-          lifetimeValue: ltv,
         }),
         local_order_id: order.id,
       },
@@ -285,7 +288,7 @@ export async function queueVendorOrderDelivered(vendorOrderId: string) {
   const client = await db();
   const { data: vo } = await client
     .from("vendor_orders")
-    .select("id, order_id, vendor_id, subtotal, status")
+    .select("id, order_id, vendor_id, status")
     .eq("id", vendorOrderId)
     .maybeSingle();
   if (!vo || vo.status !== "delivered") return;
