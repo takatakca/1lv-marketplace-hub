@@ -122,11 +122,11 @@ const vendorPaidVisibilityMigration = readFileSync(
   "utf8",
 );
 const vendorInventoryGateMigration = readFileSync(
-  join(root, "supabase/migrations/20261002081500_vendor_inventory_commit_gate.sql"),
+  join(root, "supabase/migrations/20261002074500_vendor_inventory_commit_gate.sql"),
   "utf8",
 );
 const vendorInventoryCommitMigration = readFileSync(
-  join(root, "supabase/migrations/20261002081500_vendor_inventory_commit_gate.sql"),
+  join(root, "supabase/migrations/20261002074500_vendor_inventory_commit_gate.sql"),
   "utf8",
 );
 const checkoutProductLockMigration = readFileSync(
