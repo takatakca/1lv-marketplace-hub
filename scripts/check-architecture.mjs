@@ -44,6 +44,12 @@ for (const file of walk(sourceRoot)) {
       rel + ": references another TAKATAK child application directly",
     );
   }
+
+  if (content.includes("TAKATAK_MASTER_API_KEY")) {
+    violations.push(
+      rel + ": legacy generic TAKATAK_MASTER_API_KEY must not return; use TAKATAK_1LV_API_KEY",
+    );
+  }
 }
 
 for (const legacyPath of [
@@ -174,12 +180,6 @@ if (
 ) {
   violations.push(
     "TAKATAK login OTP must default to non-creating intent.",
-  );
-}
-
-if (masterClient.includes("TAKATAK_MASTER_API_KEY")) {
-  violations.push(
-    "src/lib/takatak/client.server.ts: generic TAKATAK_MASTER_API_KEY must not return",
   );
 }
 
