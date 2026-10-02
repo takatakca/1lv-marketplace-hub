@@ -418,6 +418,21 @@ for (const [content, marker, label] of [
     "external Stripe refunds are surfaced for manual reconciliation",
   ],
   [
+    stripeWebhook,
+    '"stripe_subscription_binding_conflict"',
+    "Stripe Checkout cannot silently replace a non-terminal vendor subscription",
+  ],
+  [
+    stripeWebhook,
+    '"stripe_stale_subscription_deleted"',
+    "stale Stripe cancellation events cannot cancel the currently linked subscription",
+  ],
+  [
+    stripeWebhook,
+    '"stripe_invoice_missing_subscription"',
+    "subscription invoice events without a subscription id fail closed",
+  ],
+  [
     stripeConnectFunctions,
     "resolveTrustedAppOrigin(request.url)",
     "Stripe Connect account links use the canonical trusted 1LV origin",
