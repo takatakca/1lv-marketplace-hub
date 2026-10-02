@@ -398,6 +398,7 @@ export type Database = {
           kind: string
           note: string | null
           payout_id: string | null
+          refund_id: string | null
           vendor_id: string
           vendor_order_id: string | null
         }
@@ -409,6 +410,7 @@ export type Database = {
           kind?: string
           note?: string | null
           payout_id?: string | null
+          refund_id?: string | null
           vendor_id: string
           vendor_order_id?: string | null
         }
@@ -420,6 +422,7 @@ export type Database = {
           kind?: string
           note?: string | null
           payout_id?: string | null
+          refund_id?: string | null
           vendor_id?: string
           vendor_order_id?: string | null
         }
@@ -1255,21 +1258,30 @@ export type Database = {
       stripe_event_log: {
         Row: {
           id: string
+          last_error: string | null
           payload: Json | null
-          processed_at: string
+          processed_at: string | null
+          status: string
           type: string
+          updated_at: string
         }
         Insert: {
           id: string
+          last_error?: string | null
           payload?: Json | null
-          processed_at?: string
+          processed_at?: string | null
+          status?: string
           type: string
+          updated_at?: string
         }
         Update: {
           id?: string
+          last_error?: string | null
           payload?: Json | null
-          processed_at?: string
+          processed_at?: string | null
+          status?: string
           type?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -1758,6 +1770,14 @@ export type Database = {
       }
     }
     Functions: {
+      claim_stripe_event: {
+        Args: { _id: string; _payload: Json; _type: string }
+        Returns: boolean
+      }
+      finalize_refund_accounting: {
+        Args: { _refund_id: string; _stripe_refund_id: string }
+        Returns: Json
+      }
       can_access_dispute: {
         Args: { _dispute_id: string; _user_id: string }
         Returns: boolean
