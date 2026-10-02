@@ -197,6 +197,10 @@ const checkoutContactNormalizationMigration = readFileSync(
   join(root, "supabase/migrations/20261002120000_checkout_contact_normalization.sql"),
   "utf8",
 );
+const firstOrderEmailHistoryMigration = readFileSync(
+  join(root, "supabase/migrations/20261002121500_first_order_email_history_guard.sql"),
+  "utf8",
+);
 const marketplaceSettingsMigration = readFileSync(
   join(root, "supabase/migrations/20260930150630_persistent_marketplace_settings.sql"),
   "utf8",
@@ -508,7 +512,17 @@ for (const [content, marker, label] of [
   [
     checkoutContactNormalizationMigration,
     "SELECT '20261002120000'",
-    "final production schema marker includes checkout contact normalization",
+    "checkout contact normalization migration retains its historical schema marker",
+  ],
+  [
+    firstOrderEmailHistoryMigration,
+    "SELECT '20261002121500'",
+    "final production schema marker includes guest-to-account first-order protection",
+  ],
+  [
+    firstOrderEmailHistoryMigration,
+    "lower(btrim(COALESCE(o.customer_email",
+    "first-order promotion prior-history checks include normalized checkout email",
   ],
   [
     checkoutContactNormalizationMigration,
@@ -1981,16 +1995,28 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002120000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002121500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002120000"') ||
-  !checkoutContactNormalizationMigration.includes("SELECT '20261002120000'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002121500"') ||
+  !firstOrderEmailHistoryMigration.includes("SELECT '20261002121500'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002120000",
+    "production health/migration gates must track schema 20261002121500",
+  );
+}
+
+if (
+  firstOrderEmailHistoryMigration.includes("NEW.customer_id IS NULL") ||
+  !firstOrderEmailHistoryMigration.includes("o.customer_id = NEW.customer_id") ||
+  !firstOrderEmailHistoryMigration.includes(
+    "lower(btrim(COALESCE(o.customer_email",
+  )
+) {
+  violations.push(
+    "first-order promotions must count prior paid history by customer id or normalized email, including guest-to-account transitions",
   );
 }
 
