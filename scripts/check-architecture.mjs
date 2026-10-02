@@ -1724,6 +1724,17 @@ if (
 }
 
 if (
+  !stripeWebhook.includes("configuredVendorPlanForPrice") ||
+  !stripeWebhook.includes("verifiedVendorPlan") ||
+  !stripeWebhook.includes("subscription.priceIds.length !== 1") ||
+  stripeWebhook.includes("subscription_plan: meta.plan")
+) {
+  violations.push(
+    "vendor subscription plan authority must come from one configured Stripe Price ID, not webhook metadata alone",
+  );
+}
+
+if (
   !checkoutIdempotencyMigration.includes("Checkout idempotency key conflict") ||
   !checkoutIdempotencyMigration.includes("checkout_request_hash") ||
   !checkoutIdempotencyMigration.includes(
