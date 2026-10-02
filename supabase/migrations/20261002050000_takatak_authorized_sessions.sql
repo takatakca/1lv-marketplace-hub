@@ -58,13 +58,62 @@ AS $authorized_session$
   )
   SELECT
     auth.uid() IS NOT NULL
-    AND subject_id = auth.uid()::text
-    AND auth_source = 'takatak'
-    AND master_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
-    AND lower(email) = 'takatak.' || lower(master_id) || '@auth.1lv.ca'
+    AND n.subject_id = auth.uid()::text
+    AND n.auth_source = 'takatak'
+    AND n.master_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}
+      WHERE entry ->> 'method' IN ('magiclink', 'otp')
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(n.amr) AS entry
+      WHERE entry ->> 'method' IN (
+        'password',
+        'oauth',
+        'recovery',
+        'invite',
+        'sso/saml',
+        'email/signup',
+        'email_change',
+        'anonymous'
+      )
+    )
     AND EXISTS (
       SELECT 1
-      FROM jsonb_array_elements(amr) AS entry
+      FROM public.takatak_authorized_sessions AS authorized
+      WHERE authorized.session_id::text = n.session_id
+        AND authorized.user_id = auth.uid()
+        AND authorized.takatak_person_id::text = n.master_id
+        AND authorized.revoked_at IS NULL
+    )
+  FROM normalized AS n;
+$authorized_session$;
+
+REVOKE ALL ON FUNCTION public.is_takatak_authorized_session()
+FROM PUBLIC, anon;
+
+GRANT EXECUTE ON FUNCTION public.is_takatak_authorized_session()
+TO authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.get_1lv_schema_version()
+RETURNS text
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $schema_version$
+  SELECT '20261002050000';
+$schema_version$;
+
+REVOKE ALL ON FUNCTION public.get_1lv_schema_version()
+FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.get_1lv_schema_version()
+TO service_role;
+
+    AND lower(n.email) = 'takatak.' || lower(n.master_id) || '@auth.1lv.ca'
+    AND EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(n.amr) AS entry
       WHERE entry ->> 'method' IN ('magiclink', 'otp')
     )
     AND NOT EXISTS (
