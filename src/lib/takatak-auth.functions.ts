@@ -45,6 +45,23 @@ function syntheticIdentityEmail(identityId: string): string {
   return `takatak.${identityId.toLowerCase()}@auth.1lv.ca`;
 }
 
+function takatakAppMetadata(identityId: string) {
+  return {
+    auth_source: "takatak",
+    takatak_person_id: identityId,
+  };
+}
+
+function appMetadataMatchesIdentity(
+  metadata: Record<string, unknown> | null | undefined,
+  identityId: string,
+): boolean {
+  return (
+    metadata?.["auth_source"] === "takatak" &&
+    metadata?.["takatak_person_id"] === identityId
+  );
+}
+
 function identityDisplayName(identity: TakatakVerifiedIdentity): string {
   return [identity.first_name, identity.last_name]
     .filter(Boolean)
@@ -179,28 +196,10 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
       }
     }
 
-    let loginEmail: string;
-
-    if (expectedUserId) {
-      const { data: existingUser, error } =
-        await supabaseAdmin.auth.admin.getUserById(expectedUserId);
-
-      if (error || !existingUser.user?.email) {
-        return { ok: false, error: "Could not resolve your 1LV account." };
-      }
-
-      loginEmail = existingUser.user.email;
-    } else {
-      // The TAKATAK identity UUID is the cross-application key.
-      // A master email must never silently merge into an unrelated 1LV user.
-      loginEmail = syntheticIdentityEmail(identity.id);
-    }
-
+    const loginEmail = syntheticIdentityEmail(identity.id);
     const displayName = identityDisplayName(identity);
     const localMetadata: Record<string, string | boolean> = {
       phone: identity.phone,
-      auth_source: "takatak",
-      takatak_person_id: identity.id,
       ...(displayName ? { display_name: displayName } : {}),
     };
 
@@ -211,16 +210,73 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
       localMetadata["marketing_opt_in"] = data.marketingOptIn === true;
     }
 
+    const immutableAppMetadata = takatakAppMetadata(identity.id);
     let createdUserId: string | null = null;
 
-    if (!expectedUserId) {
-      // Create the local 1LV Auth user explicitly. Supabase's magic-link
-      // generator can create users implicitly, so we must never use it as the
-      // fallback for an arbitrary createUser failure.
+    if (expectedUserId) {
+      const { data: existingUser, error: existingUserError } =
+        await supabaseAdmin.auth.admin.getUserById(expectedUserId);
+
+      if (existingUserError || !existingUser.user) {
+        return { ok: false, error: "Could not resolve your 1LV account." };
+      }
+
+      const existingAppMetadata =
+        (existingUser.user.app_metadata ?? {}) as Record<string, unknown>;
+      const existingMasterId = existingAppMetadata["takatak_person_id"];
+      const existingAuthSource = existingAppMetadata["auth_source"];
+
+      if (
+        (typeof existingMasterId === "string" &&
+          existingMasterId !== identity.id) ||
+        (typeof existingAuthSource === "string" &&
+          existingAuthSource !== "takatak")
+      ) {
+        return {
+          ok: false,
+          error: "Your 1LV account is linked to another authentication authority.",
+        };
+      }
+
+      const { data: promotedUser, error: promoteError } =
+        await supabaseAdmin.auth.admin.updateUserById(expectedUserId, {
+          email: loginEmail,
+          email_confirm: true,
+          app_metadata: {
+            ...existingAppMetadata,
+            ...immutableAppMetadata,
+          },
+          user_metadata: {
+            ...(existingUser.user.user_metadata ?? {}),
+            ...localMetadata,
+          },
+        });
+
+      if (
+        promoteError ||
+        !promotedUser.user ||
+        promotedUser.user.id !== expectedUserId ||
+        promotedUser.user.email?.trim().toLowerCase() !==
+          loginEmail.toLowerCase() ||
+        !appMetadataMatchesIdentity(
+          promotedUser.user.app_metadata as Record<string, unknown>,
+          identity.id,
+        )
+      ) {
+        return {
+          ok: false,
+          error: "Could not bind your local 1LV session to GROUPE TAKATAK.",
+        };
+      }
+    } else {
+      // Create the local 1LV Auth user explicitly only after GROUPE TAKATAK
+      // verified the phone. The immutable authorization marker is stored in
+      // app_metadata, which browser users cannot edit.
       const { data: createdUser, error: createUserError } =
         await supabaseAdmin.auth.admin.createUser({
           email: loginEmail,
           email_confirm: true,
+          app_metadata: immutableAppMetadata,
           user_metadata: localMetadata,
         });
 
@@ -235,14 +291,13 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
 
         // A duplicate can be a legitimate retry/race, but the deterministic
         // synthetic email must already belong to THIS exact TAKATAK identity.
-        // Do not let a pre-existing unrelated local account be adopted.
         const targetEmail = loginEmail.toLowerCase();
         let existingUser:
           | {
               id: string;
               email?: string;
               email_confirmed_at?: string | null;
-              user_metadata?: Record<string, unknown>;
+              app_metadata?: Record<string, unknown>;
             }
           | null = null;
 
@@ -268,12 +323,10 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
           if (existingUser || listed.users.length < 1000) break;
         }
 
-        const metadata = existingUser?.user_metadata ?? {};
         if (
           !existingUser ||
           !existingUser.email_confirmed_at ||
-          metadata["auth_source"] !== "takatak" ||
-          metadata["takatak_person_id"] !== identity.id
+          !appMetadataMatchesIdentity(existingUser.app_metadata, identity.id)
         ) {
           return {
             ok: false,
@@ -282,7 +335,15 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
         }
 
         createdUserId = existingUser.id;
-      } else if (createdUser.user?.id) {
+      } else if (
+        createdUser.user?.id &&
+        createdUser.user.email?.trim().toLowerCase() ===
+          loginEmail.toLowerCase() &&
+        appMetadataMatchesIdentity(
+          createdUser.user.app_metadata as Record<string, unknown>,
+          identity.id,
+        )
+      ) {
         createdUserId = createdUser.user.id;
       } else {
         return {
@@ -300,8 +361,17 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
 
     const tokenHash = linkData.properties?.hashed_token?.trim() ?? "";
     const linkUserId = linkData.user?.id ?? "";
+    const linkEmail = linkData.user?.email?.trim().toLowerCase() ?? "";
+    const linkAppMetadata =
+      (linkData.user?.app_metadata ?? {}) as Record<string, unknown>;
 
-    if (linkError || !tokenHash || !linkUserId) {
+    if (
+      linkError ||
+      !tokenHash ||
+      !linkUserId ||
+      linkEmail !== loginEmail.toLowerCase() ||
+      !appMetadataMatchesIdentity(linkAppMetadata, identity.id)
+    ) {
       return { ok: false, error: "Could not start your 1LV session." };
     }
 
