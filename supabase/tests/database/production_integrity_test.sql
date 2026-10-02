@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(66);
+select plan(68);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002064000',
+  '20261002070000',
   'production schema marker is current'
 );
 
@@ -794,6 +794,26 @@ select results_eq(
   $sql$,
   array[1::bigint],
   'valid product persisted as active'
+);
+
+select lives_ok(
+  $sql$
+    update public.products
+    set inventory_quantity = 0
+    where slug = 'valid-published-product'
+      and status = 'active'::public.product_status
+  $sql$,
+  'active tracked product can sell its final unit and reach zero inventory'
+);
+
+select results_eq(
+  $sql$
+    select inventory_quantity::bigint
+    from public.products
+    where slug = 'valid-published-product'
+  $sql$,
+  array[0::bigint],
+  'sold-out product persists with zero inventory instead of rolling back checkout'
 );
 
 select * from finish();
