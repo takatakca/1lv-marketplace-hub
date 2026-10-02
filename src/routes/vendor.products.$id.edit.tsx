@@ -64,12 +64,16 @@ function Page() {
     if (demo) { toast.success("Saved (demo)"); nav({ to: "/vendor/products" }); return; }
     setSaving(true);
     try {
-      await updateProduct(id, {
+      const saved = await updateProduct(id, {
         ...f,
         compare_at_price: f.compare_at_price || null,
         cost: f.cost || null,
       });
-      toast.success("Product updated");
+      toast.success(
+        saved.status === "pending_review"
+          ? "Product updated — pending marketplace review"
+          : "Product updated",
+      );
       nav({ to: "/vendor/products" });
     } catch (err) { toast.error((err as Error).message); }
     finally { setSaving(false); }
