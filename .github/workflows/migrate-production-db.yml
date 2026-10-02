@@ -58,23 +58,33 @@ jobs:
           [ -n "${SUPABASE_DB_PASSWORD:-}" ] || missing+=("SUPABASE_DB_PASSWORD")
 
           if (( ${#missing[@]} > 0 )); then
-            printf 'ERROR: missing required 1LV production GitHub secret: %s\n' "${missing[@]}"
-            exit 1
+            if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+              printf 'ERROR: missing required 1LV production GitHub secret: %s\n' "${missing[@]}"
+              exit 1
+            fi
+
+            printf '::warning title=1LV production audit skipped::Missing required GitHub secret: %s\n' "${missing[@]}"
+            echo "AUDIT_AVAILABLE=false" >> "$GITHUB_ENV"
+            exit 0
           fi
 
+          echo "AUDIT_AVAILABLE=true" >> "$GITHUB_ENV"
           echo "Confirmed exact 1LV production project: $EXPECTED_PROJECT_REF"
           echo "Expected 1LV schema version: $EXPECTED_SCHEMA_VERSION"
           echo "Apply requested: $APPLY_REQUESTED"
 
       - name: Checkout repository
+        if: env.AUDIT_AVAILABLE == 'true'
         uses: actions/checkout@v5
 
       - name: Setup Supabase CLI
+        if: env.AUDIT_AVAILABLE == 'true'
         uses: supabase/setup-cli@v3.0.1
         with:
           version: "2.118.0"
 
       - name: Validate local migrations before remote access
+        if: env.AUDIT_AVAILABLE == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -98,32 +108,35 @@ jobs:
           trap - EXIT
 
       - name: Link exact 1LV production project
+        if: env.AUDIT_AVAILABLE == 'true'
         shell: bash
         run: |
           set -euo pipefail
           supabase link --project-ref "$EXPECTED_PROJECT_REF"
 
       - name: Show local versus production migration history
+        if: env.AUDIT_AVAILABLE == 'true'
         shell: bash
         run: |
           set -euo pipefail
           supabase migration list --linked
 
       - name: Dry-run production migration
+        if: env.AUDIT_AVAILABLE == 'true'
         shell: bash
         run: |
           set -euo pipefail
           supabase db push --linked --dry-run
 
       - name: Apply pending production migrations
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply }}
+        if: ${{ env.AUDIT_AVAILABLE == 'true' && github.event_name == 'workflow_dispatch' && inputs.apply }}
         shell: bash
         run: |
           set -euo pipefail
           supabase db push --linked
 
       - name: Verify production migration history
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply }}
+        if: ${{ env.AUDIT_AVAILABLE == 'true' && github.event_name == 'workflow_dispatch' && inputs.apply }}
         shell: bash
         run: |
           set -euo pipefail
