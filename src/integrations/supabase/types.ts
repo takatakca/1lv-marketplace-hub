@@ -303,6 +303,7 @@ export type Database = {
         Row: {
           billing_address: Json | null
           checkout_idempotency_hash: string | null
+          checkout_request_hash: string | null
           created_at: string
           inventory_committed_at: string | null
           inventory_released_at: string | null
@@ -333,6 +334,8 @@ export type Database = {
         Insert: {
           billing_address?: Json | null
           checkout_idempotency_hash?: string | null
+          checkout_request_hash?: string | null
+          checkout_request_hash?: string | null
           created_at?: string
           inventory_committed_at?: string | null
           inventory_released_at?: string | null
@@ -1811,6 +1814,27 @@ export type Database = {
           _promotion_code?: string | null
           _shipping_address: Json
         }
+        Returns: Json
+      }
+      create_marketplace_order_locked: {
+        Args: {
+          _billing_address: Json | null
+          _customer_email: string
+          _customer_id: string | null
+          _customer_phone: string
+          _idempotency_key: string
+          _items: Json
+          _promotion_code?: string | null
+          _shipping_address: Json
+        }
+        Returns: Json
+      }
+      get_vendor_order_for_current_user: {
+        Args: { _vendor_order_id: string }
+        Returns: Json
+      }
+      list_vendor_orders_for_current_user: {
+        Args: { _vendor_id: string }
         Returns: Json
       }
       lookup_guest_order: {
