@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(16);
+select plan(24);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261001064000',
+  '20261001202000',
   'production schema marker is current'
 );
 
@@ -45,6 +45,87 @@ select ok(
     'EXECUTE'
   ),
   'service role can execute the schema marker'
+);
+
+select ok(
+  not has_column_privilege(
+    'anon',
+    'public.profiles',
+    'takatak_person_id',
+    'SELECT'
+  ),
+  'anonymous clients cannot read TAKATAK master identity links'
+);
+
+select ok(
+  not has_column_privilege(
+    'authenticated',
+    'public.profiles',
+    'takatak_person_id',
+    'SELECT'
+  ),
+  'authenticated clients cannot read TAKATAK master identity links'
+);
+
+select ok(
+  not has_column_privilege(
+    'authenticated',
+    'public.profiles',
+    'takatak_person_id',
+    'INSERT'
+  ),
+  'authenticated clients cannot insert TAKATAK master identity links'
+);
+
+select ok(
+  not has_column_privilege(
+    'authenticated',
+    'public.profiles',
+    'takatak_person_id',
+    'UPDATE'
+  ),
+  'authenticated clients cannot update TAKATAK master identity links'
+);
+
+select ok(
+  has_column_privilege(
+    'authenticated',
+    'public.profiles',
+    'display_name',
+    'SELECT'
+  ),
+  'authenticated clients retain access to safe local profile fields'
+);
+
+select ok(
+  has_column_privilege(
+    'authenticated',
+    'public.profiles',
+    'display_name',
+    'UPDATE'
+  ),
+  'authenticated clients may still update safe local profile fields'
+);
+
+select ok(
+  has_column_privilege(
+    'service_role',
+    'public.profiles',
+    'takatak_person_id',
+    'UPDATE'
+  ),
+  'service role can persist TAKATAK master identity links'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_trigger
+    where tgname = 'profiles_protect_takatak_identity'
+      and tgrelid = 'public.profiles'::regclass
+      and not tgisinternal
+  ),
+  'profile master identity trigger is installed'
 );
 
 select ok(
