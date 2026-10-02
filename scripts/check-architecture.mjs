@@ -1305,6 +1305,22 @@ if (
 }
 
 if (
+  !productionServer.includes("requestRequiresNoStore") ||
+  !productionServer.includes('res.setHeader("Cache-Control", "no-store")') ||
+  !productionServer.includes(
+    '"Cross-Origin-Opener-Policy", "same-origin-allow-popups"',
+  ) ||
+  !productionServer.includes('"Origin-Agent-Cluster", "?1"') ||
+  !productionServer.includes(
+    '"X-Permitted-Cross-Domain-Policies", "none"',
+  )
+) {
+  violations.push(
+    "production server must force no-store on authenticated/private responses and retain isolation headers",
+  );
+}
+
+if (
   productionServer.includes("x-forwarded-host") ||
   productionServer.includes("x-forwarded-proto")
 ) {
