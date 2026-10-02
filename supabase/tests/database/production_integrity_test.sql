@@ -2,12 +2,96 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(122);
+select plan(127);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002100000',
+  '20261002101500',
   'production schema marker is current'
+);
+
+select ok(
+  to_regprocedure('public.enforce_vendor_profile_authority()') is not null
+  and exists (
+    select 1
+    from pg_trigger
+    where tgname = 'vendors_profile_authority'
+      and tgrelid = 'public.vendors'::regclass
+      and not tgisinternal
+  ),
+  'vendor profile authority trigger is installed'
+);
+
+select ok(
+  not (
+    select p.prosecdef
+    from pg_proc as p
+    where p.oid = 'public.enforce_vendor_profile_authority()'::regprocedure
+  ),
+  'vendor profile authority trigger runs as SECURITY INVOKER'
+);
+
+select ok(
+  position(
+    'Vendor attempted to modify server-authoritative fields'
+    in pg_get_functiondef(
+      'public.enforce_vendor_profile_authority()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'NEW.payouts_enabled IS DISTINCT FROM OLD.payouts_enabled'
+    in pg_get_functiondef(
+      'public.enforce_vendor_profile_authority()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'NEW.commission_rate IS DISTINCT FROM OLD.commission_rate'
+    in pg_get_functiondef(
+      'public.enforce_vendor_profile_authority()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'NEW.stripe_connect_account_id IS DISTINCT FROM OLD.stripe_connect_account_id'
+    in pg_get_functiondef(
+      'public.enforce_vendor_profile_authority()'::regprocedure
+    )
+  ) > 0,
+  'browser vendor cannot mutate payout, commission, or Stripe authority fields'
+);
+
+select ok(
+  position(
+    'NEW.status := ''pending''::public.vendor_status'
+    in pg_get_functiondef(
+      'public.enforce_vendor_profile_authority()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'NEW.subscription_status := ''none'''
+    in pg_get_functiondef(
+      'public.enforce_vendor_profile_authority()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'NEW.payouts_enabled := false'
+    in pg_get_functiondef(
+      'public.enforce_vendor_profile_authority()'::regprocedure
+    )
+  ) > 0,
+  'new vendor records force safe marketplace defaults'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'vendors'
+      and policyname = 'Vendors can update their own record'
+      and coalesce(qual, '') like '%user_id%'
+      and coalesce(with_check, '') like '%user_id%'
+  ),
+  'vendor profile update policy preserves ownership in USING and WITH CHECK'
 );
 
 select ok(
