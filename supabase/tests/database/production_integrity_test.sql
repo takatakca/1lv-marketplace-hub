@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(93);
+select plan(97);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002083000',
+  '20261002084500',
   'production schema marker is current'
 );
 
@@ -114,6 +114,58 @@ select ok(
 select ok(
   to_regprocedure('public.finalize_refund_accounting(uuid,text)') is not null,
   'Stripe refund accounting RPC exists'
+);
+
+select ok(
+  position(
+    'Refund changed payout amount; review before transfer.'
+    in pg_get_functiondef(
+      'public.finalize_refund_accounting(uuid,text)'::regprocedure
+    )
+  ) > 0,
+  'refund finalization recalculates and re-holds payouts that have not transferred'
+);
+
+select ok(
+  position(
+    'refund_clawback'
+    in pg_get_functiondef(
+      'public.finalize_refund_accounting(uuid,text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'processing'
+    in pg_get_functiondef(
+      'public.finalize_refund_accounting(uuid,text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'paid'
+    in pg_get_functiondef(
+      'public.finalize_refund_accounting(uuid,text)'::regprocedure
+    )
+  ) > 0,
+  'refund finalization creates idempotent clawbacks once payout transfer processing began'
+);
+
+select ok(
+  position(
+    'mark_order_promotion_refunded'
+    in pg_get_functiondef(
+      'public.finalize_refund_accounting(uuid,text)'::regprocedure
+    )
+  ) > 0,
+  'full refund finalization restores eligible promotion usage'
+);
+
+select ok(
+  position(
+    '''refunded''::public.order_status'
+    in pg_get_functiondef(
+      'public.finalize_refund_accounting(uuid,text)'::regprocedure
+    )
+  ) > 0,
+  'fully refunded order is marked refunded at the order lifecycle level'
 );
 
 select ok(
