@@ -80,12 +80,31 @@ export async function updateVendorOrder(
   id: string,
   patch: Partial<Pick<VendorOrderRecord, "status" | "tracking_number" | "carrier">>,
 ) {
-  const { error } = await supabase
-    .from("vendor_orders" as never)
-    .update(patch as never)
-    .eq("id", id);
+  if (!patch.status) {
+    throw new Error("A fulfillment status is required.");
+  }
+
+  const { data, error } = await supabase.rpc(
+    "update_vendor_order_fulfillment" as never,
+    {
+      _vendor_order_id: id,
+      _next_status: patch.status,
+      _tracking_number: patch.tracking_number ?? null,
+      _carrier: patch.carrier ?? null,
+    } as never,
+  );
+
   if (error) throw error;
-  if (patch.status === "delivered") signalVendorOrderDelivered(id);
+
+  const result = (data ?? {}) as unknown as {
+    ok?: boolean;
+    status?: VendorOrderStatus;
+  };
+  if (result.ok !== true) {
+    throw new Error("Vendor fulfillment update was not accepted.");
+  }
+
+  if (result.status === "delivered") signalVendorOrderDelivered(id);
 }
 
 // ---------- Order items (still used to show per-line products) ----------
@@ -110,15 +129,6 @@ export async function getOrderForVendor(orderId: string) {
     .maybeSingle();
   if (error) throw error;
   return data;
-}
-
-export type FulfillmentStatus = "pending" | "processing" | "shipped" | "delivered" | "cancelled";
-export async function updateOrderItem(
-  itemId: string,
-  patch: { status?: FulfillmentStatus; tracking_number?: string | null; carrier?: string | null },
-) {
-  const { error } = await supabase.from("order_items").update(patch).eq("id", itemId);
-  if (error) throw error;
 }
 
 // ---------- Admin ----------
