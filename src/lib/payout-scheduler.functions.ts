@@ -147,7 +147,7 @@ export const runWeeklyPayoutScheduler = createServerFn({ method: "POST" })
           })
           .eq("id", runId);
       }
-      await s.releaseLock(db, s.PAYOUT_LOCK);
+      await s.releaseLock(db, s.PAYOUT_LOCK, context.userId);
     }
 
     return {
