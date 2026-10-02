@@ -181,6 +181,10 @@ const authorityRlsAlignmentMigration = readFileSync(
   join(root, "supabase/migrations/20261002110000_align_authority_rls_states.sql"),
   "utf8",
 );
+const marketplaceTimestampAuthorityMigration = readFileSync(
+  join(root, "supabase/migrations/20261002111500_marketplace_creation_timestamp_authority.sql"),
+  "utf8",
+);
 const marketplaceSettingsMigration = readFileSync(
   join(root, "supabase/migrations/20260930150630_persistent_marketplace_settings.sql"),
   "utf8",
@@ -472,7 +476,22 @@ for (const [content, marker, label] of [
   [
     authorityRlsAlignmentMigration,
     "SELECT '20261002110000'",
-    "final production schema marker aligns authority-generated RLS states",
+    "authority RLS alignment migration retains its historical schema marker",
+  ],
+  [
+    marketplaceTimestampAuthorityMigration,
+    "SELECT '20261002111500'",
+    "final production schema marker protects marketplace creation timestamps",
+  ],
+  [
+    marketplaceTimestampAuthorityMigration,
+    "NEW.created_at := now()",
+    "browser-created vendor/product timestamps are normalized by PostgreSQL",
+  ],
+  [
+    marketplaceTimestampAuthorityMigration,
+    "Marketplace creation timestamp is server-authoritative",
+    "browser vendors cannot rewrite marketplace creation timestamps",
   ],
   [
     authorityRlsAlignmentMigration,
@@ -1844,15 +1863,15 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002110000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002111500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002110000"')
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002111500"')
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002110000",
+    "production health/migration gates must track schema 20261002111500",
   );
 }
 
