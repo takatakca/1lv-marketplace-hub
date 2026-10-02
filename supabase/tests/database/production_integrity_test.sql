@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(39);
+select plan(42);
 
 select is(
   public.get_1lv_schema_version(),
@@ -183,6 +183,61 @@ select ok(
     'EXECUTE'
   ),
   'TAKATAK session authority helper is available only to authenticated/server roles'
+);
+
+
+select ok(
+  (
+    select bool_and(p.prosecdef)
+    from pg_proc p
+    where p.oid in (
+      'public.has_role(uuid,public.app_role)'::regprocedure,
+      'public.owns_vendor(uuid,uuid)'::regprocedure,
+      'public.can_access_dispute(uuid,uuid)'::regprocedure
+    )
+  ),
+  'private authorization helpers remain SECURITY DEFINER'
+);
+
+select ok(
+  not has_function_privilege('anon', 'public.has_role(uuid,public.app_role)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.owns_vendor(uuid,uuid)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.can_access_dispute(uuid,uuid)', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.has_role(uuid,public.app_role)', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.owns_vendor(uuid,uuid)', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.can_access_dispute(uuid,uuid)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.has_role(uuid,public.app_role)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.owns_vendor(uuid,uuid)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.can_access_dispute(uuid,uuid)', 'EXECUTE'),
+  'SECURITY DEFINER authorization helpers are callable only by authenticated/server roles'
+);
+
+select ok(
+  position(
+    '_user_id = auth.uid()'
+    in pg_get_functiondef('public.has_role(uuid,public.app_role)'::regprocedure)
+  ) > 0
+  and position(
+    'public.is_takatak_authorized_session()'
+    in pg_get_functiondef('public.has_role(uuid,public.app_role)'::regprocedure)
+  ) > 0
+  and position(
+    '_user_id = auth.uid()'
+    in pg_get_functiondef('public.owns_vendor(uuid,uuid)'::regprocedure)
+  ) > 0
+  and position(
+    'public.is_takatak_authorized_session()'
+    in pg_get_functiondef('public.owns_vendor(uuid,uuid)'::regprocedure)
+  ) > 0
+  and position(
+    '_user_id = auth.uid()'
+    in pg_get_functiondef('public.can_access_dispute(uuid,uuid)'::regprocedure)
+  ) > 0
+  and position(
+    'public.is_takatak_authorized_session()'
+    in pg_get_functiondef('public.can_access_dispute(uuid,uuid)'::regprocedure)
+  ) > 0,
+  'SECURITY DEFINER helpers prevent cross-user probing and require TAKATAK sessions'
 );
 
 select ok(
