@@ -344,13 +344,17 @@ export async function generatePayoutsCore(
       adjustmentOffset += pageSize;
     }
 
-    // A refund finalized while an earlier payout is merely "processing" creates
-    // a provisional clawback so we do not lose the race if Stripe accepts the
-    // in-flight transfer. Do not consume that clawback into a later payout until
-    // the original payout has a confirmed Stripe transfer reference. If the
-    // transfer ultimately fails before Stripe creates it, the vendor must not be
-    // charged for money they never received.
-    const confirmedClawbackPayouts = new Set<string>();
+    // A refund finalized while an earlier payout is in-flight creates a
+    // provisional clawback. Never consume that clawback until the source
+    // payout is conclusively paid. A transfer reference alone is insufficient:
+    // amount/destination mismatches still require reconciliation.
+    type ClawbackSource = {
+      id: string;
+      status: string;
+      stripe_transfer_id: string | null;
+    };
+
+    const clawbackSources = new Map<string, ClawbackSource>();
     const clawbackPayoutIds = Array.from(
       new Set(
         adjustmentRows
@@ -366,25 +370,52 @@ export async function generatePayoutsCore(
     for (const ids of batches(clawbackPayoutIds)) {
       const { data, error } = await db
         .from("payouts")
-        .select("id, stripe_transfer_id")
-        .in("id", ids)
-        .not("stripe_transfer_id", "is", null);
+        .select("id, status, stripe_transfer_id")
+        .in("id", ids);
       if (error) throw new Error(error.message);
 
-      for (const payout of data ?? []) {
-        if (payout.stripe_transfer_id) {
-          confirmedClawbackPayouts.add(payout.id);
-        }
+      for (const source of (data ?? []) as ClawbackSource[]) {
+        clawbackSources.set(source.id, source);
       }
     }
 
+    let unresolvedClawback = false;
     const eligibleAdjustmentRows = adjustmentRows.filter((adjustment) => {
       if (adjustment.kind !== "refund_clawback") return true;
-      return (
-        typeof adjustment.payout_id === "string" &&
-        confirmedClawbackPayouts.has(adjustment.payout_id)
-      );
+
+      if (typeof adjustment.payout_id !== "string") {
+        unresolvedClawback = true;
+        return false;
+      }
+
+      const source = clawbackSources.get(adjustment.payout_id);
+      if (!source) {
+        unresolvedClawback = true;
+        return false;
+      }
+
+      if (source.status === "paid") return true;
+
+      // A definitively cancelled payout with no Stripe transfer never paid the
+      // vendor, so its provisional clawback is intentionally not applied.
+      if (
+        source.status === "cancelled" &&
+        !source.stripe_transfer_id
+      ) {
+        return false;
+      }
+
+      // Processing/failed/held or any payout carrying an unreconciled transfer
+      // reference is financially ambiguous. Do not create another payout for
+      // this vendor until the source payout is reconciled or cancelled.
+      unresolvedClawback = true;
+      return false;
     });
+
+    if (unresolvedClawback) {
+      skipped += items.length;
+      continue;
+    }
 
     const adjustments = round2(
       eligibleAdjustmentRows.reduce(
