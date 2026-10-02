@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(46);
+select plan(49);
 
 select is(
   public.get_1lv_schema_version(),
@@ -360,6 +360,25 @@ select ok(
   'only a server-granted TAKATAK magic-link session is authorized'
 );
 
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.revoke_current_takatak_session()',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.revoke_current_takatak_session()',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.revoke_current_takatak_session()',
+    'EXECUTE'
+  ),
+  'current-session revocation is available only to authenticated/server roles'
+);
+
 select set_config(
   'request.jwt.claims',
   '{"sub":"22222222-2222-4222-8222-222222222222","session_id":"66666666-6666-4666-8666-666666666666","email":"takatak.11111111-1111-4111-8111-111111111111@auth.1lv.ca","app_metadata":{},"amr":[{"method":"magiclink"}]}',
@@ -391,6 +410,22 @@ select set_config(
 select ok(
   not public.is_takatak_authorized_session(),
   'TAKATAK metadata cannot authorize a non-synthetic local email'
+);
+
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-4222-8222-222222222222","session_id":"66666666-6666-4666-8666-666666666666","email":"takatak.11111111-1111-4111-8111-111111111111@auth.1lv.ca","app_metadata":{"auth_source":"takatak","takatak_person_id":"11111111-1111-4111-8111-111111111111"},"amr":[{"method":"magiclink"}]}',
+  true
+);
+
+select ok(
+  public.revoke_current_takatak_session(),
+  'an active TAKATAK session can revoke only its own grant'
+);
+
+select ok(
+  not public.is_takatak_authorized_session(),
+  'revoked TAKATAK session loses authorization immediately'
 );
 
 select ok(
