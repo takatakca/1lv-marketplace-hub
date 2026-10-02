@@ -215,6 +215,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Setup Node.js for local Auth integration test
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies for local Auth integration test
+        run: npm ci --ignore-scripts
+
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v3.0.1
         with:
@@ -222,6 +231,31 @@ jobs:
 
       - name: Start local Supabase database
         run: supabase db start
+
+      - name: Export local Supabase Auth environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          eval "$(supabase status -o env)"
+          ANON="${ANON_KEY:-${PUBLISHABLE_KEY:-}}"
+          SERVICE="${SERVICE_ROLE_KEY:-${SECRET_KEY:-}}"
+          API="${API_URL:-http://127.0.0.1:54321}"
+
+          test -n "$ANON"
+          test -n "$SERVICE"
+          case "$API" in
+            http://127.0.0.1:*|http://localhost:*) ;;
+            *)
+              echo "ERROR: refusing non-local Supabase URL in Auth integration test."
+              exit 1
+              ;;
+          esac
+
+          {
+            echo "SUPABASE_LOCAL_URL=$API"
+            echo "SUPABASE_LOCAL_ANON_KEY=$ANON"
+            echo "SUPABASE_LOCAL_SERVICE_ROLE_KEY=$SERVICE"
+          } >> "$GITHUB_ENV"
 
       - name: Replay all migrations from scratch
         run: supabase db reset --local --no-seed
@@ -235,6 +269,9 @@ jobs:
         run: |
           set -euo pipefail
           supabase test db --local
+
+      - name: Verify real TAKATAK Auth JWT and RLS boundary
+        run: node scripts/ci-takatak-local-auth-session.mjs
 
       - name: Stop local Supabase
         if: always()
