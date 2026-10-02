@@ -133,42 +133,44 @@ jobs:
                 exit 1
               }
               printf '%s\n' "$PRIVATE_HEADERS" | grep -qi '^Cross-Origin-Opener-Policy: same-origin-allow-popups' || {
-                echo "Expected Cross-Origin-Opener-Policy on production responses."
+                echo "Expected /login to retain popup-safe origin isolation."
+                printf '%s\n' "$PRIVATE_HEADERS"
                 exit 1
               }
               printf '%s\n' "$PRIVATE_HEADERS" | grep -qi '^Origin-Agent-Cluster: ?1' || {
-                echo "Expected Origin-Agent-Cluster on production responses."
+                echo "Expected /login to opt into an origin-keyed agent cluster."
+                printf '%s\n' "$PRIVATE_HEADERS"
                 exit 1
               }
               printf '%s\n' "$PRIVATE_HEADERS" | grep -qi '^X-Permitted-Cross-Domain-Policies: none' || {
-                echo "Expected X-Permitted-Cross-Domain-Policies on production responses."
+                echo "Expected /login to refuse Adobe cross-domain policy files."
+                printf '%s\n' "$PRIVATE_HEADERS"
                 exit 1
               }
 
-              TAKATAK_STATUS="$(curl                 --silent                 --output /dev/null                 --write-out '%{http_code}'                 --max-time 5                 --request POST                 "http://127.0.0.1:$PORT/api/internal/takatak/drain")"
+              TAKATAK_STATUS="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 --request POST "http://127.0.0.1:$PORT/api/internal/takatak/drain")"
               test "$TAKATAK_STATUS" = "401" || {
                 echo "Expected unauthenticated TAKATAK drain to return 401, got $TAKATAK_STATUS"
                 exit 1
               }
 
-              INVENTORY_STATUS="$(curl                 --silent                 --output /dev/null                 --write-out '%{http_code}'                 --max-time 5                 --request POST                 "http://127.0.0.1:$PORT/api/internal/inventory/cleanup")"
+              INVENTORY_STATUS="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 --request POST "http://127.0.0.1:$PORT/api/internal/inventory/cleanup")"
               test "$INVENTORY_STATUS" = "401" || {
                 echo "Expected unauthenticated inventory cleanup to return 401, got $INVENTORY_STATUS"
                 exit 1
               }
 
               STRIPE_HEADERS_FILE="$(mktemp)"
-              STRIPE_STATUS="$(curl                 --silent                 --output /dev/null                 --dump-header "$STRIPE_HEADERS_FILE"                 --write-out '%{http_code}'                 --max-time 5                 --request POST                 --data '{}'                 "http://127.0.0.1:$PORT/api/public/webhooks/stripe")"
+              STRIPE_STATUS="$(curl --silent --output /dev/null --dump-header "$STRIPE_HEADERS_FILE" --write-out '%{http_code}' --max-time 5 --request POST --data '{}' "http://127.0.0.1:$PORT/api/public/webhooks/stripe")"
               test "$STRIPE_STATUS" = "401" || {
                 echo "Expected unsigned Stripe webhook to return 401, got $STRIPE_STATUS"
                 exit 1
               }
               tr -d '\r' < "$STRIPE_HEADERS_FILE" | grep -qi '^Cache-Control: no-store' || {
-                echo "Expected unsigned Stripe webhook response to be non-cacheable."
+                echo "Expected Stripe webhook responses to be non-cacheable."
                 cat "$STRIPE_HEADERS_FILE"
                 exit 1
               }
-              rm -f "$STRIPE_HEADERS_FILE"
 
               exit 0
             fi
