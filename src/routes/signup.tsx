@@ -16,7 +16,6 @@ export const Route = createFileRoute("/signup")({
 
 function Signup() {
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [terms, setTerms] = useState(false);
@@ -32,7 +31,6 @@ function Signup() {
     if (loading) return;
 
     const cleanName = name.trim();
-    const cleanEmail = email.trim();
 
     if (!cleanName) {
       toast.error("Enter your full name.");
@@ -52,7 +50,6 @@ function Signup() {
       data: {
         phone: formatted,
         fullName: cleanName,
-        email: cleanEmail || undefined,
       },
     });
     setLoading(false);
@@ -165,22 +162,6 @@ function Signup() {
                 Enter a valid Canadian number (10 digits, or starting with +1).
               </p>
             )}
-          </label>
-
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-navy">
-              Email{" "}
-              <span className="font-normal text-muted-foreground">
-                (optional)
-              </span>
-            </span>
-            <input
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className="w-full rounded-md border border-border px-3 py-2 text-sm outline-none focus:border-electric"
-            />
           </label>
 
           <label className="flex items-start gap-2 text-xs">
