@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Database } from "@/integrations/supabase/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -160,7 +161,7 @@ export const createStripeConnectAccount = createServerFn({ method: "POST" })
 /** Create a hosted Express onboarding Account Link for the caller's vendor. */
 export const createStripeConnectAccountLink = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { vendorId: string; returnOrigin: string }) => data)
+  .inputValidator((data: { vendorId: string }) => data)
   .handler(async ({ data, context }): Promise<ConnectLinkResult> => {
     if (!configured()) {
       return { url: null, pending: true, reason: "Stripe setup required" };
@@ -169,7 +170,20 @@ export const createStripeConnectAccountLink = createServerFn({ method: "POST" })
     if (!vendor.stripe_connect_account_id) {
       return { url: null, pending: true, reason: "No payout account yet — create one first." };
     }
-    const origin = data.returnOrigin.replace(/\/$/, "");
+    const request = getRequest();
+    if (!request?.url) {
+      throw new Error("Could not resolve the trusted 1LV return origin.");
+    }
+
+    const requestUrl = new URL(request.url);
+    const localDevelopment =
+      requestUrl.hostname === "localhost" ||
+      requestUrl.hostname === "127.0.0.1";
+    if (requestUrl.protocol !== "https:" && !localDevelopment) {
+      throw new Error("Stripe Connect return origin must use HTTPS.");
+    }
+
+    const origin = requestUrl.origin;
     const link = await stripeCall("/account_links", "POST", {
       account: vendor.stripe_connect_account_id,
       refresh_url: `${origin}/vendor/payouts?connect=refresh`,
