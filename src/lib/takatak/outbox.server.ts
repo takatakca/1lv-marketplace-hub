@@ -579,7 +579,7 @@ async function countBy(client: Db, filter: (q: any) => any): Promise<number> {
 export async function takatakStatus(): Promise<TakatakStatus> {
   const client = await db();
   const url = Boolean(process.env["TAKATAK_MASTER_API_URL"]);
-  const key = Boolean(process.env["TAKATAK_MASTER_API_KEY"]);
+  const key = Boolean(process.env["TAKATAK_1LV_API_KEY"]?.trim());
 
   const [pending, processing, delivered, failed] = await Promise.all([
     countBy(client, (q) => q.eq("status", "pending")),
