@@ -151,15 +151,47 @@ try {
     magicMethods.has("magiclink") || magicMethods.has("otp"),
     `Unexpected magic-link AMR: ${JSON.stringify([...magicMethods])}`,
   );
+
+  const magicSessionId =
+    typeof magicPayload.session_id === "string" ? magicPayload.session_id : "";
+  assert.match(
+    magicSessionId,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    "Magic-link session_id missing",
+  );
+
+  // A valid synthetic email + immutable app_metadata + magic-link AMR is not
+  // enough. Until the trusted TAKATAK bridge records this exact session_id,
+  // direct local Supabase Auth must remain unusable.
+  assert.equal(
+    await profileVisible(verified.session.access_token, takatakUserId),
+    false,
+    "Direct magic-link session must be denied before TAKATAK session grant",
+  );
+  assert.equal(
+    await hasRole(verified.session.access_token, takatakUserId, "customer"),
+    false,
+    "Direct magic-link session must not reach SECURITY DEFINER role helpers before grant",
+  );
+
+  const { error: grantError } = await admin
+    .from("takatak_authorized_sessions")
+    .insert({
+      session_id: magicSessionId,
+      user_id: takatakUserId,
+      takatak_person_id: masterId,
+    });
+  assert.equal(grantError, null, grantError?.message);
+
   assert.equal(
     await profileVisible(verified.session.access_token, takatakUserId),
     true,
-    "Verified TAKATAK magic-link session must pass restrictive RLS",
+    "Server-granted TAKATAK magic-link session must pass restrictive RLS",
   );
   assert.equal(
     await hasRole(verified.session.access_token, takatakUserId, "customer"),
     true,
-    "Verified TAKATAK session must be allowed to use private role helper",
+    "Server-granted TAKATAK session must be allowed to use private role helper",
   );
 
   const { data: refreshed, error: refreshError } =
@@ -168,10 +200,16 @@ try {
     });
   assert.equal(refreshError, null, refreshError?.message);
   assert.ok(refreshed.session?.access_token, "Refreshed session missing");
+  const refreshedPayload = decodePayload(refreshed.session.access_token);
+  assert.equal(
+    refreshedPayload.session_id,
+    magicSessionId,
+    "Refresh must preserve the authorized Supabase session_id",
+  );
   assert.equal(
     await profileVisible(refreshed.session.access_token, takatakUserId),
     true,
-    "Refreshed TAKATAK session must remain authorized",
+    "Refreshed granted TAKATAK session must remain authorized",
   );
 
   const { error: passwordSetError } =
