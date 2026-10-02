@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(42);
+select plan(46);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002034500',
+  '20261002050000',
   'production schema marker is current'
 );
 
@@ -172,6 +172,55 @@ select ok(
 );
 
 select ok(
+  to_regclass('public.takatak_authorized_sessions') is not null,
+  'server-side TAKATAK session grant registry exists'
+);
+
+select ok(
+  not has_table_privilege(
+    'anon',
+    'public.takatak_authorized_sessions',
+    'SELECT'
+  )
+  and not has_table_privilege(
+    'authenticated',
+    'public.takatak_authorized_sessions',
+    'SELECT'
+  )
+  and not has_table_privilege(
+    'authenticated',
+    'public.takatak_authorized_sessions',
+    'INSERT'
+  )
+  and has_table_privilege(
+    'service_role',
+    'public.takatak_authorized_sessions',
+    'SELECT'
+  )
+  and has_table_privilege(
+    'service_role',
+    'public.takatak_authorized_sessions',
+    'INSERT'
+  ),
+  'only the trusted server can read or create TAKATAK session grants'
+);
+
+select ok(
+  (
+    select p.prosecdef
+    from pg_proc as p
+    where p.oid = 'public.is_takatak_authorized_session()'::regprocedure
+  )
+  and position(
+    'public.takatak_authorized_sessions'
+    in pg_get_functiondef(
+      'public.is_takatak_authorized_session()'::regprocedure
+    )
+  ) > 0,
+  'session authority helper is SECURITY DEFINER and requires the server grant registry'
+);
+
+select ok(
   not has_function_privilege(
     'anon',
     'public.is_takatak_authorized_session()',
@@ -282,18 +331,38 @@ select ok(
 
 select set_config(
   'request.jwt.claims',
-  '{"sub":"22222222-2222-4222-8222-222222222222","email":"takatak.11111111-1111-4111-8111-111111111111@auth.1lv.ca","app_metadata":{"auth_source":"takatak","takatak_person_id":"11111111-1111-4111-8111-111111111111"},"amr":[{"method":"magiclink"}]}',
+  '{"sub":"22222222-2222-4222-8222-222222222222","session_id":"66666666-6666-4666-8666-666666666666","email":"takatak.11111111-1111-4111-8111-111111111111@auth.1lv.ca","app_metadata":{"auth_source":"takatak","takatak_person_id":"11111111-1111-4111-8111-111111111111"},"amr":[{"method":"magiclink"}]}',
   true
 );
 
 select ok(
+  not public.is_takatak_authorized_session(),
+  'a direct synthetic magic-link session is rejected before server grant'
+);
+
+set local session_replication_role = replica;
+
+insert into public.takatak_authorized_sessions (
+  session_id,
+  user_id,
+  takatak_person_id
+)
+values (
+  '66666666-6666-4666-8666-666666666666'::uuid,
+  '22222222-2222-4222-8222-222222222222'::uuid,
+  '11111111-1111-4111-8111-111111111111'::uuid
+);
+
+set local session_replication_role = origin;
+
+select ok(
   public.is_takatak_authorized_session(),
-  'a synthetic TAKATAK local magic-link session is authorized'
+  'only a server-granted TAKATAK magic-link session is authorized'
 );
 
 select set_config(
   'request.jwt.claims',
-  '{"sub":"22222222-2222-4222-8222-222222222222","email":"takatak.11111111-1111-4111-8111-111111111111@auth.1lv.ca","app_metadata":{},"amr":[{"method":"magiclink"}]}',
+  '{"sub":"22222222-2222-4222-8222-222222222222","session_id":"66666666-6666-4666-8666-666666666666","email":"takatak.11111111-1111-4111-8111-111111111111@auth.1lv.ca","app_metadata":{},"amr":[{"method":"magiclink"}]}',
   true
 );
 
@@ -304,7 +373,7 @@ select ok(
 
 select set_config(
   'request.jwt.claims',
-  '{"sub":"22222222-2222-4222-8222-222222222222","email":"takatak.11111111-1111-4111-8111-111111111111@auth.1lv.ca","app_metadata":{"auth_source":"takatak","takatak_person_id":"11111111-1111-4111-8111-111111111111"},"amr":[{"method":"password"}]}',
+  '{"sub":"22222222-2222-4222-8222-222222222222","session_id":"66666666-6666-4666-8666-666666666666","email":"takatak.11111111-1111-4111-8111-111111111111@auth.1lv.ca","app_metadata":{"auth_source":"takatak","takatak_person_id":"11111111-1111-4111-8111-111111111111"},"amr":[{"method":"password"}]}',
   true
 );
 
@@ -315,7 +384,7 @@ select ok(
 
 select set_config(
   'request.jwt.claims',
-  '{"sub":"22222222-2222-4222-8222-222222222222","email":"attacker@example.invalid","app_metadata":{"auth_source":"takatak","takatak_person_id":"11111111-1111-4111-8111-111111111111"},"amr":[{"method":"magiclink"}]}',
+  '{"sub":"22222222-2222-4222-8222-222222222222","session_id":"66666666-6666-4666-8666-666666666666","email":"attacker@example.invalid","app_metadata":{"auth_source":"takatak","takatak_person_id":"11111111-1111-4111-8111-111111111111"},"amr":[{"method":"magiclink"}]}',
   true
 );
 
