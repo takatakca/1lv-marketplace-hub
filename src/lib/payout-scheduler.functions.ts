@@ -36,6 +36,7 @@ export type ReconcileOneResult = {
     | "amount_mismatch"
     | "currency_mismatch"
     | "destination_mismatch"
+    | "metadata_mismatch"
     | "failed"
     | "unknown";
   note: string;
