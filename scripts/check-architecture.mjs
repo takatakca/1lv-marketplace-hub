@@ -137,6 +137,10 @@ const checkoutIdempotencyMigration = readFileSync(
   join(root, "supabase/migrations/20261002081500_checkout_idempotency_payload.sql"),
   "utf8",
 );
+const vendorOrderProjectionMigration = readFileSync(
+  join(root, "supabase/migrations/20261002083000_vendor_order_safe_projection.sql"),
+  "utf8",
+);
 const ordersService = readFileSync(
   join(root, "src/services/orders.ts"),
   "utf8",
@@ -1360,6 +1364,62 @@ if (checkoutFunctions.includes("queueCustomerEvent")) {
 }
 
 if (
+  !vendorOrderProjectionMigration.includes(
+    'DROP POLICY IF EXISTS "Vendors view related orders"',
+  ) ||
+  !vendorOrderProjectionMigration.includes(
+    "public.list_vendor_orders_for_current_user",
+  ) ||
+  !vendorOrderProjectionMigration.includes(
+    "public.get_vendor_order_for_current_user",
+  ) ||
+  !vendorOrderProjectionMigration.includes(
+    "public.is_takatak_authorized_session()",
+  ) ||
+  !vendorOrderProjectionMigration.includes(
+    "o.inventory_committed_at IS NOT NULL",
+  ) ||
+  !vendorOrderProjectionMigration.includes(
+    "o.inventory_released_at IS NULL",
+  )
+) {
+  violations.push(
+    "vendors must read paid committed orders only through the curated server-authoritative projection",
+  );
+}
+
+for (const sensitiveVendorProjectionMarker of [
+  "stripe_payment_intent_id",
+  "stripe_charge_id",
+  "billing_address",
+  "checkout_request_hash",
+  "takatak_customer_id",
+  "takatak_order_event_id",
+  "shipping_total",
+  "tax_total",
+  "promotion_code",
+  "o.total",
+]) {
+  if (vendorOrderProjectionMigration.includes(sensitiveVendorProjectionMarker)) {
+    violations.push(
+      "vendor order projection exposes forbidden parent-order field: " +
+        sensitiveVendorProjectionMarker,
+    );
+  }
+}
+
+if (
+  !ordersService.includes('"list_vendor_orders_for_current_user"') ||
+  !ordersService.includes('"get_vendor_order_for_current_user"') ||
+  ordersService.includes('orders!inner(*)') ||
+  ordersService.includes('orders!inner(id, order_number')
+) {
+  violations.push(
+    "vendor UI must use curated order RPCs and never join the full parent orders row",
+  );
+}
+
+if (
   checkoutFunctions.includes("user?.email?.trim() || data.email.trim()") ||
   !checkoutFunctions.includes('checkoutEmail.endsWith("@auth.1lv.ca")') ||
   !checkoutFunctions.includes(
@@ -1374,15 +1434,15 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002081500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002083000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002081500"')
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002083000"')
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002081500",
+    "production health/migration gates must track schema 20261002083000",
   );
 }
 
