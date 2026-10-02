@@ -86,6 +86,7 @@ async function call(
         ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15_000),
     });
     const text = await res.text();
     let json: Record<string, unknown> = {};
@@ -216,6 +217,7 @@ async function callOtp(
         authorization: `Bearer ${cfg.key}`,
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15_000),
     });
 
     const raw = await response.text();
