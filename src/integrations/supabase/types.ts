@@ -335,7 +335,6 @@ export type Database = {
           billing_address?: Json | null
           checkout_idempotency_hash?: string | null
           checkout_request_hash?: string | null
-          checkout_request_hash?: string | null
           created_at?: string
           inventory_committed_at?: string | null
           inventory_released_at?: string | null
@@ -366,6 +365,7 @@ export type Database = {
         Update: {
           billing_address?: Json | null
           checkout_idempotency_hash?: string | null
+          checkout_request_hash?: string | null
           created_at?: string
           inventory_committed_at?: string | null
           inventory_released_at?: string | null
