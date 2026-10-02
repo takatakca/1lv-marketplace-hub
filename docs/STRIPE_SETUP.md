@@ -88,7 +88,7 @@ The `vendors` table already has:
 - **Connected — charges disabled** — account exists, `charges_enabled = false`
 - **Payouts enabled** — both flags true
 
-Full Connect Express onboarding (Account Links, capability polling, live transfers) is intentionally deferred — the button is a placeholder until the ops team is ready to accept regulatory obligations for Canadian payouts.
+Connect Express onboarding is implemented end to end: server-side Express account creation, hosted Account Links, capability/status refresh, and idempotent transfers. Live operation still requires the production Stripe account, Connect settings, webhook secret, and approved operational/regulatory setup.
 
 ## 8. Test cards
 
@@ -206,14 +206,12 @@ A vendor order enters a payout only when **all** are true:
 transfer reference, duplicate transfer reference, transfer failed, paid but
 missing paid date, or net amount zero/negative. Labels only — nothing is mutated.
 
-### Refunds & disputes (prepared, not implemented)
-- A refund on a vendor order sets `vendor_orders.refund_amount`; it is deducted
-  from that vendor order's net in the next payout.
-- A dispute sets `dispute_hold_amount`, which makes the vendor order ineligible
-  until the hold is cleared.
-- If the payout was **already paid**, insert a negative row into
-  `payout_adjustments` — it is summed into the next generated payout for that
-  vendor and stamped with `applied_payout_id`.
+### Refunds & disputes
+- Customers can open disputes only on their own paid vendor split; the disputed vendor amount is held immediately.
+- Admin-approved refunds are processed server-side through Stripe with a stable idempotency key and cannot exceed the remaining refundable order amount.
+- Successful refund accounting updates `refund_records`, order/vendor-order refund totals, dispute state and payout adjustments atomically through the database finalization RPC.
+- If money was already paid out to a vendor, the accounting path records the compensating adjustment for a later payout instead of silently mutating a completed transfer.
+- Stripe `charge.refunded` webhooks also keep the order payment state synchronized and emit the TAKATAK `order.refunded` event asynchronously.
 
 ### Security
 - Vendors can read only their own payouts, items and adjustments (RLS).
@@ -223,7 +221,10 @@ missing paid date, or net amount zero/negative. Labels only — nothing is mutat
 - Stripe secret keys and Connect account ids are never returned to the client.
 
 ### Before automatic weekly payouts
-- Refund and dispute handling implemented end to end.
+- [x] Refund and dispute handling implemented end to end.
+- [x] Connect Express onboarding, capability refresh, bounded retries and reconciliation implemented.
+- [ ] Production Stripe/Connect account configuration, live webhook and Price IDs verified.
+- [ ] Operations approves `auto_process_transfers = true`; keep it false until that cutover.
 - Scheduler (pg_cron → `/api/public/*` route) with per-run locking.
 - Transfer failure retry/alerting policy.
 - Live reconciliation against the Stripe transfers API (currently local-state only).
@@ -292,7 +293,7 @@ the last eight runs are shown on `/admin/payouts`.
 | `reconcileStripePayout` | Reads the Stripe transfer and classifies: `matched`, `missing_transfer`, `amount_mismatch`, `currency_mismatch`, `destination_mismatch`, `failed`, `unknown`. |
 | `reconcileRecentPayouts` | Same check across recent paid/processing/failed payouts (1–180 days, max 200). |
 
-Retry backoff placeholder: 1h → 6h → 24h → 72h, stored in `payouts.next_retry_at`;
+Retry backoff: 1h → 6h → 24h → 72h, stored in `payouts.next_retry_at`;
 `transfer_attempt_count` and `last_transfer_attempt_at` track history. Retries stop
 at `max_transfer_attempts` — nothing retries forever.
 
