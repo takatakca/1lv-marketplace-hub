@@ -50,11 +50,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
+    let validationSequence = 0;
 
     const acceptSession = async (
       candidate: Session | null,
       signalMaster: boolean,
     ) => {
+      const sequence = ++validationSequence;
       if (!active) return;
 
       if (!candidate?.user) {
@@ -74,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         "is_takatak_authorized_session" as never,
       );
 
-      if (!active) return;
+      if (!active || sequence !== validationSequence) return;
 
       if (grantError || (granted as unknown) !== true) {
         setSession(null);
@@ -86,19 +88,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(candidate);
       await fetchRoles(candidate.user.id);
 
+      if (!active || sequence !== validationSequence) return;
+
       if (signalMaster) {
         // This event updates TAKATAK's authorized 1LV projection. It is never
         // used to establish identity or to authorize the local session.
-        void signalCustomer("customer.created");
+        void signalCustomer("customer.updated");
       }
     };
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       // Supabase recommends deferring additional Auth/Data API work outside
       // the auth-state callback to avoid callback lock/deadlock behavior.
       setLoading(true);
       setTimeout(() => {
-        void acceptSession(s, true).finally(() => {
+        void acceptSession(s, event === "SIGNED_IN").finally(() => {
           if (active) setLoading(false);
         });
       }, 0);
