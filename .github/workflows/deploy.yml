@@ -110,7 +110,18 @@ jobs:
             exit 1
           fi
 
-          echo "Frontend production environment variables are available."
+          EXPECTED_SUPABASE_URL="https://odoybkshqszucvoxzjyz.supabase.co"
+          if [ "${VITE_SUPABASE_URL%/}" != "$EXPECTED_SUPABASE_URL" ]; then
+            echo "ERROR: VITE_SUPABASE_URL must target the fixed 1LV production project."
+            exit 1
+          fi
+
+          if [[ "$VITE_STRIPE_PUBLISHABLE_KEY" != pk_* ]]; then
+            echo "ERROR: VITE_STRIPE_PUBLISHABLE_KEY is not a Stripe publishable key."
+            exit 1
+          fi
+
+          echo "Frontend production environment variables are available and target the expected services."
           echo "Building 1lv.ca..."
 
           npm run build
@@ -194,7 +205,7 @@ jobs:
         shell: bash
         env:
           PORT: "4179"
-          SUPABASE_URL: "https://example.supabase.co"
+          SUPABASE_URL: "https://odoybkshqszucvoxzjyz.supabase.co"
           SUPABASE_PUBLISHABLE_KEY: "ci-publishable-key"
           SUPABASE_SERVICE_ROLE_KEY: "ci-service-role-key"
           STRIPE_SECRET_KEY: "sk_test_ci"
