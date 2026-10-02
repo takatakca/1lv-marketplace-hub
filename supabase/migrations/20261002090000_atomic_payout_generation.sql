@@ -12,7 +12,7 @@ CREATE OR REPLACE FUNCTION public.create_vendor_payout_atomic(
 RETURNS jsonb
 LANGUAGE plpgsql
 VOLATILE
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = ''
 AS $$
 DECLARE
@@ -157,6 +157,18 @@ BEGIN
     AND pa.applied_payout_id IS NULL
   ORDER BY pa.id
   FOR UPDATE;
+
+  -- Freeze reconciliation/status of source payouts referenced by refund
+  -- clawbacks while eligibility is decided.
+  PERFORM source.id
+  FROM public.payouts AS source
+  JOIN public.payout_adjustments AS pa
+    ON pa.payout_id = source.id
+  WHERE pa.vendor_id = _vendor_id
+    AND pa.applied_payout_id IS NULL
+    AND pa.kind = 'refund_clawback'
+  ORDER BY source.id
+  FOR UPDATE OF source;
 
   SELECT EXISTS (
     SELECT 1
