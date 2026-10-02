@@ -137,6 +137,10 @@ const stripeFunctions = readFileSync(
   join(root, "src/lib/stripe.functions.ts"),
   "utf8",
 );
+const checkoutFunctions = readFileSync(
+  join(root, "src/lib/checkout.functions.ts"),
+  "utf8",
+);
 const stripeWebhook = readFileSync(
   join(root, "src/routes/api/public/webhooks.stripe.ts"),
   "utf8",
@@ -966,6 +970,12 @@ if (
 ) {
   violations.push(
     "Stripe/refund code must never queue financial order lifecycle events to GROUPE TAKATAK.",
+  );
+}
+
+if (checkoutFunctions.includes("queueCustomerEvent")) {
+  violations.push(
+    "checkout must use order.created as the single TAKATAK customer synchronization entrypoint",
   );
 }
 
