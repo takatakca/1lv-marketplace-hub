@@ -28,8 +28,13 @@ export function ProductCard({ product, rank }: { product: Product; rank?: number
     typeof product.inventoryQuantity === "number" &&
     product.inventoryQuantity > 0 &&
     product.inventoryQuantity <= 5;
+  const soldOut =
+    product.trackInventory &&
+    typeof product.inventoryQuantity === "number" &&
+    product.inventoryQuantity <= 0;
 
   const addToCart = () => {
+    if (soldOut) return;
     add(product, 1);
     toast.success("Added to cart", { description: product.title });
   };
@@ -134,10 +139,15 @@ export function ProductCard({ product, rank }: { product: Product; rank?: number
         <button
           type="button"
           onClick={addToCart}
-          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-navy px-3 py-2.5 text-xs font-extrabold text-navy-foreground transition hover:bg-electric active:scale-[0.99]"
-          aria-label={"Add " + product.title + " to cart"}
+          disabled={soldOut}
+          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-navy px-3 py-2.5 text-xs font-extrabold text-navy-foreground transition hover:bg-electric active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+          aria-label={
+            soldOut
+              ? product.title + " is sold out"
+              : "Add " + product.title + " to cart"
+          }
         >
-          <ShoppingCart size={14} /> Add to cart
+          <ShoppingCart size={14} /> {soldOut ? "Sold out" : "Add to cart"}
         </button>
       </div>
     </article>
