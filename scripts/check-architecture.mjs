@@ -150,7 +150,7 @@ const atomicPayoutMigration = readFileSync(
   "utf8",
 );
 const refundVendorScopeMigration = readFileSync(
-  join(root, "supabase/migrations/20261002091500_refund_vendor_scope.sql"),
+  join(root, "supabase/migrations/20261002093000_refund_vendor_scope.sql"),
   "utf8",
 );
 const ordersService = readFileSync(
@@ -1554,15 +1554,15 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002091500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002093000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002091500"')
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002093000"')
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002091500",
+    "production health/migration gates must track schema 20261002093000",
   );
 }
 
