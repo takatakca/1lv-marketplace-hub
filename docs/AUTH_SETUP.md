@@ -1,143 +1,123 @@
-# Authentication setup — 1LV.CA
+# Authentication architecture — 1LV.CA
 
-This project uses **Supabase Auth** (via Lovable Cloud). The app supports:
+## Canonical rule
 
-- Email + password
-- Google OAuth (one-tap "Continue with Google")
-- Phone / SMS OTP (Canadian +1 numbers)
-- Password reset via email link
+**GROUPE TAKATAK is the master identity, authentication and OTP authority.**
 
-The UI gracefully handles providers that are not yet enabled — users see a
-clear "not configured" notice instead of a broken state.
+1LV is an independent marketplace. It owns its catalog, vendors, carts,
+orders, checkout, Stripe operations, payouts and marketplace rules. It does
+not authenticate users independently and it never reads another TAKATAK child
+application.
 
----
+The only allowed cross-system direction is:
 
-## 1. Email + password
-Enabled by default. No setup needed.
+**1LV → GROUPE TAKATAK → 1LV**
 
-Recommended hardening in **Cloud → Users → Auth Settings**:
+Never:
 
-- Turn on **Confirm email** (default ON).
-- Turn on **Password HIBP check** (rejects leaked passwords).
-- Set minimum password length to **8+**.
+**1LV → another child application**
 
-The app already enforces:
+## Sign-in flow
 
-- Strength meter on signup
-- `minLength=8` on the field
-- Toast errors on weak passwords
+1. The browser submits a Canadian mobile number to a 1LV server function.
+2. The 1LV server calls the TAKATAK master API with the server-only
+   TAKATAK_MASTER_API_KEY.
+3. TAKATAK sends and verifies the SMS through its shared Supabase Phone Auth.
+4. TAKATAK returns only the verified master identity fields authorized for the
+   1LV bridge.
+5. 1LV links that master UUID to profiles.takatak_person_id.
+6. 1LV creates a short-lived local magic-link token solely to establish the
+   1LV Supabase session required by RLS.
+7. The browser exchanges that token for the local 1LV session.
 
----
+The local Supabase session is **not** a second identity authority.
 
-## 2. Google OAuth
+## New account flow
 
-The "Continue with Google" buttons on `/login` and `/signup` call
-`supabase.auth.signInWithOAuth({ provider: "google" })`.
+The 1LV signup screen collects:
 
-**Enable Google in Cloud:**
+- full name;
+- verified Canadian mobile number;
+- optional email;
+- acceptance of 1LV terms/privacy;
+- optional 1LV marketing consent.
 
-1. Open **Cloud → Users → Auth Settings → Sign-in methods**.
-2. Toggle **Google** ON.
-3. Lovable Cloud ships with **managed Google credentials** — no key needed
-   for development / preview.
-4. (Optional) Add **your own** Google OAuth Client ID + Secret for production
-   branding. In Google Cloud Console:
-   - Create an **OAuth 2.0 Client ID** (Web application).
-   - Authorized JavaScript origins:
-     - `https://onelovevision.lovable.app`
-     - `https://1lv.ca` (when the custom domain is live)
-     - `http://localhost:8080` (local dev)
-   - Authorized redirect URI (copy from Cloud's Google settings — it looks like):
-     `https://odoybkshqszucvoxzjyz.supabase.co/auth/v1/callback`
+Name/email are supplied to TAKATAK only through the authorized OTP request.
+After verification, 1LV trusts the identity returned by TAKATAK rather than
+the unverified browser input.
 
-**Redirect after sign-in:** The app passes
-`redirectTo: ${window.location.origin}/account` (or `/role-select` from
-signup). Make sure these are in **Cloud → Users → URL configuration →
-Redirect URLs**:
+For a new 1LV local auth user, 1LV uses a synthetic local email derived from
+the TAKATAK master identity UUID. A TAKATAK email address is never used as an
+implicit local account-merge key.
 
-- `https://onelovevision.lovable.app/account`
-- `https://onelovevision.lovable.app/role-select`
-- `https://1lv.ca/account`
-- `https://1lv.ca/role-select`
-- preview/dev wildcards as needed
+## Authentication methods prohibited inside 1LV
 
----
+Application code must not call its own Supabase project for:
 
-## 3. Phone / SMS OTP
+- signInWithPassword;
+- signUp;
+- signInWithOAuth;
+- signInWithOtp;
+- resetPasswordForEmail;
+- password updates through updateUser.
 
-The "Phone (SMS)" tab on `/login` calls
-`supabase.auth.signInWithOtp({ phone })` and then
-`supabase.auth.verifyOtp({ phone, token, type: "sms" })`.
+The legacy Google/password components are removed. The old password-reset
+routes remain only as informational redirects to the verified-phone flow.
 
-**Enable phone auth in Cloud:**
+Run npm run check:architecture to enforce this boundary. CI and deployment
+also run this check automatically.
 
-1. Open **Cloud → Users → Auth Settings → Sign-in methods**.
-2. Toggle **Phone** ON.
-3. Choose an SMS provider and enter its credentials:
-   - **Twilio** (recommended for Canada): Account SID, Auth Token, Message
-     Service SID, and a Twilio number that can SMS Canada.
-   - or **MessageBird**, **Vonage**, **Textlocal**.
-4. Save.
+## Server-only production configuration
 
-**Format:** the app formats Canadian numbers as `+1XXXXXXXXXX` automatically.
-10-digit input or 11-digit `1XXXXXXXXXX` is accepted.
+1LV requires:
 
-**Cost note:** SMS is **not free**. Twilio charges per message; Canadian
-A2P/long-code is usually a few cents per OTP. Set Twilio spend limits.
+- TAKATAK_MASTER_API_URL;
+- TAKATAK_MASTER_API_KEY;
+- TAKATAK_DRAIN_CRON_SECRET;
+- SUPABASE_URL;
+- SUPABASE_SERVICE_ROLE_KEY;
+- the normal 1LV public Supabase publishable configuration.
 
-Until phone is enabled, the UI shows: *"Phone OTP not configured yet. See
-docs/AUTH_SETUP.md."*
+None of the master API key, Supabase service-role key, OTP code, session
+credential or provider secret may be exposed to the browser or stored in a
+TAKATAK event payload.
 
----
+## Master API contract used by 1LV
 
-## 4. Password reset
+- POST /v1/auth/otp/send
+- POST /v1/auth/otp/verify
+- POST /v1/identity/resolve-person
+- POST /v1/identity/resolve-merchant
+- POST /v1/events
 
-- Public route `/forgot-password` calls
-  `supabase.auth.resetPasswordForEmail(email, { redirectTo: <origin>/reset-password })`.
-- Public route `/reset-password` calls `supabase.auth.updateUser({ password })`.
+Successful OTP responses must identify the authority as
+takatak_supabase_phone.
 
-Make sure `<origin>/reset-password` is in the Redirect URLs list above for
-every domain you use.
+## Data isolation
 
----
+1LV keeps only the local foreign key needed to associate its profile with the
+master identity. It does not receive TAKATAK-wide relationship data.
 
-## 5. Account-type step
+A 1LV vendor/customer cannot discover that the same person uses another
+company unless GROUPE TAKATAK explicitly introduces a future permissioned
+contract for that exact purpose.
 
-After signup the user lands on `/role-select`:
+## Production gate
 
-- "Shop as customer" → `/account`
-- "Sell as vendor" → `/vendor/onboarding`
+Before production activation:
 
-The vendor role is granted later by the existing `vendor.onboarding` flow
-(creates the `vendors` row + role).
+1. apply the TAKATAK master bridge migration to the exact TAKATAK production
+   database;
+2. configure TAKATAK Supabase Phone Auth/SMS;
+3. configure the same dedicated master API credential on TAKATAK and the 1LV
+   server;
+4. apply the 1LV migrations only to project odoybkshqszucvoxzjyz;
+5. run the Supabase Security Advisor and RLS tests;
+6. run one real phone OTP end-to-end;
+7. confirm profiles.takatak_person_id links to the returned master identity;
+8. verify one outbox event reaches TAKATAK idempotently;
+9. verify 1LV checkout/orders remain available even if TAKATAK event delivery
+   is temporarily unavailable.
 
----
-
-## 6. Local / preview / production URLs
-
-| Environment | Origin |
-| --- | --- |
-| Local dev | `http://localhost:8080` |
-| Lovable preview | `https://id-preview--deec4249-153f-4f4a-8a40-79e457dc6c83.lovable.app` |
-| Published | `https://onelovevision.lovable.app` |
-| Production custom domain | `https://1lv.ca` |
-
-Add **every** origin you actually use to:
-
-- **Cloud → Users → URL configuration → Site URL** (canonical production)
-- **Cloud → Users → URL configuration → Redirect URLs** (all of them)
-
-If Google sign-in opens then redirects to an error page, 99% of the time the
-fix is "add this exact origin to Redirect URLs."
-
----
-
-## 7. What still requires Cloud dashboard configuration
-
-- ✅ Code is ready
-- ⚠️ Enable **Google** provider in Cloud (one toggle)
-- ⚠️ Enable **Phone** provider + SMS credentials in Cloud (Twilio recommended)
-- ⚠️ Add production redirect URLs once `1lv.ca` is live
-- ⚠️ Optional: HIBP password check, MFA enforcement
-
-Nothing in this list breaks the app if skipped — the UI degrades gracefully.
+This document supersedes the former direct 1LV password, Google OAuth and
+local OTP setup.
