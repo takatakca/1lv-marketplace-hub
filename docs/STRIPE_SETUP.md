@@ -124,6 +124,9 @@ Any future expiry, any CVC.
 - Browser roles cannot insert financial order, order-item or vendor-order rows after the server-authoritative checkout migration is applied.
 - Guest payment authorization uses a dedicated short-lived HMAC capability; never reuse the Stripe or Supabase service-role secret for `CHECKOUT_GUEST_TOKEN_SECRET`.
 - Inventory is reserved during checkout and committed only after Stripe payment success; expired unpaid reservations are recoverable through the service-role-only cleanup RPC.
+- Expired reservations are also released by `.github/workflows/inventory-maintenance.yml` every 15 minutes through `/api/internal/inventory/cleanup`; production requires a dedicated `INVENTORY_MAINTENANCE_CRON_SECRET` (32+ characters) and a clean HTTPS `PRODUCTION_URL` repository variable.
+- A cancelled order PaymentIntent can be replaced only after its amount/currency/order metadata are revalidated; the replacement uses a stable idempotency key and a conditional old-ID → new-ID database binding.
+- Refund finalization recalculates payouts that have not transferred and forces them back through review. If a payout is already processing/paid, the original Stripe transfer amount stays immutable and an idempotent future clawback is recorded.
 - Webhook verifies `Stripe-Signature` with timing-safe comparison, rejects signatures older than five minutes, and uses `stripe_event_log` for event idempotency.
 - Vendor subscription checkout requires an authenticated session and enforces `vendor.user_id = auth.uid()` via RLS before creating the session.
 - `stripe_event_log` prevents double-processing of retried webhook deliveries.
