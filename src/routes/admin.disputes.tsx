@@ -220,11 +220,29 @@ function DisputeDrawer({
                 disabled={busy}
                 className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
               >
-                {DISPUTE_STATUSES.map((s) => (
+                {DISPUTE_STATUSES.filter(
+                  (s) =>
+                    ![
+                      "resolved_customer",
+                      "resolved_vendor",
+                      "rejected",
+                      "cancelled",
+                    ].includes(s),
+                ).map((s) => (
                   <option key={s} value={s}>
                     {disputeStatusLabel(s)}
                   </option>
                 ))}
+                {[
+                  "resolved_customer",
+                  "resolved_vendor",
+                  "rejected",
+                  "cancelled",
+                ].includes(dispute.status) && (
+                  <option value={dispute.status}>
+                    {disputeStatusLabel(dispute.status)}
+                  </option>
+                )}
               </select>
             </div>
 
@@ -267,6 +285,9 @@ function DisputeDrawer({
               </button>
               <button disabled={busy} onClick={() => act("reject")} className="rounded-md border border-border px-3 py-2 text-xs font-semibold text-destructive">
                 Reject dispute
+              </button>
+              <button disabled={busy} onClick={() => act("cancel")} className="rounded-md border border-border px-3 py-2 text-xs font-semibold text-muted-foreground">
+                Cancel dispute
               </button>
             </div>
 
