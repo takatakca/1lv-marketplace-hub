@@ -116,7 +116,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          EXPECTED_MIGRATION="supabase/migrations/${EXPECTED_SCHEMA_VERSION}_stripe_webhook_accounting.sql"
+          EXPECTED_MIGRATION="supabase/migrations/${EXPECTED_SCHEMA_VERSION}_atomic_refund_reservation.sql"
           test -f "$EXPECTED_MIGRATION" || {
             echo "ERROR: expected production schema migration is missing from this checkout: $EXPECTED_MIGRATION"
             exit 1
