@@ -645,6 +645,21 @@ for (const [content, marker, label] of [
   ],
   [
     stripeFunctions,
+    "makePaymentIntentNonPayable",
+    "expired/released checkout makes the stored Stripe PaymentIntent non-payable before inventory release",
+  ],
+  [
+    stripeFunctions,
+    "paymentState === \"succeeded\"",
+    "Stripe-succeeded expired checkout blocks inventory release for reconciliation",
+  ],
+  [
+    stripeFunctions,
+    "expire_${paymentIntentId}_v1",
+    "expired PaymentIntent cancellation is idempotent",
+  ],
+  [
+    stripeFunctions,
     "payment_after_${order.stripe_payment_intent_id}_v1",
     "canceled PaymentIntents are replaced with a stable idempotency key",
   ],
