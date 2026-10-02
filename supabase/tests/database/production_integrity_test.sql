@@ -2,12 +2,80 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(98);
+select plan(103);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002084500',
+  '20261002090000',
   'production schema marker is current'
+);
+
+select ok(
+  to_regprocedure(
+    'public.create_vendor_payout_atomic(uuid,date,date,timestamp with time zone)'
+  ) is not null,
+  'atomic vendor payout generation RPC exists'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.create_vendor_payout_atomic(uuid,date,date,timestamp with time zone)',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.create_vendor_payout_atomic(uuid,date,date,timestamp with time zone)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.create_vendor_payout_atomic(uuid,date,date,timestamp with time zone)',
+    'EXECUTE'
+  ),
+  'only service role may generate vendor payouts atomically'
+);
+
+select ok(
+  position(
+    'pg_advisory_xact_lock'
+    in pg_get_functiondef(
+      'public.create_vendor_payout_atomic(uuid,date,date,timestamp with time zone)'::regprocedure
+    )
+  ) > 0,
+  'atomic payout generation serializes concurrent generators by vendor'
+);
+
+select ok(
+  position(
+    'FOR UPDATE OF vo'
+    in pg_get_functiondef(
+      'public.create_vendor_payout_atomic(uuid,date,date,timestamp with time zone)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'v_inserted_items <> v_item_count'
+    in pg_get_functiondef(
+      'public.create_vendor_payout_atomic(uuid,date,date,timestamp with time zone)'::regprocedure
+    )
+  ) > 0,
+  'atomic payout generation locks vendor orders and verifies every payout item'
+);
+
+select ok(
+  position(
+    'v_claimed_adjustments <> v_adjustment_count'
+    in pg_get_functiondef(
+      'public.create_vendor_payout_atomic(uuid,date,date,timestamp with time zone)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'v_unresolved_clawback'
+    in pg_get_functiondef(
+      'public.create_vendor_payout_atomic(uuid,date,date,timestamp with time zone)'::regprocedure
+    )
+  ) > 0,
+  'atomic payout generation verifies adjustments and blocks unresolved refund clawbacks'
 );
 
 select ok(
