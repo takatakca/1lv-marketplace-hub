@@ -110,6 +110,11 @@ for (const [content, marker, label] of [
   [authBridge, 'auth_source: "takatak"', "TAKATAK local session marker"],
   [
     authBridge,
+    'intent === "login" && !expectedUserId',
+    "login must never create an unconsented 1LV account",
+  ],
+  [
+    authBridge,
     'expectedUserId ? "customer.updated" : "customer.created"',
     "correct master lifecycle event",
   ],
