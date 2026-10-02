@@ -596,6 +596,24 @@ if (
 }
 
 if (
+  authBridge.includes(".auth.signOut();") ||
+  authProvider.includes(".auth.signOut();")
+) {
+  violations.push(
+    "1LV session cleanup must use signOut({ scope: \"local\" }) so one failed/current session never revokes other devices.",
+  );
+}
+
+if (
+  !authBridge.includes('signOut({ scope: "local" })') ||
+  !authProvider.includes('signOut({ scope: "local" })')
+) {
+  violations.push(
+    "TAKATAK bootstrap and browser logout must explicitly preserve unrelated sessions with local sign-out scope.",
+  );
+}
+
+if (
   !optionalAuth.includes("requireTakatakAuthorizedSession") ||
   !optionalAuth.includes("client.auth.getClaims(token)")
 ) {
