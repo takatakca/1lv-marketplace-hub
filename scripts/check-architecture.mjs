@@ -82,7 +82,7 @@ const authProvider = readFileSync(
   "utf8",
 );
 const finalAuthMigration = readFileSync(
-  join(root, "supabase/migrations/20261001214500_profile_consent_audit.sql"),
+  join(root, "supabase/migrations/20261002034500_takatak_authenticated_session_guard.sql"),
   "utf8",
 );
 const payoutSchedulerServer = readFileSync(
