@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(62);
+select plan(63);
 
 select is(
   public.get_1lv_schema_version(),
@@ -61,6 +61,11 @@ select ok(
 select ok(
   to_regprocedure('public.reserve_dispute_refund(uuid,numeric,text,uuid)') is not null,
   'atomic dispute refund reservation RPC exists'
+);
+
+select ok(
+  to_regclass('public.disputes_one_open_per_vendor_order') is not null,
+  'database prevents concurrent duplicate open disputes for one vendor split'
 );
 
 select ok(
