@@ -101,6 +101,10 @@ const stripeConnectFunctions = readFileSync(
   join(root, "src/lib/stripe-connect.functions.ts"),
   "utf8",
 );
+const stripeFunctions = readFileSync(
+  join(root, "src/lib/stripe.functions.ts"),
+  "utf8",
+);
 const optionalAuth = readFileSync(
   join(root, "src/integrations/supabase/optional-auth.server.ts"),
   "utf8",
@@ -244,6 +248,16 @@ for (const [content, marker, label] of [
     "Stripe Connect derives redirect origin from the trusted server request",
   ],
   [
+    stripeFunctions,
+    "const request = getRequest()",
+    "Stripe subscription checkout derives redirect origin from the trusted server request",
+  ],
+  [
+    stripeFunctions,
+    "const origin = requestUrl.origin",
+    "Stripe subscription URLs use the server-derived 1LV origin",
+  ],
+  [
     stripeConnectFunctions,
     "const origin = requestUrl.origin",
     "Stripe Connect account links use the server-derived 1LV origin",
@@ -326,6 +340,12 @@ if (masterOutbox.includes('.in("status", ["pending", "failed"])')) {
 if (stripeConnectFunctions.includes("returnOrigin")) {
   violations.push(
     "Stripe Connect must not accept a browser-supplied return origin.",
+  );
+}
+
+if (stripeFunctions.includes("returnOrigin")) {
+  violations.push(
+    "Stripe subscription checkout must not accept a browser-supplied return origin.",
   );
 }
 
