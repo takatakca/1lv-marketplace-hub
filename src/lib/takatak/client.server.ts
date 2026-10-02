@@ -180,7 +180,6 @@ export type TakatakVerifiedIdentity = {
 };
 
 export type TakatakOtpMetadata = {
-  email?: string | null;
   fullName?: string | null;
   preferredLanguage?: string | null;
 };
@@ -260,7 +259,6 @@ export async function requestTakatakPhoneOtp(
 ): Promise<TakatakOtpResult> {
   const result = await callOtp("/v1/auth/otp/send", {
     phone,
-    ...(metadata.email ? { email: metadata.email } : {}),
     ...(metadata.fullName ? { full_name: metadata.fullName } : {}),
     ...(metadata.preferredLanguage
       ? { preferred_language: metadata.preferredLanguage }
