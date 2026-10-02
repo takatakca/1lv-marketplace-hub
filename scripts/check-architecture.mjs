@@ -186,7 +186,7 @@ const marketplaceTimestampAuthorityMigration = readFileSync(
   "utf8",
 );
 const firstOrderPromotionUniquenessMigration = readFileSync(
-  join(root, "supabase/migrations/20261002113000_first_order_promotion_uniqueness.sql"),
+  join(root, "supabase/migrations/20261002114500_first_order_promotion_uniqueness.sql"),
   "utf8",
 );
 const firstOrderPartialRefundMigration = readFileSync(
@@ -493,7 +493,7 @@ for (const [content, marker, label] of [
   ],
   [
     firstOrderPromotionUniquenessMigration,
-    "SELECT '20261002113000'",
+    "SELECT '20261002114500'",
     "first-order promotion uniqueness migration retains its historical schema marker",
   ],
   [
@@ -1923,7 +1923,8 @@ if (
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002114500"')
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002114500"') ||
+  !firstOrderPartialRefundMigration.includes("SELECT '20261002114500'")
 ) {
   violations.push(
     "production health/migration gates must track schema 20261002114500",
