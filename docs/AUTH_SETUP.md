@@ -32,6 +32,19 @@ Never:
 
 The local Supabase session is **not** a second identity authority.
 
+The 1LV Supabase Auth project must not accept public account creation. In the
+hosted 1LV project, **Allow new users to sign up** must be disabled. The local
+Supabase config mirrors this with `auth.enable_signup = false`, plus email and
+SMS signup disabled. Trusted 1LV server code may still provision the synthetic
+local Auth user with the service role after TAKATAK has verified the phone.
+
+The `auth.users` trigger does not use `raw_app_meta_data` as an insertion
+gate because GoTrue does not guarantee that app metadata is available to that
+trigger at the same point during admin provisioning. Instead, it bootstraps a
+local profile only for the deterministic TAKATAK synthetic email shape. The
+browser session remains fail-closed unless its issued JWT contains the immutable
+TAKATAK app metadata and an OTP/magic-link authentication method.
+
 ## New account flow
 
 The 1LV signup screen collects:
@@ -122,13 +135,14 @@ Before production activation:
 2. configure TAKATAK Supabase Phone Auth/SMS;
 3. configure the same dedicated master API credential on TAKATAK and the 1LV
    server;
-4. apply the 1LV migrations only to project odoybkshqszucvoxzjyz;
-5. run the Supabase Security Advisor and RLS tests;
-6. run one real phone OTP end-to-end;
-7. confirm profiles.takatak_person_id links to the returned master identity;
-8. verify one outbox event reaches TAKATAK idempotently;
-9. verify 1LV checkout/orders remain available even if TAKATAK event delivery
-   is temporarily unavailable.
+4. disable public signup in the hosted 1LV Supabase Auth configuration;
+5. apply the 1LV migrations only to project odoybkshqszucvoxzjyz;
+6. run the Supabase Security Advisor and RLS tests;
+7. run one real phone OTP end-to-end;
+8. confirm profiles.takatak_person_id links to the returned master identity;
+9. verify one outbox event reaches TAKATAK idempotently;
+10. verify 1LV checkout/orders remain available even if TAKATAK event delivery
+    is temporarily unavailable.
 
 This document supersedes the former direct 1LV password, Google OAuth and
 local OTP setup.
