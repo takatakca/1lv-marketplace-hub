@@ -17,7 +17,8 @@ type PhoneLoginResult =
 
 type AuthIntent = "login" | "signup";
 
-const SIGNUP_CONSENT_REVISION = "1lv-terms-privacy-2026-10-01";
+const SIGNUP_CONSENT_REVISION = "1lv-terms-privacy-effective-2026-09-30";
+const MARKETING_CONSENT_REVISION = "1lv-casl-opt-in-2026-10-01";
 
 type RequestPhoneCodeInput = {
   phone: string;
@@ -255,6 +256,8 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
           terms_accepted: true,
           privacy_accepted: true,
           marketing_opt_in: data.marketingOptIn === true,
+          marketing_consent_revision:
+            data.marketingOptIn === true ? MARKETING_CONSENT_REVISION : null,
           source: "1lv_signup",
         });
 
