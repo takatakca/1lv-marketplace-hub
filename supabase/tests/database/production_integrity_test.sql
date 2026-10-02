@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(24);
+select plan(31);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261001202000',
+  '20261001214500',
   'production schema marker is current'
 );
 
@@ -126,6 +126,49 @@ select ok(
       and not tgisinternal
   ),
   'profile master identity trigger is installed'
+);
+
+select ok(
+  to_regclass('public.profile_consent_events') is not null,
+  'server-authoritative profile consent audit table exists'
+);
+
+select ok(
+  coalesce((
+    select c.relrowsecurity
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relname = 'profile_consent_events'
+  ), false),
+  'profile consent audit table has RLS enabled'
+);
+
+select ok(
+  not has_table_privilege('anon', 'public.profile_consent_events', 'SELECT'),
+  'anonymous clients cannot read signup consent evidence'
+);
+
+select ok(
+  not has_table_privilege('authenticated', 'public.profile_consent_events', 'SELECT'),
+  'authenticated clients cannot read signup consent evidence directly'
+);
+
+select ok(
+  not has_table_privilege('authenticated', 'public.profile_consent_events', 'INSERT'),
+  'authenticated clients cannot forge signup consent evidence'
+);
+
+select ok(
+  has_table_privilege('service_role', 'public.profile_consent_events', 'SELECT')
+  and has_table_privilege('service_role', 'public.profile_consent_events', 'INSERT'),
+  'service role can append and inspect signup consent evidence'
+);
+
+select ok(
+  not has_table_privilege('service_role', 'public.profile_consent_events', 'UPDATE')
+  and not has_table_privilege('service_role', 'public.profile_consent_events', 'DELETE'),
+  'service role cannot rewrite or delete signup consent evidence through the Data API'
 );
 
 select ok(
