@@ -483,7 +483,7 @@ for (const [content, marker, label] of [
   ],
   [
     stripeWebhook,
-    '.in("payment_status", ["pending", "failed"])',
+    '.in("payment_status", ["unpaid", "failed"])',
     "stale PaymentIntent failure events cannot downgrade a paid or refunded order",
   ],
   [
