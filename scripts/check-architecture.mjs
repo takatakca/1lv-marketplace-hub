@@ -127,6 +127,16 @@ for (const [content, marker, label] of [
     "master-UUID local session isolation",
   ],
   [
+    authBridge,
+    "supabaseAdmin.auth.admin.createUser",
+    "explicit local 1LV Auth user creation",
+  ],
+  [
+    authBridge,
+    "email_confirm: true",
+    "synthetic local email is server-confirmed without sending email",
+  ],
+  [
     masterClient,
     "normalizeTakatakMasterApiBaseUrl",
     "TAKATAK master API base URL normalization",
@@ -198,6 +208,15 @@ for (const [content, marker, label] of [
 if (masterOutbox.includes('.in("status", ["pending", "failed"])')) {
   violations.push(
     "failed TAKATAK events must require explicit retry; automatic drain may process only pending events.",
+  );
+}
+
+if (
+  authBridge.includes('type: "magiclink"') &&
+  !authBridge.includes("supabaseAdmin.auth.admin.createUser")
+) {
+  violations.push(
+    "generateLink magiclink must not be the only local signup primitive; create the verified local user explicitly first.",
   );
 }
 
