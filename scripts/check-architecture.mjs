@@ -539,11 +539,11 @@ if (
 }
 
 if (
-  !optionalAuth.includes("requireTakatakSessionClaims") ||
+  !optionalAuth.includes("requireTakatakAuthorizedSession") ||
   !optionalAuth.includes("client.auth.getClaims(token)")
 ) {
   violations.push(
-    "optional Supabase auth must enforce the same verified TAKATAK JWT claims as protected server functions",
+    "optional Supabase auth must enforce both TAKATAK JWT claims and the exact server-granted session_id",
   );
 }
 
