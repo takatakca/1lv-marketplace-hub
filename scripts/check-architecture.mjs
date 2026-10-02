@@ -1188,15 +1188,6 @@ if (
 }
 
 if (
-  !payoutSchedulerServer.includes("Could not roll back incomplete payout") ||
-  !payoutSchedulerServer.includes("Could not roll back payout adjustment claim")
-) {
-  violations.push(
-    "payout generation must fail loudly if cleanup of a partial payout fails",
-  );
-}
-
-if (
   !payoutSchedulerServer.includes(
     "Recovered a stale processing transfer lease for safe idempotent retry.",
   )
@@ -1237,22 +1228,22 @@ if (
 }
 
 if (
-  !payoutSchedulerServer.includes("clawbackSources") ||
-  !payoutSchedulerServer.includes('"refund_clawback"') ||
-  !payoutSchedulerServer.includes(
-    'source.status === "paid" &&',
+  !atomicPayoutMigration.includes("refund_clawback") ||
+  !atomicPayoutMigration.includes("v_unresolved_clawback") ||
+  !atomicPayoutMigration.includes(
+    "source.status = 'paid'::public.payout_status",
   ) ||
-  !payoutSchedulerServer.includes("source.stripe_transfer_id") ||
-  !payoutSchedulerServer.includes(
-    'source.reconciliation_status === "matched"',
+  !atomicPayoutMigration.includes("source.stripe_transfer_id IS NOT NULL") ||
+  !atomicPayoutMigration.includes(
+    "source.reconciliation_status = 'matched'",
   ) ||
-  !payoutSchedulerServer.includes("!source.reconciliation_status") ||
-  !payoutSchedulerServer.includes('source.status === "cancelled"') ||
-  !payoutSchedulerServer.includes("unresolvedClawback") ||
-  !payoutSchedulerServer.includes("eligibleAdjustmentRows")
+  !atomicPayoutMigration.includes(
+    "source.status = 'cancelled'::public.payout_status",
+  ) ||
+  !atomicPayoutMigration.includes("source.stripe_transfer_id IS NULL")
 ) {
   violations.push(
-    "refund clawbacks must remain provisional until the source payout is paid with a confirmed transfer and no negative Stripe reconciliation, or definitively cancelled without a transfer",
+    "refund clawbacks must remain provisional inside the atomic payout transaction until the source payout is conclusively paid or cancelled without a transfer",
   );
 }
 
