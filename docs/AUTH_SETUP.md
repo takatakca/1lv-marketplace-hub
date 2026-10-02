@@ -26,9 +26,12 @@ Never:
 4. TAKATAK returns only the verified master identity fields authorized for the
    1LV bridge.
 5. 1LV links that master UUID to profiles.takatak_person_id.
-6. 1LV creates a short-lived local magic-link token solely to establish the
-   1LV Supabase session required by RLS.
-7. The browser exchanges that token for the local 1LV session.
+6. The trusted 1LV server creates the short-lived local magic-link material,
+   exchanges it server-side, and records the exact Supabase session_id in
+   takatak_authorized_sessions.
+7. The browser receives only the already-authorized local access/refresh
+   session and installs it with setSession. The magic-link token hash never
+   leaves the server.
 
 The local Supabase session is **not** a second identity authority.
 
