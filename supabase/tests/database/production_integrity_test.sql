@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(76);
+select plan(79);
 
 select is(
   public.get_1lv_schema_version(),
@@ -96,16 +96,97 @@ select ok(
 );
 
 select ok(
+  to_regprocedure('public.vendor_can_view_paid_order(uuid)') is not null
+  and to_regprocedure(
+    'public.vendor_can_view_paid_order_scope(uuid,uuid)'
+  ) is not null,
+  'non-recursive paid-order vendor visibility helpers exist'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.vendor_can_view_paid_order(uuid)',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'anon',
+    'public.vendor_can_view_paid_order_scope(uuid,uuid)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.vendor_can_view_paid_order(uuid)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.vendor_can_view_paid_order_scope(uuid,uuid)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.vendor_can_view_paid_order(uuid)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.vendor_can_view_paid_order_scope(uuid,uuid)',
+    'EXECUTE'
+  ),
+  'paid-order visibility helpers are callable only by authenticated/server roles'
+);
+
+select ok(
+  position(
+    'auth.uid()'
+    in pg_get_functiondef(
+      'public.vendor_can_view_paid_order(uuid)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'public.is_takatak_authorized_session()'
+    in pg_get_functiondef(
+      'public.vendor_can_view_paid_order(uuid)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'partially_refunded'
+    in pg_get_functiondef(
+      'public.vendor_can_view_paid_order(uuid)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'auth.uid()'
+    in pg_get_functiondef(
+      'public.vendor_can_view_paid_order_scope(uuid,uuid)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'public.is_takatak_authorized_session()'
+    in pg_get_functiondef(
+      'public.vendor_can_view_paid_order_scope(uuid,uuid)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'partially_refunded'
+    in pg_get_functiondef(
+      'public.vendor_can_view_paid_order_scope(uuid,uuid)'::regprocedure
+    )
+  ) > 0,
+  'visibility helpers bind auth.uid, TAKATAK session, and confirmed payment'
+);
+
+select ok(
   exists (
     select 1
     from pg_policies
     where schemaname = 'public'
       and tablename = 'orders'
       and policyname = 'Vendors view related orders'
-      and coalesce(qual, '') like '%payment_status%'
-      and coalesce(qual, '') like '%partially_refunded%'
+      and coalesce(qual, '') like '%vendor_can_view_paid_order%'
   ),
-  'vendor order-parent visibility requires confirmed payment'
+  'vendor parent-order policy uses the non-recursive paid-order helper'
 );
 
 select ok(
@@ -115,10 +196,9 @@ select ok(
     where schemaname = 'public'
       and tablename = 'vendor_orders'
       and policyname = 'Vendors view own vendor orders'
-      and coalesce(qual, '') like '%payment_status%'
-      and coalesce(qual, '') like '%partially_refunded%'
+      and coalesce(qual, '') like '%vendor_can_view_paid_order_scope%'
   ),
-  'vendor split visibility requires confirmed payment'
+  'vendor split policy uses the non-recursive paid-order helper'
 );
 
 select ok(
@@ -128,10 +208,9 @@ select ok(
     where schemaname = 'public'
       and tablename = 'order_items'
       and policyname = 'Vendors view own order items'
-      and coalesce(qual, '') like '%payment_status%'
-      and coalesce(qual, '') like '%partially_refunded%'
+      and coalesce(qual, '') like '%vendor_can_view_paid_order_scope%'
   ),
-  'vendor line-item visibility requires confirmed payment'
+  'vendor line-item policy uses the non-recursive paid-order helper'
 );
 
 select ok(
