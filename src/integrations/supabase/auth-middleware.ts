@@ -8,7 +8,7 @@ import type { Database } from './types'
 const MASTER_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-export function requireTakatakSessionClaims(claims: Record<string, unknown>) {
+export export function requireTakatakSessionClaims(claims: Record<string, unknown>) {
   const sub = typeof claims['sub'] === 'string' ? claims['sub'] : ''
   const email =
     typeof claims['email'] === 'string' ? claims['email'].trim().toLowerCase() : ''
