@@ -93,6 +93,10 @@ const stripeAccountingMigration = readFileSync(
   join(root, "supabase/migrations/20261002054500_stripe_webhook_accounting.sql"),
   "utf8",
 );
+const refundReservationMigration = readFileSync(
+  join(root, "supabase/migrations/20261002062000_atomic_refund_reservation.sql"),
+  "utf8",
+);
 const loginRoute = readFileSync(
   join(root, "src/routes/login.tsx"),
   "utf8",
@@ -283,9 +287,24 @@ for (const [content, marker, label] of [
     "session grant lookup can enforce a private registry without exposing it",
   ],
   [
-    stripeAccountingMigration,
-    "SELECT '20261002054500'",
-    "final production schema marker includes the TAKATAK session-grant boundary",
+    refundReservationMigration,
+    "SELECT '20261002062000'",
+    "final production schema marker includes atomic refund reservation",
+  ],
+  [
+    refundReservationMigration,
+    "public.reserve_dispute_refund",
+    "refund approval is reserved transactionally in PostgreSQL",
+  ],
+  [
+    refundReservationMigration,
+    "FOR UPDATE",
+    "refund reservation serializes financial approval against the order",
+  ],
+  [
+    refundReservationMigration,
+    "refund_already_reserved",
+    "one dispute cannot reserve duplicate refunds concurrently",
   ],
   [
     optionalAuth,
