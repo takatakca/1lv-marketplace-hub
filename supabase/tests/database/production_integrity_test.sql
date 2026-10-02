@@ -247,7 +247,7 @@ select ok(
   ) > 0
   and position(
     '@auth.1lv.ca'
-    in replace(
+    in translate(
       pg_get_functiondef('public.handle_new_user()'::regprocedure),
       E'\\\\',
       ''
