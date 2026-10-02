@@ -138,12 +138,9 @@ select ok(
       'public.enforce_first_order_promotion_identity()'::regprocedure
     )
   ) > 0
-  and position(
-    'NEW.customer_id IS NULL'
-    in pg_get_functiondef(
-      'public.enforce_first_order_promotion_identity()'::regprocedure
-    )
-  ) = 0,
+  and pg_get_functiondef(
+    'public.enforce_first_order_promotion_identity()'::regprocedure
+  ) ~ 'OR[[:space:]]+lower\\(btrim\\(COALESCE\\(o\\.customer_email',
   'first-order eligibility checks prior paid history by customer id or normalized email, including guest-to-account transitions'
 );
 
