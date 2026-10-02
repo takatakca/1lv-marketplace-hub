@@ -807,6 +807,24 @@ if (
 }
 
 if (
+  !payoutSchedulerServer.includes("confirmedTransferId") ||
+  !payoutSchedulerServer.includes(
+    "Stripe transfer succeeded; local finalization requires reconciliation.",
+  ) ||
+  !payoutSchedulerServer.includes(
+    '.eq("stripe_transfer_id", payout.stripe_transfer_id)',
+  ) ||
+  !payoutSchedulerServer.includes('status: "paid"') ||
+  payoutSchedulerServer.includes(
+    'if (payout.status === "failed") return finish("failed"',
+  )
+) {
+  violations.push(
+    "confirmed Stripe payouts must remain non-retryable and reconciliation must be able to repair the local paid state",
+  );
+}
+
+if (
   authBridge.includes(".auth.signOut();") ||
   authProvider.includes(".auth.signOut();")
 ) {
