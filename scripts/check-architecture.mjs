@@ -392,6 +392,16 @@ for (const [content, marker, label] of [
     "Stripe Connect requests have a bounded network timeout",
   ],
   [
+    stripeConnectFunctions,
+    `1lv_vendor_\${vendor.id}_connect_v1`,
+    "Stripe Connect account creation is vendor-idempotent",
+  ],
+  [
+    stripeConnectFunctions,
+    "conflicts with the account already bound to this vendor",
+    "Stripe Connect account binding fails closed on concurrent identity conflicts",
+  ],
+  [
     payoutSchedulerServer,
     "Stripe transfer succeeded but the payout could not be finalized locally.",
     "successful Stripe payout transfers require confirmed local persistence",
