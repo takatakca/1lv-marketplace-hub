@@ -1314,6 +1314,15 @@ if (
   );
 }
 
+if (
+  !checkoutFunctions.includes('"create_marketplace_order_locked"') ||
+  checkoutFunctions.includes('"create_marketplace_order" as never')
+) {
+  violations.push(
+    "checkout must use create_marketplace_order_locked so concurrent carts acquire deterministic product locks",
+  );
+}
+
 if (checkoutFunctions.includes("queueCustomerEvent")) {
   violations.push(
     "checkout must use order.created as the single TAKATAK customer synchronization entrypoint",
