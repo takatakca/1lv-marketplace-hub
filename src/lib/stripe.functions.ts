@@ -156,29 +156,59 @@ export const createPaymentIntent = createServerFn({ method: "POST" })
       };
     }
 
+    const amountCents = Math.round(Number(order.total) * 100);
+    const expectedCurrency = String(order.currency ?? "cad").toLowerCase();
+    if (!Number.isSafeInteger(amountCents) || amountCents < 50) {
+      throw new Error("Invalid payable order total.");
+    }
+
     if (order.stripe_payment_intent_id) {
       const existing = await stripeGet(
         `/payment_intents/${encodeURIComponent(order.stripe_payment_intent_id)}`,
       );
+      const existingMetadata =
+        existing.metadata &&
+        typeof existing.metadata === "object" &&
+        !Array.isArray(existing.metadata)
+          ? (existing.metadata as Record<string, unknown>)
+          : {};
+      const existingAmount = Number(existing.amount ?? NaN);
+      const existingCurrency = String(existing.currency ?? "").toLowerCase();
+      const existingOrderId =
+        typeof existingMetadata["order_id"] === "string"
+          ? existingMetadata["order_id"]
+          : "";
+      const existingStatus =
+        typeof existing.status === "string" ? existing.status : "";
+      const existingSecret =
+        typeof existing.client_secret === "string"
+          ? existing.client_secret
+          : null;
+
+      if (
+        !Number.isSafeInteger(existingAmount) ||
+        existingAmount !== amountCents ||
+        existingCurrency !== expectedCurrency ||
+        existingOrderId !== order.id ||
+        existingStatus === "canceled" ||
+        !existingSecret
+      ) {
+        throw new Error(
+          "Stored Stripe payment authorization does not match this order.",
+        );
+      }
+
       return {
-        clientSecret:
-          typeof existing.client_secret === "string"
-            ? existing.client_secret
-            : null,
+        clientSecret: existingSecret,
         pending: false,
       };
-    }
-
-    const amountCents = Math.round(Number(order.total) * 100);
-    if (!Number.isSafeInteger(amountCents) || amountCents < 50) {
-      throw new Error("Invalid payable order total.");
     }
 
     const intent = await stripePost(
       "/payment_intents",
       {
         amount: String(amountCents),
-        currency: (order.currency ?? "cad").toLowerCase(),
+        currency: expectedCurrency,
         "automatic_payment_methods[enabled]": "true",
         "metadata[order_id]": order.id,
         "metadata[order_number]": order.order_number,
@@ -196,13 +226,35 @@ export const createPaymentIntent = createServerFn({ method: "POST" })
       throw new Error("Stripe did not return a valid PaymentIntent.");
     }
 
-    const { error: persistError } = await supabaseAdmin
-      .from("orders")
-      .update({ stripe_payment_intent_id: intentId })
-      .eq("id", order.id);
+    const { data: persistedIntent, error: persistError } =
+      await supabaseAdmin
+        .from("orders")
+        .update({ stripe_payment_intent_id: intentId })
+        .eq("id", order.id)
+        .is("stripe_payment_intent_id", null)
+        .select("id, stripe_payment_intent_id")
+        .maybeSingle();
 
     if (persistError) {
       throw new Error("Could not persist payment authorization.");
+    }
+
+    if (!persistedIntent) {
+      const { data: currentOrder, error: currentOrderError } =
+        await supabaseAdmin
+          .from("orders")
+          .select("stripe_payment_intent_id")
+          .eq("id", order.id)
+          .maybeSingle();
+
+      if (
+        currentOrderError ||
+        currentOrder?.stripe_payment_intent_id !== intentId
+      ) {
+        throw new Error(
+          "Payment authorization was created but could not be bound safely to the order.",
+        );
+      }
     }
 
     return {
@@ -256,29 +308,90 @@ export const createVendorSubscriptionCheckout = createServerFn({
 
     const { data: vendor, error } = await context.supabase
       .from("vendors")
-      .select("id, user_id, stripe_customer_id, contact_email")
+      .select(
+        "id, user_id, stripe_customer_id, stripe_subscription_id, subscription_status, subscription_plan, contact_email",
+      )
       .eq("id", data.vendorId)
       .maybeSingle();
 
     if (error || !vendor) throw new Error("Vendor not found or access denied");
     if (vendor.user_id !== context.userId) throw new Error("Forbidden");
 
+    const subscriptionStatus = String(
+      vendor.subscription_status ?? "none",
+    ).toLowerCase();
+    const terminalSubscriptionStatuses = new Set([
+      "none",
+      "canceled",
+      "incomplete_expired",
+    ]);
+    if (
+      !terminalSubscriptionStatuses.has(subscriptionStatus) ||
+      (vendor.stripe_subscription_id &&
+        !["canceled", "incomplete_expired"].includes(subscriptionStatus))
+    ) {
+      return {
+        url: null,
+        pending: true,
+        reason:
+          "An existing Stripe subscription is already active or awaiting resolution. 1LV will not create a second subscription for this vendor.",
+      };
+    }
+
     let customerId = vendor.stripe_customer_id as string | null;
     if (!customerId) {
-      const customer = await stripePost("/customers", {
-        email: vendor.contact_email ?? "",
-        "metadata[vendor_id]": vendor.id,
-        "metadata[owner_id]": context.userId,
-      });
-      customerId = customer.id as string;
+      const customer = await stripePost(
+        "/customers",
+        {
+          email: vendor.contact_email ?? "",
+          "metadata[vendor_id]": vendor.id,
+          "metadata[owner_id]": context.userId,
+        },
+        `1lv_vendor_${vendor.id}_customer_v1`,
+      );
+      const createdCustomerId =
+        typeof customer.id === "string" && customer.id.startsWith("cus_")
+          ? customer.id
+          : null;
+      if (!createdCustomerId) {
+        throw new Error("Stripe did not return a valid customer id.");
+      }
 
       const { supabaseAdmin } = await import(
         "@/integrations/supabase/client.server"
       );
-      await supabaseAdmin
-        .from("vendors")
-        .update({ stripe_customer_id: customerId })
-        .eq("id", vendor.id);
+      const { data: persistedCustomer, error: customerPersistError } =
+        await supabaseAdmin
+          .from("vendors")
+          .update({ stripe_customer_id: createdCustomerId })
+          .eq("id", vendor.id)
+          .is("stripe_customer_id", null)
+          .select("stripe_customer_id")
+          .maybeSingle();
+
+      if (customerPersistError) {
+        throw new Error("Could not persist the Stripe customer.");
+      }
+
+      if (!persistedCustomer) {
+        const { data: currentVendor, error: currentVendorError } =
+          await supabaseAdmin
+            .from("vendors")
+            .select("stripe_customer_id")
+            .eq("id", vendor.id)
+            .maybeSingle();
+
+        if (
+          currentVendorError ||
+          currentVendor?.stripe_customer_id !== createdCustomerId
+        ) {
+          throw new Error(
+            "Stripe customer was created but could not be bound safely to this vendor.",
+          );
+        }
+      }
+
+      customerId = createdCustomerId;
     }
 
     const request = getRequest();
