@@ -105,6 +105,10 @@ const stripeFunctions = readFileSync(
   join(root, "src/lib/stripe.functions.ts"),
   "utf8",
 );
+const stripeWebhook = readFileSync(
+  join(root, "src/routes/api/public/webhooks.stripe.ts"),
+  "utf8",
+);
 const optionalAuth = readFileSync(
   join(root, "src/integrations/supabase/optional-auth.server.ts"),
   "utf8",
@@ -258,6 +262,16 @@ for (const [content, marker, label] of [
     "Stripe subscription URLs use the server-derived 1LV origin",
   ],
   [
+    stripeWebhook,
+    '"finalize_refund_accounting" as never',
+    "Stripe refunds reconcile through the atomic 1LV accounting RPC",
+  ],
+  [
+    stripeWebhook,
+    '"stripe_external_refund_detected"',
+    "external Stripe refunds are surfaced for manual reconciliation",
+  ],
+  [
     stripeConnectFunctions,
     "const origin = requestUrl.origin",
     "Stripe Connect account links use the server-derived 1LV origin",
@@ -347,6 +361,27 @@ if (stripeFunctions.includes("returnOrigin")) {
   violations.push(
     "Stripe subscription checkout must not accept a browser-supplied return origin.",
   );
+}
+
+{
+  const refundStart = stripeWebhook.indexOf('case "charge.refunded":');
+  const refundEnd = stripeWebhook.indexOf(
+    'case "checkout.session.completed":',
+    refundStart,
+  );
+  const refundBlock =
+    refundStart >= 0 && refundEnd > refundStart
+      ? stripeWebhook.slice(refundStart, refundEnd)
+      : "";
+
+  if (
+    !refundBlock.includes("finalize_refund_accounting") ||
+    refundBlock.includes('.update({ payment_status:')
+  ) {
+    violations.push(
+      "charge.refunded must not directly mutate order payment status; it must reconcile verified 1LV refund records through finalize_refund_accounting.",
+    );
+  }
 }
 
 if (
