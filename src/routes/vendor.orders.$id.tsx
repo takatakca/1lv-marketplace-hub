@@ -143,7 +143,9 @@ function Page() {
             <input value={carrier} onChange={(e) => setCarrier(e.target.value)} placeholder="Carrier" className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
             <button onClick={() => update("shipped", true)} className="w-full rounded-md bg-success px-3 py-2 text-sm font-semibold text-white">Mark shipped</button>
             <button onClick={() => update("delivered")} className="w-full rounded-md border border-border px-3 py-2 text-sm">Mark delivered</button>
-            <button onClick={() => update("cancelled")} className="w-full rounded-md border border-border px-3 py-2 text-sm text-destructive">Cancel</button>
+            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Order cancellation and refunds are handled through the admin dispute/refund workflow so a paid customer is never cancelled without financial reconciliation.
+            </p>
           </div>
         </div>
       </div>
