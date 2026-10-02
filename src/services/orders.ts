@@ -74,8 +74,8 @@ export type VendorOrderDetailRecord = VendorOrderRecord & {
 
 export async function listVendorOrders(vendorId: string) {
   const { data, error } = await supabase.rpc(
-    "list_vendor_orders_for_current_user" as never,
-    { _vendor_id: vendorId } as never,
+    "list_vendor_orders_for_current_user",
+    { _vendor_id: vendorId },
   );
   if (error) throw error;
 
@@ -85,8 +85,8 @@ export async function listVendorOrders(vendorId: string) {
 
 export async function getVendorOrder(vendorOrderId: string) {
   const { data, error } = await supabase.rpc(
-    "get_vendor_order_for_current_user" as never,
-    { _vendor_order_id: vendorOrderId } as never,
+    "get_vendor_order_for_current_user",
+    { _vendor_order_id: vendorOrderId },
   );
   if (error) throw error;
 
