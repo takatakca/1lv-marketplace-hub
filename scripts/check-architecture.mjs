@@ -129,6 +129,18 @@ const vendorOrderDetailRoute = readFileSync(
   join(root, "src/routes/vendor.orders.$id.tsx"),
   "utf8",
 );
+const inventoryMaintenanceRoute = readFileSync(
+  join(root, "src/routes/api/internal/inventory.cleanup.ts"),
+  "utf8",
+);
+const inventoryMaintenanceWorkflow = readFileSync(
+  join(root, ".github/workflows/inventory-maintenance.yml"),
+  "utf8",
+);
+const healthRoute = readFileSync(
+  join(root, "src/routes/api/public/health.ts"),
+  "utf8",
+);
 const productRoute = readFileSync(
   join(root, "src/routes/product.$slug.tsx"),
   "utf8",
@@ -980,6 +992,45 @@ if (
 ) {
   violations.push(
     "vendor paid-order visibility must not reintroduce mutually recursive RLS policy subqueries",
+  );
+}
+
+if (
+  !inventoryMaintenanceRoute.includes(
+    'process.env.INVENTORY_MAINTENANCE_CRON_SECRET',
+  ) ||
+  !inventoryMaintenanceRoute.includes("expected.length < 32") ||
+  !inventoryMaintenanceRoute.includes(
+    '"release_expired_inventory_reservations" as never',
+  ) ||
+  !inventoryMaintenanceRoute.includes(
+    'createFileRoute("/api/internal/inventory/cleanup")',
+  )
+) {
+  violations.push(
+    "expired checkout inventory cleanup must stay on the authenticated internal route with a dedicated secret",
+  );
+}
+
+if (
+  !inventoryMaintenanceWorkflow.includes('cron: "*/15 * * * *"') ||
+  !inventoryMaintenanceWorkflow.includes(
+    "INVENTORY_MAINTENANCE_CRON_SECRET",
+  ) ||
+  !inventoryMaintenanceWorkflow.includes(
+    "/api/internal/inventory/cleanup",
+  )
+) {
+  violations.push(
+    "expired checkout inventory must be released by the dedicated 15-minute production scheduler",
+  );
+}
+
+if (
+  !healthRoute.includes('"INVENTORY_MAINTENANCE_CRON_SECRET"')
+) {
+  violations.push(
+    "production health must fail closed when inventory maintenance is not configured",
   );
 }
 
