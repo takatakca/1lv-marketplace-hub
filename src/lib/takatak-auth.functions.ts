@@ -151,6 +151,34 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
       };
     }
 
+    if (intent === "login" && expectedUserId) {
+      const { data: consent, error: consentReadError } = await supabaseAdmin
+        .from("profile_consent_events")
+        .select("id")
+        .eq("profile_id", expectedUserId)
+        .eq("takatak_person_id", identity.id)
+        .eq("terms_accepted", true)
+        .eq("privacy_accepted", true)
+        .order("captured_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (consentReadError) {
+        return {
+          ok: false,
+          error: "Could not verify your 1LV account setup.",
+        };
+      }
+
+      if (!consent) {
+        return {
+          ok: false,
+          error:
+            "Your verified identity is linked to 1LV, but account setup is incomplete. Use Create an account to accept the current terms and finish setup.",
+        };
+      }
+    }
+
     let loginEmail: string;
 
     if (expectedUserId) {
