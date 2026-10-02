@@ -185,6 +185,10 @@ const marketplaceTimestampAuthorityMigration = readFileSync(
   join(root, "supabase/migrations/20261002111500_marketplace_creation_timestamp_authority.sql"),
   "utf8",
 );
+const firstOrderPromotionUniquenessMigration = readFileSync(
+  join(root, "supabase/migrations/20261002113000_first_order_promotion_uniqueness.sql"),
+  "utf8",
+);
 const marketplaceSettingsMigration = readFileSync(
   join(root, "supabase/migrations/20260930150630_persistent_marketplace_settings.sql"),
   "utf8",
@@ -481,7 +485,27 @@ for (const [content, marker, label] of [
   [
     marketplaceTimestampAuthorityMigration,
     "SELECT '20261002111500'",
-    "final production schema marker protects marketplace creation timestamps",
+    "marketplace timestamp authority migration retains its historical schema marker",
+  ],
+  [
+    firstOrderPromotionUniquenessMigration,
+    "SELECT '20261002113000'",
+    "final production schema marker includes first-order promotion uniqueness",
+  ],
+  [
+    firstOrderPromotionUniquenessMigration,
+    "promotion_redemptions_first_order_customer_uidx",
+    "first-order promotions are unique by authenticated customer identity",
+  ],
+  [
+    firstOrderPromotionUniquenessMigration,
+    "promotion_redemptions_first_order_email_uidx",
+    "first-order promotions are unique by normalized checkout email",
+  ],
+  [
+    firstOrderPromotionUniquenessMigration,
+    "promotion_redemptions_first_order_identity",
+    "first-order promotion identity keys are maintained by PostgreSQL",
   ],
   [
     marketplaceTimestampAuthorityMigration,
@@ -1875,15 +1899,15 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002111500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002113000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002111500"')
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002113000"')
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002111500",
+    "production health/migration gates must track schema 20261002113000",
   );
 }
 
