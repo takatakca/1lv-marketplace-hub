@@ -418,10 +418,14 @@ select set_config(
   true
 );
 
+set local session_replication_role = replica;
+
 select ok(
   public.revoke_current_takatak_session(),
   'an active TAKATAK session can revoke only its own grant'
 );
+
+set local session_replication_role = origin;
 
 select ok(
   not public.is_takatak_authorized_session(),
