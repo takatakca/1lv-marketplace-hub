@@ -91,7 +91,7 @@ The `vendors` table already has:
 - **Connected — charges disabled** — account exists, `charges_enabled = false`
 - **Payouts enabled** — both flags true
 
-Connect Express onboarding is implemented end to end: server-side Express account creation, hosted Account Links, capability/status refresh, and idempotent transfers. Live operation still requires the production Stripe account, Connect settings, webhook secret, and approved operational/regulatory setup.
+Connect Express onboarding is implemented end to end: server-side Express account creation, hosted Account Links, capability/status refresh, and idempotent transfers. Express account creation is itself vendor-idempotent, and 1LV refuses to overwrite a different Connect account already bound to the vendor. Live operation still requires the production Stripe account, Connect settings, webhook secret, and approved operational/regulatory setup.
 
 ## 8. Test cards
 
@@ -214,7 +214,7 @@ missing paid date, or net amount zero/negative. Labels only — nothing is mutat
 
 ### Refunds & disputes
 - Customers can open disputes only on their own paid vendor split; the disputed vendor amount is held immediately.
-- Admin-approved refunds are processed server-side through Stripe with a stable idempotency key and cannot exceed the remaining refundable order amount.
+- Admin-approved refunds are first reserved atomically in PostgreSQL under an order lock, then processed server-side through Stripe with a stable idempotency key. Concurrent approvals cannot collectively exceed the remaining refundable order or vendor-split amount.
 - Successful refund accounting updates `refund_records`, order/vendor-order refund totals, dispute state and payout adjustments atomically through the database finalization RPC.
 - If money was already paid out to a vendor, the accounting path records the compensating adjustment for a later payout instead of silently mutating a completed transfer.
 - Stripe `charge.refunded` webhooks also keep the order payment state synchronized and emit the TAKATAK `order.refunded` event asynchronously.
