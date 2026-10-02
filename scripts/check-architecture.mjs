@@ -505,6 +505,16 @@ for (const [content, marker, label] of [
   ],
   [
     stripeWebhook,
+    "retrieveStripeSubscription",
+    "subscription and invoice webhooks re-read current Stripe subscription state before local mutation",
+  ],
+  [
+    stripeWebhook,
+    '"stripe_invoice_subscription_binding_mismatch"',
+    "invoice webhook status updates verify the current vendor/customer subscription binding",
+  ],
+  [
+    stripeWebhook,
     '"stripe_invoice_missing_subscription"',
     "subscription invoice events without a subscription id fail closed",
   ],
