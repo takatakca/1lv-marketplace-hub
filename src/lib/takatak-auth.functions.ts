@@ -148,6 +148,15 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
     }
 
     const expectedUserId: string | null = linkedProfile?.id ?? null;
+
+    if (intent === "login" && !expectedUserId) {
+      return {
+        ok: false,
+        error:
+          "No 1LV account is linked to this verified identity. Create your 1LV account first.",
+      };
+    }
+
     let loginEmail: string;
 
     if (expectedUserId) {
