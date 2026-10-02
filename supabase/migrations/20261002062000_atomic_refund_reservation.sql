@@ -2,6 +2,17 @@
 -- This closes the race where concurrent approvals could both observe the same
 -- remaining refundable amount and collectively over-reserve an order.
 
+CREATE UNIQUE INDEX IF NOT EXISTS disputes_one_open_per_vendor_order
+ON public.disputes(vendor_order_id)
+WHERE vendor_order_id IS NOT NULL
+  AND status IN (
+    'open'::public.dispute_status,
+    'under_review'::public.dispute_status,
+    'waiting_customer'::public.dispute_status,
+    'waiting_vendor'::public.dispute_status
+  );
+
+
 CREATE OR REPLACE FUNCTION public.reserve_dispute_refund(
   _dispute_id uuid,
   _amount numeric,
