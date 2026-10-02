@@ -69,6 +69,10 @@ jobs:
         shell: bash
         run: npm run check:architecture
 
+      - name: Verify trusted public origin handling
+        shell: bash
+        run: npm run qa:request-origin
+
       # ------------------------------------------------------------
       # 5. Re-run repository lint before any production build
       # Protects production even if main is updated outside the normal PR path.
