@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(127);
+select plan(129);
 
 select is(
   public.get_1lv_schema_version(),
@@ -92,6 +92,29 @@ select ok(
       and coalesce(with_check, '') like '%user_id%'
   ),
   'vendor profile update policy preserves ownership in USING and WITH CHECK'
+);
+
+select ok(
+  not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'vendors'
+      and policyname = 'Authenticated can view active vendors'
+  ),
+  'authenticated customers cannot read private active-vendor rows directly'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'vendors'
+      and policyname = 'Vendors can view their own private record'
+      and coalesce(qual, '') like '%user_id%'
+  ),
+  'vendor owner retains access to its private vendor row'
 );
 
 select ok(
