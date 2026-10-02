@@ -93,9 +93,9 @@ function Signup() {
       return;
     }
 
-    const { error } = await supabase.auth.verifyOtp({
-      type: "magiclink",
-      token_hash: result.tokenHash,
+    const { error } = await supabase.auth.setSession({
+      access_token: result.accessToken,
+      refresh_token: result.refreshToken,
     });
     setLoading(false);
 
