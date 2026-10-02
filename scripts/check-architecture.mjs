@@ -384,6 +384,16 @@ for (const [content, marker, label] of [
   ],
   [
     stripeFunctions,
+    "findOpenVendorSubscriptionCheckout",
+    "vendor subscription checkout reuses or blocks an already-open Stripe Checkout",
+  ],
+  [
+    stripeFunctions,
+    "subscription_checkout_${checkoutDay}_v1",
+    "vendor subscription Checkout creation is idempotent within the active session window",
+  ],
+  [
+    stripeFunctions,
     "Stored Stripe payment authorization does not match this order.",
     "stored PaymentIntents are revalidated before reuse",
   ],
