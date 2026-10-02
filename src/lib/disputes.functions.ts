@@ -204,6 +204,7 @@ export const adminDisputeAction = createServerFn({ method: "POST" })
         | "release_hold"
         | "approve_refund"
         | "reject"
+        | "cancel"
         | "resolve_customer"
         | "resolve_vendor";
       status?: DisputeStatus;
@@ -241,10 +242,18 @@ export const adminDisputeAction = createServerFn({ method: "POST" })
     switch (data.action) {
       case "set_status": {
         if (!data.status) return { ok: false, reason: "Missing status" };
-        patch.status = data.status;
-        if (["resolved_customer", "resolved_vendor", "rejected", "cancelled"].includes(data.status)) {
-          patch.resolved_at = new Date().toISOString();
+        if (
+          ["resolved_customer", "resolved_vendor", "rejected", "cancelled"].includes(
+            data.status,
+          )
+        ) {
+          return {
+            ok: false,
+            reason:
+              "Use the explicit resolution action so payout holds and refund accounting stay consistent.",
+          };
         }
+        patch.status = data.status;
         break;
       }
       case "place_hold": {
@@ -258,9 +267,17 @@ export const adminDisputeAction = createServerFn({ method: "POST" })
         break;
       }
       case "reject":
+      case "cancel":
       case "resolve_vendor": {
-        if (dispute.vendor_order_id) await setVendorOrderHold(db, dispute.vendor_order_id, 0);
-        patch.status = data.action === "reject" ? "rejected" : "resolved_vendor";
+        if (dispute.vendor_order_id) {
+          await setVendorOrderHold(db, dispute.vendor_order_id, 0);
+        }
+        patch.status =
+          data.action === "reject"
+            ? "rejected"
+            : data.action === "cancel"
+              ? "cancelled"
+              : "resolved_vendor";
         patch.resolved_at = new Date().toISOString();
         break;
       }
