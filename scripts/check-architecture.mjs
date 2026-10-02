@@ -122,11 +122,19 @@ const vendorPaidVisibilityMigration = readFileSync(
   "utf8",
 );
 const vendorInventoryGateMigration = readFileSync(
-  join(root, "supabase/migrations/20261002074500_vendor_inventory_commit_gate.sql"),
+  join(root, "supabase/migrations/20261002081500_vendor_inventory_commit_gate.sql"),
   "utf8",
 );
 const vendorInventoryCommitMigration = readFileSync(
-  join(root, "supabase/migrations/20261002074500_vendor_inventory_commit_gate.sql"),
+  join(root, "supabase/migrations/20261002081500_vendor_inventory_commit_gate.sql"),
+  "utf8",
+);
+const checkoutProductLockMigration = readFileSync(
+  join(root, "supabase/migrations/20261002080000_checkout_product_lock_order.sql"),
+  "utf8",
+);
+const checkoutIdempotencyMigration = readFileSync(
+  join(root, "supabase/migrations/20261002081500_checkout_idempotency_payload.sql"),
   "utf8",
 );
 const ordersService = readFileSync(
@@ -379,9 +387,24 @@ for (const [content, marker, label] of [
     "session grant lookup can enforce a private registry without exposing it",
   ],
   [
-    vendorInventoryGateMigration,
-    "SELECT '20261002074500'",
-    "final production schema marker includes committed-inventory vendor gate",
+    checkoutIdempotencyMigration,
+    "SELECT '20261002081500'",
+    "final production schema marker includes checkout payload idempotency",
+  ],
+  [
+    checkoutProductLockMigration,
+    "ORDER BY 1",
+    "multi-product checkout locks are deterministic",
+  ],
+  [
+    checkoutIdempotencyMigration,
+    "checkout_request_hash",
+    "checkout idempotency key is bound to the normalized request payload",
+  ],
+  [
+    checkoutIdempotencyMigration,
+    "hashtextextended(v_idempotency_hash, 0)",
+    "checkout idempotency serialization occurs before product processing",
   ],
   [
     vendorInventoryGateMigration,
@@ -402,11 +425,6 @@ for (const [content, marker, label] of [
     vendorInventoryGateMigration,
     "public.vendor_can_view_paid_order_scope",
     "inventory-gated vendor visibility remains non-recursive through narrow helpers",
-  ],
-  [
-    vendorInventoryCommitMigration,
-    "SELECT '20261002074500'",
-    "final production schema marker includes committed-inventory vendor gate",
   ],
   [
     vendorInventoryCommitMigration,
@@ -1315,6 +1333,18 @@ if (
 }
 
 if (
+  !checkoutIdempotencyMigration.includes("Checkout idempotency key conflict") ||
+  !checkoutIdempotencyMigration.includes("checkout_request_hash") ||
+  !checkoutIdempotencyMigration.includes(
+    "hashtextextended(v_idempotency_hash, 0)",
+  )
+) {
+  violations.push(
+    "checkout idempotency must serialize by key and reject payload reuse conflicts",
+  );
+}
+
+if (
   !checkoutFunctions.includes('"create_marketplace_order_locked"') ||
   checkoutFunctions.includes('"create_marketplace_order" as never')
 ) {
@@ -1344,15 +1374,15 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002074500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002081500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002074500"')
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002081500"')
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002074500",
+    "production health/migration gates must track schema 20261002081500",
   );
 }
 
