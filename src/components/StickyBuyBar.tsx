@@ -4,7 +4,15 @@ import type { Product } from "@/lib/data";
 import { useCart } from "@/hooks/use-cart";
 import { toast } from "sonner";
 
-export function StickyBuyBar({ product }: { product: Product }) {
+export function StickyBuyBar({
+  product,
+  quantity = 1,
+  variant,
+}: {
+  product: Product;
+  quantity?: number;
+  variant?: Record<string, string>;
+}) {
   const { add } = useCart();
   const soldOut =
     product.trackInventory &&
@@ -23,7 +31,7 @@ export function StickyBuyBar({ product }: { product: Product }) {
           disabled={soldOut}
           onClick={() => {
             if (soldOut) return;
-            add(product, 1);
+            add(product, quantity, variant);
             toast.success("Added to cart");
           }}
           className="rounded-md border border-electric px-3 py-2.5 text-xs font-bold text-electric disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground"
@@ -41,7 +49,7 @@ export function StickyBuyBar({ product }: { product: Product }) {
         ) : (
           <Link
             to="/checkout"
-            onClick={() => add(product, 1)}
+            onClick={() => add(product, quantity, variant)}
             className="rounded-md bg-gradient-deal px-4 py-2.5 text-xs font-bold text-white"
           >
             Buy now
