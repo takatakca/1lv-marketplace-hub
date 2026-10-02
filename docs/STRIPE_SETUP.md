@@ -254,6 +254,7 @@ missing paid date, or net amount zero/negative. Labels only — nothing is mutat
 - `processApprovedRefund(refundId)` (admin only) creates the Stripe refund from the parent order's PaymentIntent/charge. Refunds are capped at the order's remaining refundable amount, and a record with a `stripe_refund_id` can never be processed twice.
 - Order payment status becomes `partially_refunded` or `refunded` once money actually moves.
 - Without `STRIPE_SECRET_KEY`, processing returns `setup-required` and the record stays safely `approved`.
+- A refund in `processing` can be rechecked and a `failed` refund can be retried from the admin UI. Retries reuse the same stable Stripe idempotency key; if Stripe already created the refund, 1LV retrieves/reconciles that same refund instead of creating a duplicate.
 
 **Negative adjustments after payout**
 - If the vendor_order was already paid out, refund approval writes a negative row into `payout_adjustments`, which the next generated payout subtracts automatically.
