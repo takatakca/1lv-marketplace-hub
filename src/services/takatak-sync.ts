@@ -9,7 +9,6 @@
 import {
   syncTakatakCustomer,
   syncTakatakMerchant,
-  syncTakatakOrderCreated,
   syncTakatakVendorOrderDelivered,
 } from "@/lib/takatak.functions";
 
@@ -28,10 +27,6 @@ export function signalMerchant(
   event: "merchant.application.created" | "merchant.updated" | "merchant.approved" | "merchant.suspended",
 ) {
   safe(syncTakatakMerchant({ data: { vendorId, event } }));
-}
-
-export function signalOrderCreated(orderId: string) {
-  safe(syncTakatakOrderCreated({ data: { orderId } }));
 }
 
 export function signalVendorOrderDelivered(vendorOrderId: string) {
