@@ -1,7 +1,7 @@
 /**
  * TAKATAK Master Platform HTTP client — SERVER ONLY.
  *
- * TAKATAK_MASTER_API_URL / TAKATAK_MASTER_API_KEY are read inside the
+ * TAKATAK_MASTER_API_URL / TAKATAK_1LV_API_KEY are read inside the
  * functions (never at module scope) and NEVER leave this module.
  * If configuration is missing, nothing throws: callers keep the event queued
  * and the admin console reports "setup required".
@@ -56,7 +56,7 @@ export function takatakConfig(): TakatakConfig {
   const url = normalizeTakatakMasterApiBaseUrl(
     process.env["TAKATAK_MASTER_API_URL"],
   );
-  const key = process.env["TAKATAK_MASTER_API_KEY"]?.trim();
+  const key = process.env["TAKATAK_1LV_API_KEY"]?.trim();
   if (!url || !key) return null;
   return { url, key };
 }
