@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(73);
+select plan(76);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002071500',
+  '20261002073000',
   'production schema marker is current'
 );
 
@@ -93,6 +93,45 @@ select ok(
   not has_table_privilege('authenticated','public.vendor_orders','UPDATE')
   and not has_table_privilege('authenticated','public.order_items','UPDATE'),
   'browser sessions cannot directly mutate vendor fulfillment tables'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'orders'
+      and policyname = 'Vendors view related orders'
+      and coalesce(qual, '') like '%payment_status%'
+      and coalesce(qual, '') like '%partially_refunded%'
+  ),
+  'vendor order-parent visibility requires confirmed payment'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'vendor_orders'
+      and policyname = 'Vendors view own vendor orders'
+      and coalesce(qual, '') like '%payment_status%'
+      and coalesce(qual, '') like '%partially_refunded%'
+  ),
+  'vendor split visibility requires confirmed payment'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'order_items'
+      and policyname = 'Vendors view own order items'
+      and coalesce(qual, '') like '%payment_status%'
+      and coalesce(qual, '') like '%partially_refunded%'
+  ),
+  'vendor line-item visibility requires confirmed payment'
 );
 
 select ok(
