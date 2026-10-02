@@ -175,6 +175,7 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
         .select("id")
         .eq("profile_id", expectedUserId)
         .eq("takatak_person_id", identity.id)
+        .eq("consent_revision", SIGNUP_CONSENT_REVISION)
         .eq("terms_accepted", true)
         .eq("privacy_accepted", true)
         .order("captured_at", { ascending: false })
