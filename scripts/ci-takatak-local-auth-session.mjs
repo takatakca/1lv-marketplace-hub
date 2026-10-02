@@ -1,0 +1,195 @@
+import assert from "node:assert/strict";
+import { createClient } from "@supabase/supabase-js";
+
+const url = process.env.SUPABASE_LOCAL_URL?.trim() ?? "";
+const anonKey = process.env.SUPABASE_LOCAL_ANON_KEY?.trim() ?? "";
+const serviceRoleKey =
+  process.env.SUPABASE_LOCAL_SERVICE_ROLE_KEY?.trim() ?? "";
+
+assert.ok(url.startsWith("http://127.0.0.1:") || url.startsWith("http://localhost:"), "Local Supabase URL required");
+assert.ok(anonKey.length > 20, "Local anon key required");
+assert.ok(serviceRoleKey.length > 20, "Local service-role key required");
+
+const admin = createClient(url, serviceRoleKey, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
+const publicClient = () =>
+  createClient(url, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+const masterId = "11111111-1111-4111-8111-111111111111";
+const localEmail = `takatak.${masterId}@auth.1lv.ca`;
+const directEmail = "direct-local-auth-bypass@example.invalid";
+const password = "CiOnly-1LV-Password-Guard!2026";
+
+function decodePayload(token) {
+  const part = token.split(".")[1];
+  assert.ok(part, "JWT payload is missing");
+  const normalized = part.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  return JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
+}
+
+function authMethods(payload) {
+  return new Set(
+    (Array.isArray(payload.amr) ? payload.amr : [])
+      .map((entry) => {
+        if (typeof entry === "string") return entry;
+        if (entry && typeof entry === "object" && typeof entry.method === "string") {
+          return entry.method;
+        }
+        return null;
+      })
+      .filter(Boolean),
+  );
+}
+
+async function profileVisible(accessToken, userId) {
+  const client = createClient(url, anonKey, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data, error } = await client
+    .from("profiles")
+    .select("id, display_name")
+    .eq("id", userId);
+
+  if (error) {
+    throw new Error(`Profile RLS query failed unexpectedly: ${error.message}`);
+  }
+  return Array.isArray(data) && data.some((row) => row.id === userId);
+}
+
+async function deleteByEmail(email) {
+  for (let page = 1; page <= 10; page += 1) {
+    const { data, error } = await admin.auth.admin.listUsers({
+      page,
+      perPage: 1000,
+    });
+    if (error) throw error;
+    const found = data.users.filter(
+      (user) => user.email?.trim().toLowerCase() === email.toLowerCase(),
+    );
+    for (const user of found) {
+      const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
+      if (deleteError) throw deleteError;
+    }
+    if (data.users.length < 1000) break;
+  }
+}
+
+await deleteByEmail(localEmail);
+await deleteByEmail(directEmail);
+
+let takatakUserId = null;
+try {
+  const { data: created, error: createError } =
+    await admin.auth.admin.createUser({
+      email: localEmail,
+      email_confirm: true,
+      app_metadata: {
+        auth_source: "takatak",
+        takatak_person_id: masterId,
+      },
+      user_metadata: {
+        display_name: "CI TAKATAK User",
+      },
+    });
+
+  assert.equal(createError, null, createError?.message);
+  assert.ok(created.user?.id, "TAKATAK local Auth user was not created");
+  takatakUserId = created.user.id;
+
+  const { data: link, error: linkError } =
+    await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email: localEmail,
+    });
+  assert.equal(linkError, null, linkError?.message);
+
+  const tokenHash = link.properties?.hashed_token?.trim() ?? "";
+  assert.ok(tokenHash, "Magic-link token hash was not generated");
+
+  const magicClient = publicClient();
+  const { data: verified, error: verifyError } =
+    await magicClient.auth.verifyOtp({
+      type: "magiclink",
+      token_hash: tokenHash,
+    });
+
+  assert.equal(verifyError, null, verifyError?.message);
+  assert.ok(verified.session?.access_token, "Magic-link session missing");
+  assert.equal(verified.user?.id, takatakUserId);
+
+  const magicPayload = decodePayload(verified.session.access_token);
+  const magicMethods = authMethods(magicPayload);
+  assert.equal(magicPayload.app_metadata?.auth_source, "takatak");
+  assert.equal(magicPayload.app_metadata?.takatak_person_id, masterId);
+  assert.equal(String(magicPayload.email ?? "").toLowerCase(), localEmail);
+  assert.ok(
+    magicMethods.has("magiclink") || magicMethods.has("otp"),
+    `Unexpected magic-link AMR: ${JSON.stringify([...magicMethods])}`,
+  );
+  assert.equal(
+    await profileVisible(verified.session.access_token, takatakUserId),
+    true,
+    "Verified TAKATAK magic-link session must pass restrictive RLS",
+  );
+
+  const { data: refreshed, error: refreshError } =
+    await magicClient.auth.refreshSession({
+      refresh_token: verified.session.refresh_token,
+    });
+  assert.equal(refreshError, null, refreshError?.message);
+  assert.ok(refreshed.session?.access_token, "Refreshed session missing");
+  assert.equal(
+    await profileVisible(refreshed.session.access_token, takatakUserId),
+    true,
+    "Refreshed TAKATAK session must remain authorized",
+  );
+
+  const { error: passwordSetError } =
+    await admin.auth.admin.updateUserById(takatakUserId, { password });
+  assert.equal(passwordSetError, null, passwordSetError?.message);
+
+  const passwordClient = publicClient();
+  const { data: passwordLogin, error: passwordLoginError } =
+    await passwordClient.auth.signInWithPassword({
+      email: localEmail,
+      password,
+    });
+  assert.equal(passwordLoginError, null, passwordLoginError?.message);
+  assert.ok(passwordLogin.session?.access_token, "Password session missing");
+
+  const passwordMethods = authMethods(
+    decodePayload(passwordLogin.session.access_token),
+  );
+  assert.ok(
+    passwordMethods.has("password"),
+    `Expected password AMR, got: ${JSON.stringify([...passwordMethods])}`,
+  );
+  assert.equal(
+    await profileVisible(passwordLogin.session.access_token, takatakUserId),
+    false,
+    "Direct local password session must be denied by restrictive RLS",
+  );
+
+  const directClient = publicClient();
+  const { data: directSignup, error: directSignupError } =
+    await directClient.auth.signUp({
+      email: directEmail,
+      password,
+    });
+  assert.ok(
+    directSignupError || !directSignup.user,
+    "Direct local Supabase signup must be rejected by the auth.users trigger",
+  );
+
+  console.log("TAKATAK local Auth / real JWT / RLS integration: PASS");
+} finally {
+  if (takatakUserId) {
+    await admin.auth.admin.deleteUser(takatakUserId);
+  }
+  await deleteByEmail(directEmail);
+}
