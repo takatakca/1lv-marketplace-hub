@@ -15,6 +15,34 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+
+const MASTER_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isTakatakLocalUser(user: User | null | undefined): user is User {
+  if (!user) return false;
+
+  const appMetadata = (user.app_metadata ?? {}) as Record<string, unknown>;
+  const masterId =
+    typeof appMetadata["takatak_person_id"] === "string"
+      ? appMetadata["takatak_person_id"]
+      : "";
+  const authSource =
+    typeof appMetadata["auth_source"] === "string"
+      ? appMetadata["auth_source"]
+      : "";
+  const email = user.email?.trim().toLowerCase() ?? "";
+  const expectedEmail = masterId
+    ? `takatak.${masterId.toLowerCase()}@auth.1lv.ca`
+    : "";
+
+  return (
+    authSource === "takatak" &&
+    MASTER_ID_PATTERN.test(masterId) &&
+    email === expectedEmail
+  );
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -22,6 +50,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+      if (s?.user && !isTakatakLocalUser(s.user)) {
+        setSession(null);
+        setRoles([]);
+        // Defer Auth calls outside the callback to avoid Supabase auth
+        // callback deadlocks. A stray local Supabase session is never trusted.
+        setTimeout(() => {
+          void supabase.auth.signOut();
+        }, 0);
+        return;
+      }
+
       setSession(s);
       if (s?.user) {
         // defer to avoid deadlocks
@@ -36,8 +75,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      if (data.session?.user) fetchRoles(data.session.user.id);
+      const current = data.session;
+      if (current?.user && !isTakatakLocalUser(current.user)) {
+        setSession(null);
+        setRoles([]);
+        void supabase.auth.signOut();
+      } else {
+        setSession(current);
+        if (current?.user) fetchRoles(current.user.id);
+      }
       setLoading(false);
     });
 
