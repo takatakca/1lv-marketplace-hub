@@ -88,14 +88,11 @@ async function notifyAdmins(
 }
 
 async function claimEvent(db: AdminDb, evt: StripeEvent): Promise<boolean> {
-  const { data, error } = await db.rpc(
-    "claim_stripe_event" as never,
-    {
-      _id: evt.id,
-      _type: evt.type,
-      _payload: evt,
-    } as never,
-  );
+  const { data, error } = await db.rpc("claim_stripe_event", {
+    _id: evt.id,
+    _type: evt.type,
+    _payload: evt,
+  });
   if (error) throw error;
   return data === true;
 }
@@ -378,13 +375,10 @@ async function handleEvent(evt: StripeEvent) {
         }
 
         const { data: accounting, error: accountingError } =
-          await supabaseAdmin.rpc(
-            "finalize_refund_accounting" as never,
-            {
-              _refund_id: refundRecord.id,
-              _stripe_refund_id: stripeRefundId,
-            } as never,
-          );
+          await supabaseAdmin.rpc("finalize_refund_accounting", {
+            _refund_id: refundRecord.id,
+            _stripe_refund_id: stripeRefundId,
+          });
 
         if (accountingError) throw accountingError;
         if (
