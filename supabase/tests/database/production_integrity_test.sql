@@ -6,7 +6,7 @@ select plan(79);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002073000',
+  '20261002074500',
   'production schema marker is current'
 );
 
@@ -173,8 +173,20 @@ select ok(
     in pg_get_functiondef(
       'public.vendor_can_view_paid_order_scope(uuid,uuid)'::regprocedure
     )
+  ) > 0
+  and position(
+    'inventory_committed_at IS NOT NULL'
+    in pg_get_functiondef(
+      'public.vendor_can_view_paid_order(uuid)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'inventory_released_at IS NULL'
+    in pg_get_functiondef(
+      'public.vendor_can_view_paid_order_scope(uuid,uuid)'::regprocedure
+    )
   ) > 0,
-  'visibility helpers bind auth.uid, TAKATAK session, and confirmed payment'
+  'visibility helpers bind identity, TAKATAK session, payment, and committed inventory'
 );
 
 select ok(
@@ -225,8 +237,14 @@ select ok(
     in pg_get_functiondef(
       'public.update_vendor_order_fulfillment(uuid,public.vendor_order_status,text,text)'::regprocedure
     )
+  ) > 0
+  and position(
+    'Vendor fulfillment requires committed inventory'
+    in pg_get_functiondef(
+      'public.update_vendor_order_fulfillment(uuid,public.vendor_order_status,text,text)'::regprocedure
+    )
   ) > 0,
-  'vendor fulfillment RPC requires an authorized TAKATAK session and paid parent order'
+  'vendor fulfillment RPC requires TAKATAK auth, payment, and committed inventory'
 );
 
 select ok(
