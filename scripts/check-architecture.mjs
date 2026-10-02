@@ -1229,14 +1229,19 @@ if (
   !payoutSchedulerServer.includes("clawbackSources") ||
   !payoutSchedulerServer.includes('"refund_clawback"') ||
   !payoutSchedulerServer.includes(
-    'source.status === "paid" && source.stripe_transfer_id',
+    'source.status === "paid" &&',
   ) ||
+  !payoutSchedulerServer.includes("source.stripe_transfer_id") ||
+  !payoutSchedulerServer.includes(
+    'source.reconciliation_status === "matched"',
+  ) ||
+  !payoutSchedulerServer.includes("!source.reconciliation_status") ||
   !payoutSchedulerServer.includes('source.status === "cancelled"') ||
   !payoutSchedulerServer.includes("unresolvedClawback") ||
   !payoutSchedulerServer.includes("eligibleAdjustmentRows")
 ) {
   violations.push(
-    "refund clawbacks must remain provisional until the source payout is reconciled paid or definitively cancelled without a transfer",
+    "refund clawbacks must remain provisional until the source payout is paid with a confirmed transfer and no negative Stripe reconciliation, or definitively cancelled without a transfer",
   );
 }
 
