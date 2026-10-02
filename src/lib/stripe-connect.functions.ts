@@ -42,6 +42,7 @@ async function stripeCall(
   path: string,
   method: "GET" | "POST",
   body?: Record<string, string>,
+  idempotencyKey?: string,
 ): Promise<Record<string, unknown>> {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) throw new Error("Stripe not configured");
@@ -50,6 +51,7 @@ async function stripeCall(
     headers: {
       Authorization: `Bearer ${key}`,
       ...(body ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
+      ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
     },
     ...(body ? { body: new URLSearchParams(body).toString() } : {}),
     signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
@@ -106,17 +108,72 @@ function deriveStatus(acct: Record<string, unknown>): ConnectResult {
 
 async function persist(vendorId: string, r: ConnectResult, accountId?: string) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  await supabaseAdmin
+  const statusPatch = {
+    charges_enabled: r.chargesEnabled,
+    payouts_enabled: r.payoutsEnabled,
+    stripe_details_submitted: r.detailsSubmitted,
+    stripe_connect_status: r.status,
+    stripe_connect_last_checked_at: new Date().toISOString(),
+  } as never;
+
+  if (!accountId) {
+    const { data: updated, error } = await supabaseAdmin
+      .from("vendors")
+      .update(statusPatch)
+      .eq("id", vendorId)
+      .select("id")
+      .maybeSingle();
+    if (error || !updated) {
+      throw new Error(
+        error?.message ?? "Could not persist Stripe Connect status.",
+      );
+    }
+    return;
+  }
+
+  const { data: bound, error: bindError } = await supabaseAdmin
     .from("vendors")
     .update({
-      ...(accountId ? { stripe_connect_account_id: accountId } : {}),
-      charges_enabled: r.chargesEnabled,
-      payouts_enabled: r.payoutsEnabled,
-      stripe_details_submitted: r.detailsSubmitted,
-      stripe_connect_status: r.status,
-      stripe_connect_last_checked_at: new Date().toISOString(),
+      ...statusPatch,
+      stripe_connect_account_id: accountId,
     } as never)
-    .eq("id", vendorId);
+    .eq("id", vendorId)
+    .is("stripe_connect_account_id", null)
+    .select("id, stripe_connect_account_id")
+    .maybeSingle();
+
+  if (bindError) throw new Error(bindError.message);
+  if (bound) return;
+
+  const { data: current, error: currentError } = await supabaseAdmin
+    .from("vendors")
+    .select("stripe_connect_account_id")
+    .eq("id", vendorId)
+    .maybeSingle();
+
+  if (
+    currentError ||
+    !current ||
+    current.stripe_connect_account_id !== accountId
+  ) {
+    throw new Error(
+      "Stripe Connect account was created but conflicts with the account already bound to this vendor.",
+    );
+  }
+
+  const { data: refreshed, error: refreshError } = await supabaseAdmin
+    .from("vendors")
+    .update(statusPatch)
+    .eq("id", vendorId)
+    .eq("stripe_connect_account_id", accountId)
+    .select("id")
+    .maybeSingle();
+
+  if (refreshError || !refreshed) {
+    throw new Error(
+      refreshError?.message ?? "Could not persist Stripe Connect status.",
+    );
+  }
 }
 
 /** Create (or reuse) a Stripe Express account for the caller's vendor. */
@@ -144,20 +201,32 @@ export const createStripeConnectAccount = createServerFn({ method: "POST" })
       return result;
     }
 
-    const acct = await stripeCall("/accounts", "POST", {
-      type: "express",
-      country: "CA",
-      default_currency: "cad",
-      email: vendor.contact_email ?? "",
-      "capabilities[card_payments][requested]": "true",
-      "capabilities[transfers][requested]": "true",
-      "business_profile[name]": vendor.store_name,
-      "metadata[vendor_id]": vendor.id,
-      "metadata[owner_id]": context.userId,
-      "metadata[store_name]": vendor.store_name,
-    });
+    const acct = await stripeCall(
+      "/accounts",
+      "POST",
+      {
+        type: "express",
+        country: "CA",
+        default_currency: "cad",
+        email: vendor.contact_email ?? "",
+        "capabilities[card_payments][requested]": "true",
+        "capabilities[transfers][requested]": "true",
+        "business_profile[name]": vendor.store_name,
+        "metadata[vendor_id]": vendor.id,
+        "metadata[owner_id]": context.userId,
+        "metadata[store_name]": vendor.store_name,
+      },
+      `1lv_vendor_${vendor.id}_connect_v1`,
+    );
+    const accountId =
+      typeof acct.id === "string" && acct.id.startsWith("acct_")
+        ? acct.id
+        : null;
+    if (!accountId) {
+      throw new Error("Stripe did not return a valid Connect account id.");
+    }
     const result = deriveStatus(acct);
-    await persist(vendor.id, result, acct.id as string);
+    await persist(vendor.id, result, accountId);
     return result;
   });
 
