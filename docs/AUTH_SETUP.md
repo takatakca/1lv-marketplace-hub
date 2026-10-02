@@ -21,7 +21,7 @@ Never:
 
 1. The browser submits a Canadian mobile number to a 1LV server function.
 2. The 1LV server calls the TAKATAK master API with the server-only
-   TAKATAK_MASTER_API_KEY.
+   TAKATAK_1LV_API_KEY.
 3. TAKATAK sends and verifies the SMS through its shared Supabase Phone Auth.
 4. TAKATAK returns only the verified master identity fields authorized for the
    1LV bridge.
@@ -72,7 +72,7 @@ also run this check automatically.
 1LV requires:
 
 - TAKATAK_MASTER_API_URL;
-- TAKATAK_MASTER_API_KEY;
+- TAKATAK_1LV_API_KEY;
 - TAKATAK_DRAIN_CRON_SECRET;
 - SUPABASE_URL;
 - SUPABASE_SERVICE_ROLE_KEY;
