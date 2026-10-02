@@ -455,6 +455,11 @@ for (const [content, marker, label] of [
     "review submission requires an active subscribed vendor",
   ],
   [
+    vendorProductAuthorityMigration,
+    "status = 'draft'::public.product_status",
+    "vendors may hard-delete only draft products; reviewed products remain auditable through archive",
+  ],
+  [
     expiredOrderTerminalMigration,
     "payment_status = 'failed'::public.payment_status",
     "released unpaid checkout becomes payment-failed",
