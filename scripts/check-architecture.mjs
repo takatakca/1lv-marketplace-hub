@@ -193,6 +193,10 @@ const firstOrderPartialRefundMigration = readFileSync(
   join(root, "supabase/migrations/20261002114500_first_order_partial_refund_guard.sql"),
   "utf8",
 );
+const checkoutContactNormalizationMigration = readFileSync(
+  join(root, "supabase/migrations/20261002120000_checkout_contact_normalization.sql"),
+  "utf8",
+);
 const marketplaceSettingsMigration = readFileSync(
   join(root, "supabase/migrations/20260930150630_persistent_marketplace_settings.sql"),
   "utf8",
@@ -499,7 +503,22 @@ for (const [content, marker, label] of [
   [
     firstOrderPartialRefundMigration,
     "SELECT '20261002114500'",
-    "final production schema marker includes partial-refund first-order guard",
+    "partial-refund first-order migration retains its historical schema marker",
+  ],
+  [
+    checkoutContactNormalizationMigration,
+    "SELECT '20261002120000'",
+    "final production schema marker includes checkout contact normalization",
+  ],
+  [
+    checkoutContactNormalizationMigration,
+    "normalize_canadian_checkout_address",
+    "checkout addresses are normalized and validated inside PostgreSQL",
+  ],
+  [
+    checkoutContactNormalizationMigration,
+    "@auth\\.1lv\\.ca$",
+    "database checkout rejects synthetic TAKATAK transport emails as customer receipts",
   ],
   [
     firstOrderPartialRefundMigration,
@@ -1904,6 +1923,17 @@ if (
 }
 
 if (
+  !checkoutFunctions.includes("normalizeCheckoutAddress") ||
+  !checkoutFunctions.includes("CANADIAN_POSTAL_CODE_RE") ||
+  !checkoutFunctions.includes('typeof data.email !== "string"') ||
+  !checkoutFunctions.includes('typeof item.quantity !== "number"')
+) {
+  violations.push(
+    "checkout server input must fail closed on malformed runtime types and normalize Canadian addresses",
+  );
+}
+
+if (
   checkoutFunctions.includes("user?.email?.trim() || data.email.trim()") ||
   !checkoutFunctions.includes('checkoutEmail.endsWith("@auth.1lv.ca")') ||
   !checkoutFunctions.includes(
@@ -1918,16 +1948,16 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002114500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002120000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002114500"') ||
-  !firstOrderPartialRefundMigration.includes("SELECT '20261002114500'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002120000"') ||
+  !checkoutContactNormalizationMigration.includes("SELECT '20261002120000'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002114500",
+    "production health/migration gates must track schema 20261002120000",
   );
 }
 
