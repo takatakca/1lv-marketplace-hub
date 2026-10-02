@@ -375,7 +375,7 @@ async function handleEvent(evt: StripeEvent) {
         const { data: order, error: orderError } = await supabaseAdmin
           .from("orders")
           .select(
-            "id, order_number, payment_status, status, stripe_payment_intent_id, inventory_committed_at, inventory_released_at",
+            "id, order_number, payment_status, status, stripe_payment_intent_id, inventory_reserved_until, inventory_committed_at, inventory_released_at",
           )
           .eq("id", orderId)
           .maybeSingle();
@@ -407,7 +407,14 @@ async function handleEvent(evt: StripeEvent) {
           break;
         }
 
-        if (!order.inventory_released_at) {
+        const reservationExpired =
+          Boolean(order.inventory_reserved_until) &&
+          new Date(order.inventory_reserved_until as string).getTime() <=
+            Date.now();
+        const checkoutClosed =
+          Boolean(order.inventory_released_at) || reservationExpired;
+
+        if (checkoutClosed && !order.inventory_released_at) {
           const { error: releaseError } = await supabaseAdmin.rpc(
             "release_order_inventory" as never,
             { _order_id: order.id } as never,
@@ -419,7 +426,7 @@ async function handleEvent(evt: StripeEvent) {
           .from("orders")
           .update({
             payment_status: "failed",
-            status: "cancelled",
+            ...(checkoutClosed ? { status: "cancelled" as const } : {}),
           })
           .eq("id", order.id)
           .eq("stripe_payment_intent_id", paymentIntentId)
