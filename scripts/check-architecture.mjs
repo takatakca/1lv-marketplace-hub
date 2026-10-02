@@ -1555,6 +1555,18 @@ if (
 }
 
 if (
+  !payoutSchedulerServer.includes('actualMetadata["payout_id"]') ||
+  !payoutSchedulerServer.includes('actualMetadata["vendor_id"]') ||
+  !payoutSchedulerServer.includes('transferMetadata["payout_id"] !== payout.id') ||
+  !payoutSchedulerServer.includes('transferMetadata["vendor_id"] !== payout.vendor_id') ||
+  !payoutSchedulerServer.includes('"metadata_mismatch"')
+) {
+  violations.push(
+    "Stripe payout transfer and reconciliation must bind the remote transfer metadata to the exact local payout and vendor",
+  );
+}
+
+if (
   authBridge.includes(".auth.signOut();") ||
   authProvider.includes(".auth.signOut();")
 ) {
