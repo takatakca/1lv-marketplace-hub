@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "check:architecture": "node scripts/check-architecture.mjs"
+    "check:architecture": "node scripts/check-architecture.mjs",\n    "qa:request-origin": "node scripts/request-origin-tests.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
