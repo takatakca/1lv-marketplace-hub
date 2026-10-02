@@ -63,6 +63,22 @@ async function profileVisible(accessToken, userId) {
   return Array.isArray(data) && data.some((row) => row.id === userId);
 }
 
+
+async function hasRole(accessToken, userId, role) {
+  const client = createClient(url, anonKey, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data, error } = await client.rpc("has_role", {
+    _user_id: userId,
+    _role: role,
+  });
+  if (error) {
+    throw new Error(`has_role RPC failed unexpectedly: ${error.message}`);
+  }
+  return data === true;
+}
+
 async function deleteByEmail(email) {
   for (let page = 1; page <= 10; page += 1) {
     const { data, error } = await admin.auth.admin.listUsers({
@@ -140,6 +156,11 @@ try {
     true,
     "Verified TAKATAK magic-link session must pass restrictive RLS",
   );
+  assert.equal(
+    await hasRole(verified.session.access_token, takatakUserId, "customer"),
+    true,
+    "Verified TAKATAK session must be allowed to use private role helper",
+  );
 
   const { data: refreshed, error: refreshError } =
     await magicClient.auth.refreshSession({
@@ -177,6 +198,11 @@ try {
     await profileVisible(passwordLogin.session.access_token, takatakUserId),
     false,
     "Direct local password session must be denied by restrictive RLS",
+  );
+  assert.equal(
+    await hasRole(passwordLogin.session.access_token, takatakUserId, "customer"),
+    false,
+    "Direct password session must also be denied by SECURITY DEFINER helpers",
   );
 
   const directClient = publicClient();
