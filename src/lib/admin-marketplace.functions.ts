@@ -229,25 +229,36 @@ export const getAdminSubscriptions = createServerFn({ method: "POST" })
   });
 
 
-export type BackfillVendorOrdersResult = {
-  created: number;
-  skipped: number;
+export type MissingVendorOrderAuditResult = {
+  missingOrders: number;
+  missingSplits: number;
+  inspectedOrders: number;
+  reason?: string;
 };
 
-export const backfillVendorOrdersServer = createServerFn({ method: "POST" })
+/**
+ * Audit legacy orders that predate server-authoritative vendor split creation.
+ *
+ * IMPORTANT: this function intentionally never writes vendor_orders. Historical
+ * order_items do not contain an immutable commission-rate snapshot, so using a
+ * vendor's current commission rate would fabricate financial history and could
+ * create an incorrect payout obligation.
+ */
+export const auditMissingVendorOrdersServer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }): Promise<BackfillVendorOrdersResult> => {
+  .handler(async ({ context }): Promise<MissingVendorOrderAuditResult> => {
     const db = await adminDb(context);
     const pageSize = 250;
     let offset = 0;
-    let created = 0;
-    let skipped = 0;
+    let inspectedOrders = 0;
+    let missingOrders = 0;
+    let missingSplits = 0;
 
     while (true) {
       const { data, error } = await db
         .from("orders")
         .select(
-          "id, order_items(vendor_id, quantity, unit_price), vendor_orders(id, vendor_id)",
+          "id, order_items(vendor_id), vendor_orders(id, vendor_id)",
         )
         .order("created_at", { ascending: true })
         .range(offset, offset + pageSize - 1);
@@ -256,107 +267,45 @@ export const backfillVendorOrdersServer = createServerFn({ method: "POST" })
 
       const orders = (data ?? []) as unknown as Array<{
         id: string;
-        order_items: Array<{
-          vendor_id: string;
-          quantity: number;
-          unit_price: number;
-        }>;
-        vendor_orders: Array<{
-          id: string;
-          vendor_id: string;
-        }>;
+        order_items: Array<{ vendor_id: string }>;
+        vendor_orders: Array<{ id: string; vendor_id: string }>;
       }>;
 
       if (orders.length === 0) break;
-
-      const candidates: Array<{
-        orderId: string;
-        vendorId: string;
-        subtotal: number;
-      }> = [];
-      const vendorIds = new Set<string>();
+      inspectedOrders += orders.length;
 
       for (const order of orders) {
-        const items = order.order_items ?? [];
-        if (items.length === 0) {
-          skipped++;
-          continue;
-        }
-
-        const existing = new Set(
+        const expectedVendorIds = new Set(
+          (order.order_items ?? [])
+            .map((item) => item.vendor_id)
+            .filter(Boolean),
+        );
+        const existingVendorIds = new Set(
           (order.vendor_orders ?? []).map((split) => split.vendor_id),
         );
-        const byVendor = new Map<string, number>();
-
-        for (const item of items) {
-          const line = Number(item.unit_price ?? 0) * Number(item.quantity ?? 0);
-          byVendor.set(
-            item.vendor_id,
-            (byVendor.get(item.vendor_id) ?? 0) + line,
-          );
-        }
 
         let missingForOrder = 0;
-        for (const [vendorId, subtotal] of byVendor) {
-          if (existing.has(vendorId)) continue;
-          candidates.push({ orderId: order.id, vendorId, subtotal });
-          vendorIds.add(vendorId);
-          missingForOrder++;
+        for (const vendorId of expectedVendorIds) {
+          if (!existingVendorIds.has(vendorId)) missingForOrder++;
         }
 
-        if (missingForOrder === 0) skipped++;
-      }
-
-      const rateByVendor = new Map<string, number>();
-      const vendorList = [...vendorIds];
-      for (let i = 0; i < vendorList.length; i += 100) {
-        const batch = vendorList.slice(i, i + 100);
-        const { data: vendors, error: vendorError } = await db
-          .from("vendors")
-          .select("id, commission_rate")
-          .in("id", batch);
-        if (vendorError) throw vendorError;
-
-        for (const vendor of vendors ?? []) {
-          rateByVendor.set(
-            vendor.id,
-            Number(vendor.commission_rate ?? 0.1),
-          );
+        if (missingForOrder > 0) {
+          missingOrders++;
+          missingSplits += missingForOrder;
         }
-      }
-
-      const rows = candidates.map((candidate) => {
-        const subtotal = Math.round(candidate.subtotal * 100) / 100;
-        const rate = rateByVendor.get(candidate.vendorId) ?? 0.1;
-        const commission = Math.round(subtotal * rate * 100) / 100;
-        return {
-          order_id: candidate.orderId,
-          vendor_id: candidate.vendorId,
-          subtotal,
-          commission_amount: commission,
-          vendor_payout_amount:
-            Math.round((subtotal - commission) * 100) / 100,
-          status: "pending" as const,
-        };
-      });
-
-      for (let i = 0; i < rows.length; i += 100) {
-        const batch = rows.slice(i, i + 100);
-        const { data: inserted, error: insertError } = await db
-          .from("vendor_orders" as never)
-          .upsert(batch as never, {
-            onConflict: "order_id,vendor_id",
-            ignoreDuplicates: true,
-          })
-          .select("id");
-
-        if (insertError) throw insertError;
-        created += (inserted ?? []).length;
       }
 
       if (orders.length < pageSize) break;
       offset += pageSize;
     }
 
-    return { created, skipped };
+    return {
+      missingOrders,
+      missingSplits,
+      inspectedOrders,
+      reason:
+        missingSplits > 0
+          ? "Historical vendor splits require manual reconciliation because the original commission snapshot is unavailable."
+          : undefined,
+    };
   });
