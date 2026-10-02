@@ -519,7 +519,12 @@ export async function retryFailedOutbox(): Promise<number> {
   const client = await db();
   const { data } = await client
     .from("takatak_outbox")
-    .update({ status: "pending", next_attempt_at: new Date().toISOString() })
+    .update({
+      status: "pending",
+      attempt_count: 0,
+      last_error: null,
+      next_attempt_at: new Date().toISOString(),
+    })
     .eq("status", "failed")
     .select("id");
   return (data ?? []).length;
