@@ -215,6 +215,7 @@ missing paid date, or net amount zero/negative. Labels only — nothing is mutat
 ### Refunds & disputes
 - Customers can open disputes only on their own paid vendor split; the disputed vendor amount is held immediately.
 - Admin-approved refunds are first reserved atomically in PostgreSQL under an order lock, then processed server-side through Stripe with a stable idempotency key. Concurrent approvals cannot collectively exceed the remaining refundable order or vendor-split amount.
+- 1LV revalidates the Stripe refund id, amount, currency and metadata before accounting. Only Stripe status `succeeded` finalizes the refund locally; `pending` / `requires_action` remain processing, while `failed` / `canceled` are surfaced to admins without marking money as returned.
 - Successful refund accounting updates `refund_records`, order/vendor-order refund totals, dispute state and payout adjustments atomically through the database finalization RPC.
 - If money was already paid out to a vendor, the accounting path records the compensating adjustment for a later payout instead of silently mutating a completed transfer.
 - Stripe `charge.refunded` webhooks also keep the order payment state synchronized and emit the TAKATAK `order.refunded` event asynchronously.
