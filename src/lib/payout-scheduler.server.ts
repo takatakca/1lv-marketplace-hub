@@ -352,6 +352,7 @@ export async function generatePayoutsCore(
       id: string;
       status: string;
       stripe_transfer_id: string | null;
+      reconciliation_status: string | null;
     };
 
     const clawbackSources = new Map<string, ClawbackSource>();
@@ -370,7 +371,7 @@ export async function generatePayoutsCore(
     for (const ids of batches(clawbackPayoutIds)) {
       const { data, error } = await db
         .from("payouts")
-        .select("id, status, stripe_transfer_id")
+        .select("id, status, stripe_transfer_id, reconciliation_status")
         .in("id", ids);
       if (error) throw new Error(error.message);
 
@@ -394,7 +395,12 @@ export async function generatePayoutsCore(
         return false;
       }
 
-      if (source.status === "paid" && source.stripe_transfer_id) {
+      if (
+        source.status === "paid" &&
+        source.stripe_transfer_id &&
+        (!source.reconciliation_status ||
+          source.reconciliation_status === "matched")
+      ) {
         return true;
       }
 
