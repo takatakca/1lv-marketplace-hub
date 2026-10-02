@@ -622,6 +622,21 @@ for (const [content, marker, label] of [
   ],
   [
     stripeFunctions,
+    "payment_after_${order.stripe_payment_intent_id}_v1",
+    "canceled PaymentIntents are replaced with a stable idempotency key",
+  ],
+  [
+    stripeFunctions,
+    '"stripe_payment_intent_id",\n            order.stripe_payment_intent_id',
+    "replacement PaymentIntent binding compares the previously stored authorization",
+  ],
+  [
+    stripeFunctions,
+    '.in("payment_status", ["unpaid", "failed"])',
+    "replacement PaymentIntent binding cannot overwrite a terminal paid state",
+  ],
+  [
+    stripeFunctions,
     "Payment authorization was created but could not be bound safely to the order.",
     "new PaymentIntent persistence is verified before returning success",
   ],
