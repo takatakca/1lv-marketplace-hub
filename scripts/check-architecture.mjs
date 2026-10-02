@@ -92,6 +92,11 @@ for (const [content, marker, label] of [
     "1LV integration status validates the TAKATAK API URL",
   ],
   [
+    masterOutbox,
+    '.eq("status", "pending")',
+    "automatic outbox retries stop after MAX_ATTEMPTS",
+  ],
+  [
     masterClient,
     "key.length < 32",
     "minimum 32-character 1LV credential",
@@ -173,6 +178,12 @@ for (const [content, marker, label] of [
   if (!content.includes(marker)) {
     violations.push("Missing architecture guard: " + label);
   }
+}
+
+if (masterOutbox.includes('.in("status", ["pending", "failed"])')) {
+  violations.push(
+    "failed TAKATAK events must require explicit retry; automatic drain may process only pending events.",
+  );
 }
 
 if (
