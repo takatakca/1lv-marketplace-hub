@@ -2,12 +2,66 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(139);
+select plan(143);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002111500',
+  '20261002113000',
   'production schema marker is current'
+);
+
+select ok(
+  to_regprocedure('public.enforce_first_order_promotion_identity()') is not null
+  and exists (
+    select 1
+    from pg_trigger
+    where tgname = 'promotion_redemptions_first_order_identity'
+      and tgrelid = 'public.promotion_redemptions'::regclass
+      and not tgisinternal
+  ),
+  'first-order promotion identity trigger is installed'
+);
+
+select ok(
+  to_regclass('public.promotion_redemptions_first_order_customer_uidx') is not null
+  and to_regclass('public.promotion_redemptions_first_order_email_uidx') is not null,
+  'first-order promotion usage is unique by customer and normalized email'
+);
+
+select ok(
+  position(
+    'NEW.status IN (''reserved'', ''redeemed'')'
+    in pg_get_functiondef(
+      'public.enforce_first_order_promotion_identity()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'first_order_customer_key := NULL'
+    in pg_get_functiondef(
+      'public.enforce_first_order_promotion_identity()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'first_order_email_key := NULL'
+    in pg_get_functiondef(
+      'public.enforce_first_order_promotion_identity()'::regprocedure
+    )
+  ) > 0,
+  'first-order uniqueness applies only while redemption is reserved/redeemed and releases on terminal restoration'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.enforce_first_order_promotion_identity()',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.enforce_first_order_promotion_identity()',
+    'EXECUTE'
+  ),
+  'browser roles cannot invoke first-order promotion trigger function directly'
 );
 
 select ok(
