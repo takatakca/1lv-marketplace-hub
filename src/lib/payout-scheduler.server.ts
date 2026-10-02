@@ -94,8 +94,12 @@ export async function acquireLock(db: Db, name: string, owner: string, minutes =
   return Array.isArray(data) && data.length > 0;
 }
 
-export async function releaseLock(db: Db, name: string) {
-  await db.from("scheduler_locks").delete().eq("lock_name", name);
+export async function releaseLock(db: Db, name: string, owner: string) {
+  await db
+    .from("scheduler_locks")
+    .delete()
+    .eq("lock_name", name)
+    .eq("locked_by", owner);
 }
 
 // ---------------- period ----------------
