@@ -97,6 +97,16 @@ for (const [content, marker, label] of [
     "automatic outbox retries stop after MAX_ATTEMPTS",
   ],
   [
+    masterOutbox,
+    "attempt_count: 0",
+    "manual outbox retry resets retry budget",
+  ],
+  [
+    masterOutbox,
+    "last_error: null",
+    "manual outbox retry clears stale error",
+  ],
+  [
     masterClient,
     "key.length < 32",
     "minimum 32-character 1LV credential",
