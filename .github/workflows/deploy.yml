@@ -207,6 +207,7 @@ jobs:
           TAKATAK_1LV_API_KEY: ${{ github.sha }}
           TAKATAK_DRAIN_CRON_SECRET: "ci-takatak-drain-secret-000000000000000000"
           HEALTH_SKIP_DATABASE_CHECK: "1"
+          RELEASE_REVISION: ${{ github.sha }}
         run: |
           set -euo pipefail
 
@@ -221,7 +222,8 @@ jobs:
                 if (
                   payload.ok !== true ||
                   payload.runtime !== "tanstack-start" ||
-                  payload.database !== "skipped"
+                  payload.database !== "skipped" ||
+                  payload.revision !== process.env.GITHUB_SHA
                 ) process.exit(1);
               ' "$HEALTH"
 
@@ -640,7 +642,8 @@ jobs:
                 if (
                   payload.ok !== true ||
                   payload.runtime !== "tanstack-start" ||
-                  payload.database !== "ready"
+                  payload.database !== "ready" ||
+                  payload.revision !== process.env.GITHUB_SHA
                 ) process.exit(1);
               ' "$HEALTH"
               then
