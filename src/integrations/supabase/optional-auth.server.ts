@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { getRequest } from "@tanstack/react-start/server";
 import type { Database } from "./types";
+import { requireTakatakSessionClaims } from "./auth-middleware";
 
 export type OptionalSupabaseUser = {
   id: string;
@@ -34,15 +35,17 @@ export async function getOptionalSupabaseUser(): Promise<OptionalSupabaseUser | 
     },
   });
 
-  const { data, error } = await client.auth.getUser(token);
-  if (error || !data.user) {
+  const { data, error } = await client.auth.getClaims(token);
+  if (error || !data?.claims) {
     throw new Response("Unauthorized", { status: 401 });
   }
 
-  return {
-    id: data.user.id,
-    email: data.user.email ?? null,
-  };
+  const claims = data.claims as Record<string, unknown>;
+  const id = requireTakatakSessionClaims(claims);
+  const email =
+    typeof claims["email"] === "string" ? claims["email"] : null;
+
+  return { id, email };
 }
 
 export async function getOptionalSupabaseUserId(): Promise<string | null> {
