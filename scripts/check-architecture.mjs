@@ -77,6 +77,11 @@ for (const [content, marker, label] of [
   ],
   [
     masterClient,
+    "key.length < 32",
+    "minimum 32-character 1LV credential",
+  ],
+  [
+    masterClient,
     'json["authority"] !== "takatak_supabase_phone"',
     "TAKATAK OTP authority assertion",
   ],
