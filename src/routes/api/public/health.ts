@@ -3,6 +3,29 @@ import { createFileRoute } from "@tanstack/react-router";
 import { takatakConfigured } from "@/lib/takatak/client.server";
 
 const EXPECTED_SCHEMA_VERSION = "20261002120000";
+const EXPECTED_SUPABASE_PROJECT_REF = "odoybkshqszucvoxzjyz";
+const EXPECTED_SUPABASE_HOST =
+  `${EXPECTED_SUPABASE_PROJECT_REF}.supabase.co`;
+
+function supabaseTargetConfigured() {
+  const raw = process.env.SUPABASE_URL?.trim();
+  if (!raw) return false;
+
+  try {
+    const url = new URL(raw);
+    return (
+      url.protocol === "https:" &&
+      url.hostname === EXPECTED_SUPABASE_HOST &&
+      !url.username &&
+      !url.password &&
+      (url.pathname === "/" || url.pathname === "") &&
+      !url.search &&
+      !url.hash
+    );
+  } catch {
+    return false;
+  }
+}
 
 const REQUIRED_RUNTIME_ENV = [
   "SUPABASE_URL",
@@ -72,6 +95,7 @@ export const Route = createFileRoute("/api/public/health")({
           (name) => !process.env[name]?.trim(),
         );
         const masterIntegrationReady = takatakConfigured();
+        const supabaseTargetReady = supabaseTargetConfigured();
 
         if (missing.length > 0) {
           console.error(
@@ -86,8 +110,16 @@ export const Route = createFileRoute("/api/public/health")({
           );
         }
 
+        if (missing.length === 0 && !supabaseTargetReady) {
+          console.error(
+            "[1lv.ca] SUPABASE_URL does not target the fixed 1LV production project.",
+          );
+        }
+
         const configurationReady =
-          missing.length === 0 && masterIntegrationReady;
+          missing.length === 0 &&
+          masterIntegrationReady &&
+          supabaseTargetReady;
 
         const database = configurationReady
           ? await checkDatabaseSchema()
