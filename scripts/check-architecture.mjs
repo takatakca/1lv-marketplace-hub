@@ -89,6 +89,10 @@ const sessionGrantMigration = readFileSync(
   join(root, "supabase/migrations/20261002050000_takatak_authorized_sessions.sql"),
   "utf8",
 );
+const stripeAccountingMigration = readFileSync(
+  join(root, "supabase/migrations/20261002054500_stripe_webhook_accounting.sql"),
+  "utf8",
+);
 const loginRoute = readFileSync(
   join(root, "src/routes/login.tsx"),
   "utf8",
