@@ -26,8 +26,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (s?.user) {
         // defer to avoid deadlocks
         setTimeout(() => fetchRoles(s.user.id), 0);
-        // Non-blocking master-CRM signal. Covers email, Google and phone OTP
-        // sign-ups; the queue de-duplicates so repeat sign-ins are harmless.
+        // The browser session is local to 1LV and is issued only after
+        // GROUPE TAKATAK verifies the master identity. This non-blocking event
+        // updates TAKATAK's authorized 1LV projection; it is not authentication.
         setTimeout(() => signalCustomer("customer.created"), 0);
       } else {
         setRoles([]);
