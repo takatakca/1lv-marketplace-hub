@@ -11,11 +11,54 @@ import type { TakatakEventType } from "./types";
 
 export type TakatakConfig = { url: string; key: string } | null;
 
+export function normalizeTakatakMasterApiBaseUrl(
+  value: string | undefined,
+): string | null {
+  const raw = value?.trim();
+  if (!raw) return null;
+
+  try {
+    const parsed = new URL(raw);
+    const loopback =
+      parsed.hostname === "localhost" ||
+      parsed.hostname === "127.0.0.1" ||
+      parsed.hostname === "::1";
+
+    if (parsed.protocol !== "https:" && !loopback) {
+      return null;
+    }
+
+    if (parsed.username || parsed.password) {
+      return null;
+    }
+
+    let pathname = parsed.pathname.replace(/\/+$/, "");
+
+    if (pathname.endsWith("/api/v1")) {
+      pathname = pathname.slice(0, -"/v1".length);
+    } else if (pathname === "" || pathname === "/") {
+      pathname = "/api";
+    } else if (!pathname.endsWith("/api")) {
+      pathname = `${pathname}/api`;
+    }
+
+    parsed.pathname = pathname;
+    parsed.search = "";
+    parsed.hash = "";
+
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
 export function takatakConfig(): TakatakConfig {
-  const url = process.env["TAKATAK_MASTER_API_URL"];
-  const key = process.env["TAKATAK_MASTER_API_KEY"];
+  const url = normalizeTakatakMasterApiBaseUrl(
+    process.env["TAKATAK_MASTER_API_URL"],
+  );
+  const key = process.env["TAKATAK_MASTER_API_KEY"]?.trim();
   if (!url || !key) return null;
-  return { url: url.replace(/\/$/, ""), key };
+  return { url, key };
 }
 
 export function takatakConfigured(): boolean {
