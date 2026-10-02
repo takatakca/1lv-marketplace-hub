@@ -393,8 +393,8 @@ for (const [content, marker, label] of [
   ],
   [
     stripeFunctions,
-    "subscription_checkout_${checkoutDay}_v1",
-    "vendor subscription Checkout creation is idempotent within the active session window",
+    "subscription_checkout_${checkoutWindow}_v1",
+    "vendor subscription Checkout creation is idempotent within a short retry window",
   ],
   [
     stripeFunctions,
