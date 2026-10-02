@@ -298,6 +298,11 @@ for (const [content, marker, label] of [
   ],
   [
     refundReservationMigration,
+    "disputes_one_open_per_vendor_order",
+    "database prevents concurrent duplicate open disputes",
+  ],
+  [
+    refundReservationMigration,
     "FOR UPDATE",
     "refund reservation serializes financial approval against the order",
   ],
