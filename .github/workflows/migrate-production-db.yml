@@ -1,6 +1,14 @@
 name: Migrate 1LV Production Database
 
 on:
+  push:
+    branches:
+      - upgrade/persistent-commerce-settings
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/tests/**"
+      - ".github/workflows/migrate-production-db.yml"
+
   workflow_dispatch:
     inputs:
       confirm_project_ref:
@@ -31,6 +39,8 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_TELEMETRY_DISABLED: "1"
+      CONFIRM_PROJECT_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_project_ref || 'odoybkshqszucvoxzjyz' }}
+      APPLY_REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.apply && 'true' || 'false' }}
 
     steps:
       - name: Verify explicit production target
@@ -38,7 +48,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "${{ inputs.confirm_project_ref }}" != "$EXPECTED_PROJECT_REF" ]; then
+          if [ "$CONFIRM_PROJECT_REF" != "$EXPECTED_PROJECT_REF" ]; then
             echo "ERROR: confirmation does not match the fixed 1LV production project."
             exit 1
           fi
@@ -55,7 +65,7 @@ jobs:
 
           echo "Confirmed exact 1LV production project: $EXPECTED_PROJECT_REF"
           echo "Expected 1LV schema version: $EXPECTED_SCHEMA_VERSION"
-          echo "Apply requested: ${{ inputs.apply }}"
+          echo "Apply requested: $APPLY_REQUESTED"
 
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -107,14 +117,14 @@ jobs:
           supabase db push --linked --dry-run
 
       - name: Apply pending production migrations
-        if: ${{ inputs.apply }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply }}
         shell: bash
         run: |
           set -euo pipefail
           supabase db push --linked
 
       - name: Verify production migration history
-        if: ${{ inputs.apply }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply }}
         shell: bash
         run: |
           set -euo pipefail
