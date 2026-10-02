@@ -338,6 +338,46 @@ for (const [content, marker, label] of [
     "Stripe subscription URLs use the canonical trusted 1LV origin",
   ],
   [
+    stripeFunctions,
+    "Stored Stripe payment authorization does not match this order.",
+    "stored PaymentIntents are revalidated before reuse",
+  ],
+  [
+    stripeFunctions,
+    "Payment authorization was created but could not be bound safely to the order.",
+    "new PaymentIntent persistence is verified before returning success",
+  ],
+  [
+    stripeFunctions,
+    "terminalSubscriptionStatuses",
+    "subscription checkout blocks duplicate non-terminal subscriptions",
+  ],
+  [
+    stripeFunctions,
+    `1lv_vendor_\${vendor.id}_customer_v1`,
+    "Stripe Customer creation is vendor-idempotent",
+  ],
+  [
+    stripeFunctions,
+    "AbortSignal.timeout(STRIPE_TIMEOUT_MS)",
+    "Stripe Billing requests have a bounded network timeout",
+  ],
+  [
+    stripeConnectFunctions,
+    "AbortSignal.timeout(STRIPE_TIMEOUT_MS)",
+    "Stripe Connect requests have a bounded network timeout",
+  ],
+  [
+    payoutSchedulerServer,
+    "Stripe transfer succeeded but the payout could not be finalized locally.",
+    "successful Stripe payout transfers require confirmed local persistence",
+  ],
+  [
+    payoutSchedulerServer,
+    "AbortSignal.timeout(STRIPE_TIMEOUT_MS)",
+    "Stripe payout requests have a bounded network timeout",
+  ],
+  [
     requestOrigin,
     'DEFAULT_PUBLIC_ORIGIN = "https://1lv.ca"',
     "trusted origin helper has the canonical 1LV production origin",
