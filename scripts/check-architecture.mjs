@@ -573,6 +573,24 @@ for (const [content, marker, label] of [
   }
 }
 
+for (const forbiddenFinancialMarker of [
+  "lifetimeValue:",
+  '.select("subtotal',
+  "vendor_orders(vendor_id, subtotal",
+  "payment_status",
+  "stripe_payment",
+  "refund_amount",
+  "payout_amount",
+  "total, currency",
+]) {
+  if (masterOutbox.includes(forbiddenFinancialMarker)) {
+    violations.push(
+      "TAKATAK outbox must not read or project 1LV financial data: " +
+        forbiddenFinancialMarker,
+    );
+  }
+}
+
 if (masterOutbox.includes('.in("status", ["pending", "failed"])')) {
   violations.push(
     "failed TAKATAK events must require explicit retry; automatic drain may process only pending events.",
