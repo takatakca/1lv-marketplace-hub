@@ -507,6 +507,8 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
     };
   }
 
+  let recoveredStaleProcessing = false;
+
   if (payout.status === "processing") {
     const leaseCutoff = new Date(Date.now() - 10 * 60_000);
     const attemptedAt = payout.last_transfer_attempt_at
@@ -557,6 +559,7 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
     }
 
     payout.status = "failed";
+    recoveredStaleProcessing = true;
   }
 
   if (!["approved", "failed"].includes(payout.status)) {
@@ -602,7 +605,15 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
 
   const settings = await readSettings(db);
   const previousAttempts = Number(payout.transfer_attempt_count ?? 0);
-  if (previousAttempts >= settings.maxTransferAttempts) {
+
+  // A stale processing row represents an UNKNOWN outcome of the same logical
+  // Stripe transfer. Replaying the stable idempotency key is reconciliation,
+  // not a new payout attempt, so it must remain possible even when the normal
+  // retry budget was reached.
+  if (
+    !recoveredStaleProcessing &&
+    previousAttempts >= settings.maxTransferAttempts
+  ) {
     return {
       ok: false,
       status: payout.status,
@@ -610,7 +621,9 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
     };
   }
 
-  const attempt = previousAttempts + 1;
+  const attempt = recoveredStaleProcessing
+    ? Math.max(previousAttempts, 1)
+    : previousAttempts + 1;
   const { data: claimed, error: claimError } = await db
     .from("payouts")
     .update({
