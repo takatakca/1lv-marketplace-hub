@@ -19,7 +19,7 @@ function Signup() {
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [terms, setTerms] = useState(false);
-  const [marketing, setMarketing] = useState(true);
+  const [marketing, setMarketing] = useState(false);
   const [stage, setStage] = useState<"details" | "code">("details");
   const [loading, setLoading] = useState(false);
   const nav = useNavigate();
