@@ -330,7 +330,7 @@ for (const [content, marker, label] of [
   ],
   [
     stripeWebhook,
-    '"finalize_refund_accounting" as never',
+    '"finalize_refund_accounting"',
     "Stripe refunds reconcile through the atomic 1LV accounting RPC",
   ],
   [
