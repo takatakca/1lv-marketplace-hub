@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(113);
+select plan(115);
 
 select is(
   public.get_1lv_schema_version(),
@@ -205,6 +205,26 @@ select ok(
     )
   ) > 0,
   'atomic payout generation verifies adjustments and blocks unresolved refund clawbacks'
+);
+
+select ok(
+  not (
+    select p.prosecdef
+    from pg_proc p
+    where p.oid =
+      'public.create_vendor_payout_atomic(uuid,date,date,timestamp with time zone)'::regprocedure
+  ),
+  'atomic payout generation runs as SECURITY INVOKER'
+);
+
+select ok(
+  position(
+    'FOR UPDATE OF source'
+    in pg_get_functiondef(
+      'public.create_vendor_payout_atomic(uuid,date,date,timestamp with time zone)'::regprocedure
+    )
+  ) > 0,
+  'atomic payout generation locks source payouts used by refund clawbacks'
 );
 
 select ok(
