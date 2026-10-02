@@ -93,7 +93,7 @@ jobs:
           STRIPE_PRICE_VENDOR_GROWTH_MONTHLY: "price_ci_growth"
           STRIPE_PRICE_VENDOR_SCALE_MONTHLY: "price_ci_scale"
           TAKATAK_MASTER_API_URL: "https://takatak.invalid"
-          TAKATAK_1LV_API_KEY: "ci-takatak-api-key"
+          TAKATAK_1LV_API_KEY: "ci-takatak-api-key-0123456789abcdef"
           TAKATAK_DRAIN_CRON_SECRET: "ci-takatak-drain-secret-000000000000000000"
           HEALTH_SKIP_DATABASE_CHECK: "1"
         run: |
@@ -164,7 +164,7 @@ jobs:
           STRIPE_PRICE_VENDOR_GROWTH_MONTHLY: "price_ci_growth"
           STRIPE_PRICE_VENDOR_SCALE_MONTHLY: "price_ci_scale"
           TAKATAK_MASTER_API_URL: "https://takatak.invalid"
-          TAKATAK_1LV_API_KEY: "ci-takatak-api-key"
+          TAKATAK_1LV_API_KEY: "ci-takatak-api-key-0123456789abcdef"
           TAKATAK_DRAIN_CRON_SECRET: "ci-takatak-drain-secret-000000000000000000"
           HEALTH_SKIP_DATABASE_CHECK: "1"
         run: |
