@@ -113,6 +113,18 @@ const inventorySelloutMigration = readFileSync(
   join(root, "supabase/migrations/20261002070000_inventory_sellout_integrity.sql"),
   "utf8",
 );
+const vendorFulfillmentMigration = readFileSync(
+  join(root, "supabase/migrations/20261002071500_vendor_fulfillment_authority.sql"),
+  "utf8",
+);
+const ordersService = readFileSync(
+  join(root, "src/services/orders.ts"),
+  "utf8",
+);
+const vendorOrderDetailRoute = readFileSync(
+  join(root, "src/routes/vendor.orders.$id.tsx"),
+  "utf8",
+);
 const productRoute = readFileSync(
   join(root, "src/routes/product.$slug.tsx"),
   "utf8",
@@ -347,9 +359,39 @@ for (const [content, marker, label] of [
     "session grant lookup can enforce a private registry without exposing it",
   ],
   [
-    inventorySelloutMigration,
-    "SELECT '20261002070000'",
-    "final production schema marker includes final-unit inventory sellout integrity",
+    vendorFulfillmentMigration,
+    "SELECT '20261002071500'",
+    "final production schema marker includes server-authoritative vendor fulfillment",
+  ],
+  [
+    vendorFulfillmentMigration,
+    "public.is_takatak_authorized_session()",
+    "vendor fulfillment mutations require the authorized TAKATAK session registry",
+  ],
+  [
+    vendorFulfillmentMigration,
+    "Vendor fulfillment requires a paid order",
+    "vendor fulfillment cannot start before confirmed payment",
+  ],
+  [
+    vendorFulfillmentMigration,
+    "REVOKE UPDATE ON public.vendor_orders FROM authenticated",
+    "browser sessions cannot mutate vendor order state directly",
+  ],
+  [
+    vendorFulfillmentMigration,
+    "REVOKE UPDATE ON public.order_items FROM authenticated",
+    "browser sessions cannot mutate order-item fulfillment directly",
+  ],
+  [
+    ordersService,
+    '"update_vendor_order_fulfillment" as never',
+    "vendor order service uses the guarded fulfillment RPC",
+  ],
+  [
+    vendorOrderDetailRoute,
+    "admin dispute/refund workflow",
+    "vendor UI does not expose unsafe paid-order cancellation",
   ],
   [
     inventorySelloutMigration,
@@ -886,6 +928,24 @@ if (
 ) {
   violations.push(
     "payout scheduler lock release must be scoped to the current lease owner",
+  );
+}
+
+if (
+  ordersService.includes('.from("vendor_orders" as never)\n    .update') ||
+  ordersService.includes('.from("order_items").update')
+) {
+  violations.push(
+    "vendor fulfillment must never return to direct browser table updates",
+  );
+}
+
+if (
+  vendorOrderDetailRoute.includes('update("cancelled")') ||
+  vendorOrderDetailRoute.includes(">Cancel</button>")
+) {
+  violations.push(
+    "vendor UI must not cancel paid orders outside the admin refund/cancellation workflow",
   );
 }
 
