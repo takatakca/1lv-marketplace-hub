@@ -180,6 +180,20 @@ function writeWebResponse(req, response, res) {
   body.pipe(res);
 }
 
+function applySecurityHeaders(res) {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=()",
+  );
+  res.setHeader(
+    "Strict-Transport-Security",
+    "max-age=31536000",
+  );
+}
+
 async function tryServeStatic(req, res) {
   if (req.method !== "GET" && req.method !== "HEAD") return false;
 
@@ -244,6 +258,7 @@ async function tryServeStatic(req, res) {
 }
 
 const server = http.createServer(async (req, res) => {
+  applySecurityHeaders(res);
   try {
     if (await tryServeStatic(req, res)) return;
 
