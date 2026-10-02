@@ -1069,6 +1069,53 @@ export type Database = {
           },
         ]
       }
+      profile_consent_events: {
+        Row: {
+          captured_at: string
+          consent_revision: string
+          created_at: string
+          id: string
+          marketing_opt_in: boolean
+          privacy_accepted: boolean
+          profile_id: string
+          source: string
+          takatak_person_id: string
+          terms_accepted: boolean
+        }
+        Insert: {
+          captured_at?: string
+          consent_revision: string
+          created_at?: string
+          id?: string
+          marketing_opt_in?: boolean
+          privacy_accepted: boolean
+          profile_id: string
+          source?: string
+          takatak_person_id: string
+          terms_accepted: boolean
+        }
+        Update: {
+          captured_at?: string
+          consent_revision?: string
+          created_at?: string
+          id?: string
+          marketing_opt_in?: boolean
+          privacy_accepted?: boolean
+          profile_id?: string
+          source?: string
+          takatak_person_id?: string
+          terms_accepted?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_consent_events_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
