@@ -124,6 +124,11 @@ for (const [content, marker, label] of [
     "phone-only TAKATAK OTP payload",
   ],
   [
+    masterClient,
+    "intent: \"login\" | \"signup\" = \"login\"",
+    "explicit login/signup OTP intent",
+  ],
+  [
     authBridge,
     'expectedUserId ? "customer.updated" : "customer.created"',
     "correct master lifecycle event",
@@ -141,6 +146,14 @@ if (
 ) {
   violations.push(
     "TAKATAK OTP bridge must stay phone-only; unverified email must not enter master auth.",
+  );
+}
+
+if (
+  !masterClient.includes('intent: "login" | "signup" = "login"')
+) {
+  violations.push(
+    "TAKATAK login OTP must default to non-creating intent.",
   );
 }
 
