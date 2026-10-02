@@ -50,30 +50,49 @@ export type VendorOrderRecord = {
 
 // ---------- Vendor-facing: vendor_orders ----------
 
+export type VendorOrderListRecord = VendorOrderRecord & {
+  orders: {
+    id: string;
+    order_number: string;
+    payment_status: string;
+    customer_email: string | null;
+    created_at: string;
+  };
+};
+
+export type VendorOrderDetailRecord = VendorOrderRecord & {
+  orders: {
+    id: string;
+    order_number: string;
+    payment_status: string;
+    shipping_address: Record<string, unknown> | null;
+    customer_email: string | null;
+    customer_phone: string | null;
+    created_at: string;
+  };
+};
+
 export async function listVendorOrders(vendorId: string) {
-  const { data, error } = await supabase
-    .from("vendor_orders" as never)
-    .select("*, orders!inner(id, order_number, payment_status, total, customer_email, created_at)")
-    .eq("vendor_id", vendorId)
-    .order("created_at", { ascending: false });
+  const { data, error } = await supabase.rpc(
+    "list_vendor_orders_for_current_user" as never,
+    { _vendor_id: vendorId } as never,
+  );
   if (error) throw error;
-  return (data ?? []) as Array<
-    VendorOrderRecord & {
-      orders: { id: string; order_number: string; payment_status: string; total: number; customer_email: string | null; created_at: string };
-    }
-  >;
+
+  const rows = data as unknown;
+  return (Array.isArray(rows) ? rows : []) as VendorOrderListRecord[];
 }
 
 export async function getVendorOrder(vendorOrderId: string) {
-  const { data, error } = await supabase
-    .from("vendor_orders" as never)
-    .select("*, orders!inner(*)")
-    .eq("id", vendorOrderId)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc(
+    "get_vendor_order_for_current_user" as never,
+    { _vendor_order_id: vendorOrderId } as never,
+  );
   if (error) throw error;
-  return data as
-    | (VendorOrderRecord & { orders: Record<string, unknown> })
-    | null;
+
+  const row = data as unknown;
+  if (!row || typeof row !== "object" || Array.isArray(row)) return null;
+  return row as VendorOrderDetailRecord;
 }
 
 export async function updateVendorOrder(
@@ -117,18 +136,6 @@ export async function listItemsForVendorOrder(orderId: string, vendorId: string)
     .eq("vendor_id", vendorId);
   if (error) throw error;
   return data ?? [];
-}
-
-// ---------- Legacy helpers kept for compatibility ----------
-
-export async function getOrderForVendor(orderId: string) {
-  const { data, error } = await supabase
-    .from("orders")
-    .select("*, order_items(*)")
-    .eq("id", orderId)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
 }
 
 // ---------- Admin ----------
