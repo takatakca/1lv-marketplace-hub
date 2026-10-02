@@ -15,9 +15,35 @@ type PhoneLoginResult =
   | { ok: true; tokenHash: string }
   | { ok: false; error: string; setupRequired?: boolean };
 
+type AuthIntent = "login" | "signup";
+
+type RequestPhoneCodeInput = {
+  phone: string;
+  email?: string;
+  fullName?: string;
+  preferredLanguage?: string;
+};
+
+type VerifyPhoneCodeInput = {
+  phone: string;
+  code: string;
+  intent?: AuthIntent;
+  termsAccepted?: boolean;
+  marketingOptIn?: boolean;
+};
+
 function validCanadianPhone(raw: string): string | null {
   const phone = normalizePhone(raw);
   return phone && /^\+1\d{10}$/.test(phone) ? phone : null;
+}
+
+function normalizeOptionalEmail(raw: string | undefined): string | null {
+  const email = (raw ?? "").trim().toLowerCase();
+  if (!email) return null;
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return null;
+  }
+  return email;
 }
 
 function syntheticIdentityEmail(identityId: string): string {
@@ -34,14 +60,30 @@ function identityDisplayName(identity: TakatakVerifiedIdentity): string {
 export const requestTakatakPhoneLoginCode = createServerFn({
   method: "POST",
 })
-  .inputValidator((data: { phone: string }) => data)
+  .inputValidator((data: RequestPhoneCodeInput) => data)
   .handler(async ({ data }): Promise<PhoneActionResult> => {
     const phone = validCanadianPhone(data.phone ?? "");
     if (!phone) {
       return { ok: false, error: "Enter a valid Canadian phone number." };
     }
 
-    const result = await requestTakatakPhoneOtp(phone);
+    const rawEmail = (data.email ?? "").trim();
+    const email = normalizeOptionalEmail(data.email);
+    if (rawEmail && !email) {
+      return { ok: false, error: "Enter a valid email address." };
+    }
+
+    const fullName = (data.fullName ?? "").trim().slice(0, 200) || null;
+    const requestedLanguage = (data.preferredLanguage ?? "").trim().toLowerCase();
+    const preferredLanguage = ["en", "fr", "es"].includes(requestedLanguage)
+      ? requestedLanguage
+      : null;
+
+    const result = await requestTakatakPhoneOtp(phone, {
+      email,
+      fullName,
+      preferredLanguage,
+    });
     if (!result.ok) {
       return {
         ok: false,
@@ -56,13 +98,21 @@ export const requestTakatakPhoneLoginCode = createServerFn({
 export const verifyTakatakPhoneLoginCode = createServerFn({
   method: "POST",
 })
-  .inputValidator((data: { phone: string; code: string }) => data)
+  .inputValidator((data: VerifyPhoneCodeInput) => data)
   .handler(async ({ data }): Promise<PhoneLoginResult> => {
     const phone = validCanadianPhone(data.phone ?? "");
     const code = (data.code ?? "").trim();
+    const intent: AuthIntent = data.intent === "signup" ? "signup" : "login";
 
     if (!phone || !/^\d{6}$/.test(code)) {
       return { ok: false, error: "Enter the 6-digit verification code." };
+    }
+
+    if (intent === "signup" && data.termsAccepted !== true) {
+      return {
+        ok: false,
+        error: "Accept the 1LV terms and privacy policy to create an account.",
+      };
     }
 
     const verified = await verifyTakatakPhoneOtp(phone, code);
@@ -97,36 +147,44 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
       return { ok: false, error: "Could not resolve your 1LV account." };
     }
 
-    let loginEmail: string | null = null;
     const expectedUserId: string | null = linkedProfile?.id ?? null;
+    let loginEmail: string;
 
     if (expectedUserId) {
-      const { data, error } =
+      const { data: existingUser, error } =
         await supabaseAdmin.auth.admin.getUserById(expectedUserId);
 
-      if (error || !data.user?.email) {
+      if (error || !existingUser.user?.email) {
         return { ok: false, error: "Could not resolve your 1LV account." };
       }
 
-      loginEmail = data.user.email;
+      loginEmail = existingUser.user.email;
     } else {
-      loginEmail =
-        identity.email ??
-        syntheticIdentityEmail(identity.id);
+      // The TAKATAK identity UUID is the cross-application key.
+      // A master email must never silently merge into an unrelated 1LV user.
+      loginEmail = syntheticIdentityEmail(identity.id);
     }
 
     const displayName = identityDisplayName(identity);
+    const localMetadata: Record<string, string | boolean> = {
+      phone: identity.phone,
+      auth_source: "takatak",
+      takatak_person_id: identity.id,
+      ...(displayName ? { display_name: displayName } : {}),
+    };
+
+    if (intent === "signup") {
+      const acceptedAt = new Date().toISOString();
+      localMetadata["terms_accepted_at"] = acceptedAt;
+      localMetadata["privacy_accepted_at"] = acceptedAt;
+      localMetadata["marketing_opt_in"] = data.marketingOptIn === true;
+    }
+
     const { data: linkData, error: linkError } =
       await supabaseAdmin.auth.admin.generateLink({
         type: "magiclink",
         email: loginEmail,
-        options: {
-          data: {
-            ...(displayName ? { display_name: displayName } : {}),
-            phone: identity.phone,
-            auth_source: "takatak",
-          },
-        },
+        options: { data: localMetadata },
       });
 
     const tokenHash = linkData.properties?.hashed_token?.trim() ?? "";
@@ -196,7 +254,10 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
       const { queueCustomerEvent } = await import(
         "@/lib/takatak/outbox.server"
       );
-      await queueCustomerEvent(linkUserId, "customer.updated");
+      await queueCustomerEvent(
+        linkUserId,
+        expectedUserId ? "customer.updated" : "customer.created",
+      );
     } catch {
       // The verified login remains valid even if asynchronous master sync
       // cannot be queued on this request.
