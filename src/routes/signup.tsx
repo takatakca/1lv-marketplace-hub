@@ -49,6 +49,7 @@ function Signup() {
     const result = await requestTakatakPhoneLoginCode({
       data: {
         phone: formatted,
+        intent: "signup",
         fullName: cleanName,
       },
     });
