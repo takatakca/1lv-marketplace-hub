@@ -62,7 +62,72 @@ type StripeEvent = {
 
 type AdminDb = SupabaseClient<Database>;
 
+const STRIPE_API = "https://api.stripe.com/v1";
+const STRIPE_API_TIMEOUT_MS = 20_000;
 const MAX_STRIPE_WEBHOOK_BYTES = 1024 * 1024;
+
+type StripeSubscriptionSnapshot = {
+  id: string;
+  status: string;
+  customerId: string | null;
+  metadata: Record<string, unknown>;
+};
+
+async function retrieveStripeSubscription(
+  subscriptionId: string,
+): Promise<StripeSubscriptionSnapshot> {
+  if (!/^sub_[A-Za-z0-9_]+$/.test(subscriptionId)) {
+    throw new Error("Invalid Stripe subscription id.");
+  }
+
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) throw new Error("Stripe secret key not configured.");
+
+  const response = await fetch(
+    `${STRIPE_API}/subscriptions/${encodeURIComponent(subscriptionId)}`,
+    {
+      method: "GET",
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(STRIPE_API_TIMEOUT_MS),
+    },
+  );
+
+  const json = (await response.json()) as Record<string, unknown>;
+  if (!response.ok) {
+    const message =
+      json.error &&
+      typeof json.error === "object" &&
+      !Array.isArray(json.error) &&
+      typeof (json.error as Record<string, unknown>).message === "string"
+        ? String((json.error as Record<string, unknown>).message)
+        : "Stripe subscription lookup failed.";
+    throw new Error(message);
+  }
+
+  const id = typeof json.id === "string" ? json.id : "";
+  const status = typeof json.status === "string" ? json.status : "";
+  const customerId =
+    typeof json.customer === "string"
+      ? json.customer
+      : json.customer &&
+          typeof json.customer === "object" &&
+          !Array.isArray(json.customer) &&
+          typeof (json.customer as Record<string, unknown>).id === "string"
+        ? String((json.customer as Record<string, unknown>).id)
+        : null;
+  const metadata =
+    json.metadata &&
+    typeof json.metadata === "object" &&
+    !Array.isArray(json.metadata)
+      ? (json.metadata as Record<string, unknown>)
+      : {};
+
+  if (id !== subscriptionId || !status) {
+    throw new Error("Stripe subscription response is invalid.");
+  }
+
+  return { id, status, customerId, metadata };
+}
 
 async function readLimitedBody(request: Request): Promise<string | null> {
   const declaredLength = request.headers.get("content-length");
@@ -534,10 +599,6 @@ async function handleEvent(evt: StripeEvent) {
     case "customer.subscription.created":
     case "customer.subscription.updated": {
       const vendorId = meta.vendor_id;
-      const status =
-        typeof (obj as { status?: string }).status === "string"
-          ? (obj as { status: string }).status
-          : "active";
       const subId =
         typeof (obj as { id?: string }).id === "string"
           ? (obj as { id: string }).id
@@ -564,12 +625,32 @@ async function handleEvent(evt: StripeEvent) {
           break;
         }
 
+        const remote = await retrieveStripeSubscription(subId);
+        const remoteVendorId =
+          typeof remote.metadata["vendor_id"] === "string"
+            ? String(remote.metadata["vendor_id"])
+            : "";
+        if (remoteVendorId !== vendorId) {
+          await notifyAdmins(
+            supabaseAdmin,
+            "stripe_subscription_metadata_mismatch",
+            "Stripe subscription metadata mismatch",
+            `Stripe subscription ${subId.slice(0, 12)} is not bound to the expected 1LV vendor. Automatic status mutation was blocked.`,
+          );
+          break;
+        }
+
+        const remotePlan =
+          typeof remote.metadata["plan"] === "string"
+            ? String(remote.metadata["plan"])
+            : meta.plan ?? null;
+
         const { error: updateError } = await supabaseAdmin
           .from("vendors")
           .update({
             stripe_subscription_id: subId,
-            subscription_status: status,
-            subscription_plan: meta.plan ?? null,
+            subscription_status: remote.status,
+            subscription_plan: remotePlan,
           } as never)
           .eq("id", vendorId);
 
@@ -619,7 +700,6 @@ async function handleEvent(evt: StripeEvent) {
     }
     case "invoice.payment_succeeded":
     case "invoice.payment_failed": {
-      const status = evt.type === "invoice.payment_succeeded" ? "active" : "past_due";
       const customerId = (obj as { customer?: string }).customer;
       const legacySubscription = (obj as { subscription?: string }).subscription;
       const parent = (obj as {
@@ -635,10 +715,53 @@ async function handleEvent(evt: StripeEvent) {
         null;
 
       if (subscriptionId) {
+        const remote = await retrieveStripeSubscription(subscriptionId);
+
+        if (
+          typeof customerId === "string" &&
+          remote.customerId &&
+          remote.customerId !== customerId
+        ) {
+          await notifyAdmins(
+            supabaseAdmin,
+            "stripe_invoice_customer_mismatch",
+            "Stripe invoice/customer mismatch",
+            "A subscription invoice referenced a customer different from the current Stripe subscription. Automatic status mutation was blocked.",
+          );
+          break;
+        }
+
+        const { data: vendor, error: vendorError } = await supabaseAdmin
+          .from("vendors")
+          .select("id, stripe_customer_id")
+          .eq("stripe_subscription_id", subscriptionId)
+          .maybeSingle();
+        if (vendorError) throw vendorError;
+        if (!vendor) break;
+
+        const remoteVendorId =
+          typeof remote.metadata["vendor_id"] === "string"
+            ? String(remote.metadata["vendor_id"])
+            : "";
+        if (
+          remoteVendorId !== vendor.id ||
+          (vendor.stripe_customer_id &&
+            remote.customerId &&
+            vendor.stripe_customer_id !== remote.customerId)
+        ) {
+          await notifyAdmins(
+            supabaseAdmin,
+            "stripe_invoice_subscription_binding_mismatch",
+            "Stripe invoice subscription binding mismatch",
+            "A subscription invoice did not match the stored 1LV vendor/customer binding. Automatic status mutation was blocked.",
+          );
+          break;
+        }
+
         const { error: updateError } = await supabaseAdmin
           .from("vendors")
-          .update({ subscription_status: status } as never)
-          .eq("stripe_subscription_id", subscriptionId);
+          .update({ subscription_status: remote.status } as never)
+          .eq("id", vendor.id);
         if (updateError) throw updateError;
       } else if (customerId) {
         await notifyAdmins(
