@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(49);
+select plan(57);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002050000',
+  '20261002054500',
   'production schema marker is current'
 );
 
@@ -45,6 +45,68 @@ select ok(
     'EXECUTE'
   ),
   'service role can execute the schema marker'
+);
+
+
+select ok(
+  to_regprocedure('public.claim_stripe_event(text,text,jsonb)') is not null,
+  'Stripe webhook claim RPC exists'
+);
+
+select ok(
+  to_regprocedure('public.finalize_refund_accounting(uuid,text)') is not null,
+  'Stripe refund accounting RPC exists'
+);
+
+select ok(
+  not has_function_privilege('anon','public.claim_stripe_event(text,text,jsonb)','EXECUTE')
+  and not has_function_privilege('authenticated','public.claim_stripe_event(text,text,jsonb)','EXECUTE')
+  and has_function_privilege('service_role','public.claim_stripe_event(text,text,jsonb)','EXECUTE'),
+  'only service role may claim Stripe webhook events'
+);
+
+select ok(
+  not has_function_privilege('anon','public.finalize_refund_accounting(uuid,text)','EXECUTE')
+  and not has_function_privilege('authenticated','public.finalize_refund_accounting(uuid,text)','EXECUTE')
+  and has_function_privilege('service_role','public.finalize_refund_accounting(uuid,text)','EXECUTE'),
+  'only service role may finalize Stripe refund accounting'
+);
+
+select ok(
+  exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='stripe_event_log' and column_name='status'
+  )
+  and exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='stripe_event_log' and column_name='last_error'
+  ),
+  'Stripe event log stores processing state and failure details'
+);
+
+select ok(
+  to_regclass('public.payout_adjustments_refund_unique') is not null,
+  'each refund can create at most one payout carry-forward adjustment'
+);
+
+select is(
+  public.claim_stripe_event(
+    'evt_pgtap_atomic_claim',
+    'payment_intent.succeeded',
+    '{"id":"evt_pgtap_atomic_claim","type":"payment_intent.succeeded"}'::jsonb
+  ),
+  true,
+  'first Stripe event claim succeeds'
+);
+
+select is(
+  public.claim_stripe_event(
+    'evt_pgtap_atomic_claim',
+    'payment_intent.succeeded',
+    '{"id":"evt_pgtap_atomic_claim","type":"payment_intent.succeeded"}'::jsonb
+  ),
+  false,
+  'duplicate processing Stripe event claim is rejected'
 );
 
 select ok(
