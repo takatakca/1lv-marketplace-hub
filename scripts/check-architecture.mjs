@@ -93,6 +93,10 @@ const payoutSchedulerFunctions = readFileSync(
   join(root, "src/lib/payout-scheduler.functions.ts"),
   "utf8",
 );
+const stripeConnectFunctions = readFileSync(
+  join(root, "src/lib/stripe-connect.functions.ts"),
+  "utf8",
+);
 const optionalAuth = readFileSync(
   join(root, "src/integrations/supabase/optional-auth.server.ts"),
   "utf8",
@@ -216,6 +220,16 @@ for (const [content, marker, label] of [
     "database user bootstrap requires immutable Auth app metadata",
   ],
   [
+    stripeConnectFunctions,
+    "const request = getRequest()",
+    "Stripe Connect derives redirect origin from the trusted server request",
+  ],
+  [
+    stripeConnectFunctions,
+    "const origin = requestUrl.origin",
+    "Stripe Connect account links use the server-derived 1LV origin",
+  ],
+  [
     masterClient,
     "normalizeTakatakMasterApiBaseUrl",
     "TAKATAK master API base URL normalization",
@@ -287,6 +301,12 @@ for (const [content, marker, label] of [
 if (masterOutbox.includes('.in("status", ["pending", "failed"])')) {
   violations.push(
     "failed TAKATAK events must require explicit retry; automatic drain may process only pending events.",
+  );
+}
+
+if (stripeConnectFunctions.includes("returnOrigin")) {
+  violations.push(
+    "Stripe Connect must not accept a browser-supplied return origin.",
   );
 }
 
