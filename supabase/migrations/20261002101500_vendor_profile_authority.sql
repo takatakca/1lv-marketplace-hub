@@ -113,6 +113,17 @@ TO authenticated
 USING (auth.uid() = user_id)
 WITH CHECK (auth.uid() = user_id);
 
+-- Public storefront reads use fixed-column SECURITY DEFINER RPCs. Do not allow
+-- authenticated customers to SELECT the private vendors row merely because a
+-- store is active; RLS cannot hide sensitive columns.
+DROP POLICY IF EXISTS "Authenticated can view active vendors" ON public.vendors;
+DROP POLICY IF EXISTS "Vendors can view their own private record" ON public.vendors;
+CREATE POLICY "Vendors can view their own private record"
+ON public.vendors
+FOR SELECT
+TO authenticated
+USING (auth.uid() = user_id);
+
 CREATE OR REPLACE FUNCTION public.get_1lv_schema_version()
 RETURNS text
 LANGUAGE sql
