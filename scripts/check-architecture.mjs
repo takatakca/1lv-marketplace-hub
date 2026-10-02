@@ -145,6 +145,21 @@ for (const [content, marker, label] of [
     "synthetic local email is server-confirmed without sending email",
   ],
   [
+    authBridge,
+    'new Set(["email_exists", "user_already_exists"])',
+    "local auth bootstrap only recovers explicit duplicate-user races",
+  ],
+  [
+    authBridge,
+    'metadata["takatak_person_id"] !== identity.id',
+    "duplicate local auth user must match the exact TAKATAK identity",
+  ],
+  [
+    authBridge,
+    'metadata["auth_source"] !== "takatak"',
+    "duplicate local auth user must already be TAKATAK-owned",
+  ],
+  [
     masterClient,
     "normalizeTakatakMasterApiBaseUrl",
     "TAKATAK master API base URL normalization",
