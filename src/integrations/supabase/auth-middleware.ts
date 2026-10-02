@@ -32,11 +32,14 @@ export function requireTakatakSessionClaims(claims: Record<string, unknown>) {
 
   const methods = new Set(
     (Array.isArray(claims['amr']) ? claims['amr'] : [])
-      .map((entry) =>
-        entry && typeof entry === 'object' && !Array.isArray(entry)
-          ? (entry as Record<string, unknown>)['method']
-          : null,
-      )
+      .map((entry) => {
+        if (typeof entry === 'string') return entry
+        if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+          const method = (entry as Record<string, unknown>)['method']
+          return typeof method === 'string' ? method : null
+        }
+        return null
+      })
       .filter((method): method is string => typeof method === 'string'),
   )
 
