@@ -374,6 +374,21 @@ for (const [content, marker, label] of [
   ],
   [
     vendorPaidVisibilityMigration,
+    "public.vendor_can_view_paid_order",
+    "vendor parent-order visibility uses a non-recursive caller-bound helper",
+  ],
+  [
+    vendorPaidVisibilityMigration,
+    "public.vendor_can_view_paid_order_scope",
+    "vendor split/item visibility uses a non-recursive caller-bound helper",
+  ],
+  [
+    vendorPaidVisibilityMigration,
+    "public.is_takatak_authorized_session()",
+    "vendor visibility helpers require a server-authorized TAKATAK session",
+  ],
+  [
+    vendorPaidVisibilityMigration,
     'CREATE POLICY "Vendors view related orders"',
     "vendor privacy migration protects parent-order reads",
   ],
@@ -952,6 +967,19 @@ if (
 ) {
   violations.push(
     "payout scheduler lock release must be scoped to the current lease owner",
+  );
+}
+
+if (
+  vendorPaidVisibilityMigration.includes(
+    "JOIN public.order_items AS oi ON oi.order_id = orders.id",
+  ) ||
+  vendorPaidVisibilityMigration.includes(
+    "JOIN public.orders AS o ON o.id = order_items.order_id",
+  )
+) {
+  violations.push(
+    "vendor paid-order visibility must not reintroduce mutually recursive RLS policy subqueries",
   );
 }
 
