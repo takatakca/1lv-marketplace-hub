@@ -6,7 +6,7 @@
  *   server-side admin check; the route guard is UX only.
  * - Payloads are ALWAYS rebuilt from the database by the mappers. A browser
  *   can never hand us a payload to forward to TAKATAK.
- * - TAKATAK_MASTER_API_URL / TAKATAK_MASTER_API_KEY never leave the server;
+ * - TAKATAK_MASTER_API_URL / TAKATAK_1LV_API_KEY never leave the server;
  *   only booleans ("configured") are returned to the console.
  * - Lifecycle calls are fire-and-forget for the caller: they never block
  *   signup, vendor onboarding, or checkout.
