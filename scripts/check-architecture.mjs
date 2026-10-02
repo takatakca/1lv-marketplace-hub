@@ -141,6 +141,10 @@ const checkoutFunctions = readFileSync(
   join(root, "src/lib/checkout.functions.ts"),
   "utf8",
 );
+const checkoutRoute = readFileSync(
+  join(root, "src/routes/checkout.tsx"),
+  "utf8",
+);
 const stripeWebhook = readFileSync(
   join(root, "src/routes/api/public/webhooks.stripe.ts"),
   "utf8",
@@ -976,6 +980,20 @@ if (
 if (checkoutFunctions.includes("queueCustomerEvent")) {
   violations.push(
     "checkout must use order.created as the single TAKATAK customer synchronization entrypoint",
+  );
+}
+
+if (
+  checkoutFunctions.includes("user?.email?.trim() || data.email.trim()") ||
+  !checkoutFunctions.includes('checkoutEmail.endsWith("@auth.1lv.ca")') ||
+  !checkoutFunctions.includes(
+    "Receipt/contact email is always the address explicitly supplied at checkout.",
+  ) ||
+  !checkoutRoute.includes('endsWith("@auth.1lv.ca")') ||
+  !checkoutRoute.includes("defaultValue={contactEmail}")
+) {
+  violations.push(
+    "synthetic TAKATAK RLS email must never become the 1LV checkout receipt/contact email",
   );
 }
 
