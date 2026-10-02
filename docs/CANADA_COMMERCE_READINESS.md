@@ -44,7 +44,7 @@ Official references:
 
 ## Server-authoritative atomic checkout
 
-This branch contains the P0 checkout boundary and its production migration. The code and migration suite are CI-validated; production activation remains fail-closed until the exact 1LV Supabase project is migrated to schema version `20261001214500` and the required server secrets are configured.
+This branch contains the P0 checkout boundary and its production migration. The code and migration suite are CI-validated; production activation remains fail-closed until the exact 1LV Supabase project is migrated through schema version `20261002084500` and every required server/scheduler secret is configured.
 
 The new flow:
 
@@ -53,12 +53,14 @@ The new flow:
 3. a service-role-only PostgreSQL RPC validates active products/vendors, database prices and inventory;
 4. province tax and shipping totals are calculated inside the database transaction;
 5. parent order, order items and vendor splits are created atomically;
-6. duplicate retries are collapsed by a hashed checkout idempotency key;
+6. duplicate retries are serialized by checkout key, bound to a normalized request fingerprint, and multi-product locks are acquired deterministically;
 7. direct browser INSERT policies/privileges for financial order rows are removed;
 8. guest lookup requires both the public order reference and the original high-entropy checkout key;
 9. guest Stripe payment requires a separate short-lived signed capability;
-10. PaymentIntent creation verifies ownership/capability, blocks cancelled/refunded/expired orders and persists one order-scoped PaymentIntent;
-11. inventory is reserved at checkout, committed on Stripe payment success, and can be safely restored when an unpaid reservation expires.
+10. PaymentIntent creation verifies ownership/capability, blocks cancelled/refunded/expired orders, safely replaces a cancelled authorization, and persists one current order-scoped PaymentIntent;
+11. inventory is reserved at checkout, committed on Stripe payment success, and released by a dedicated authenticated 15-minute maintenance job after unpaid reservations expire;
+12. vendors receive only curated paid/committed order projections and fulfillment transitions run through a guarded TAKATAK-authorized RPC;
+13. successful refunds atomically update order/vendor accounting, re-hold unreleased payouts for review, and create idempotent clawbacks when a Stripe transfer was already processing or paid.
 
 The database RPC is executable only by `service_role`; it uses `SECURITY INVOKER`, an empty `search_path`, schema-qualified relations, and explicit function grants. The public guest lookup remains a narrowly scoped `SECURITY DEFINER` function because it must read a guest order through RLS, and it requires the high-entropy checkout key in addition to the order number.
 
@@ -66,26 +68,16 @@ The database RPC is executable only by `service_role`; it uses `SECURITY INVOKER
 
 Before this branch is merged/deployed:
 
-- apply `supabase/migrations/20260930141500_server_authoritative_checkout.sql` to the correct 1LV.CA Supabase project;
-- set a dedicated `CHECKOUT_GUEST_TOKEN_SECRET` of at least 32 random characters on the server;
-- keep `SUPABASE_SERVICE_ROLE_KEY`, Stripe secret keys and the guest token secret server-only;
+- apply the complete ordered migration set through `20261002084500_refund_payout_race_safety.sql` to the exact 1LV.CA Supabase project `odoybkshqszucvoxzjyz`;
+- configure `CHECKOUT_GUEST_TOKEN_SECRET`, `TAKATAK_DRAIN_CRON_SECRET` and `INVENTORY_MAINTENANCE_CRON_SECRET` as separate random server-only secrets of at least 32 characters;
+- keep `SUPABASE_SERVICE_ROLE_KEY`, Stripe secret keys and all scheduler/guest capability secrets server-only;
+- configure the repository `PRODUCTION_URL` variable as the clean HTTPS production origin so the secured GitHub Actions schedulers can call the internal endpoints;
 - run Supabase Security Advisor after the migration;
-- test guest and authenticated checkout, tampered totals, duplicate retries, expired reservations, inventory exhaustion and unauthorized PaymentIntent attempts.
+- test guest and authenticated checkout, mismatched idempotency payload reuse, concurrent multi-product carts, expired reservations, final-unit sellout, unauthorized PaymentIntent attempts, cancelled PaymentIntent recovery, refund/payout races and vendor fulfillment authorization.
 
-## Coupon engine
+## Persistent promotion engine
 
-The current admin coupon screen is still local/demo state. Do not advertise arbitrary coupon codes publicly until a persistent coupon engine validates:
-
-- active status
-- start/end windows
-- minimum order value
-- percent/fixed/free-shipping type
-- global or vendor scope
-- product/category exclusions
-- per-customer and global usage limits
-- stacking rules
-- server-calculated discount amount
-- redemption recording in the same transaction as checkout
+Promotions are now persisted and validated server-side. The database enforces active windows, minimum order, fixed/percent/free-shipping types, global/per-customer limits, first-order rules, include/exclude targets, reservation/redeem/release states and restoration on eligible full refunds. Browser totals are never authoritative.
 
 ## Persistent marketplace settings
 
@@ -114,10 +106,11 @@ Do not enable fully automatic payment/payout operations solely because this UI b
 
 Recommended release sequence:
 
-1. apply and verify the server-authoritative checkout migration on the correct 1LV.CA Supabase project;
-2. configure the dedicated guest checkout signing secret;
-3. merge this Canada commerce/security upgrade only after CI and database verification are green;
-4. verify the persisted marketplace settings and audit history in production;
-5. implement the persistent coupon engine before advertising arbitrary coupon codes;
-6. run targeted Stripe test-mode orders across representative provinces and inventory edge cases;
-7. only then widen production traffic and automation.
+1. apply and verify every migration through schema `20261002084500` on the exact 1LV.CA Supabase project;
+2. configure the guest checkout, TAKATAK drain and inventory-maintenance secrets plus the production URL;
+3. verify hosted 1LV Auth keeps public signup and anonymous users disabled;
+4. merge this Canada commerce/security upgrade only after CI, migration replay, pgTAP and real TAKATAK Auth/JWT/RLS verification are green;
+5. verify persisted marketplace settings, promotions and audit history in production;
+6. run targeted Stripe test-mode orders across representative provinces, concurrent carts, inventory expiry, refund/payout races and fulfillment transitions;
+7. perform one controlled real TAKATAK SMS login/signup session and confirm local-session revocation;
+8. only then widen production traffic and automation.
