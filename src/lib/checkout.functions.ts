@@ -71,8 +71,14 @@ function validateCheckoutInput(data: ServerCheckoutInput): ServerCheckoutInput {
     }
   }
 
-  if (!data.email || data.email.length > 320) {
-    throw new Error("A valid email address is required.");
+  const checkoutEmail = data.email?.trim().toLowerCase() ?? "";
+  if (
+    checkoutEmail.length < 5 ||
+    checkoutEmail.length > 320 ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(checkoutEmail) ||
+    checkoutEmail.endsWith("@auth.1lv.ca")
+  ) {
+    throw new Error("A valid customer email address is required.");
   }
   if (!data.shippingAddress?.province) {
     throw new Error("Shipping province is required.");
@@ -97,7 +103,9 @@ export const createMarketplaceOrder = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<ServerCheckoutResult> => {
     const user = await getOptionalSupabaseUser();
     const userId = user?.id ?? null;
-    const customerEmail = user?.email?.trim() || data.email.trim();
+    // The local Supabase email is a synthetic TAKATAK RLS transport identity.
+    // Receipt/contact email is always the address explicitly supplied at checkout.
+    const customerEmail = data.email.trim().toLowerCase();
 
     if (!userId) {
       assertGuestPaymentTokenConfigured();
