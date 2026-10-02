@@ -102,6 +102,7 @@ export const Route = createFileRoute("/api/public/health")({
             service: "1lv.ca",
             runtime: "tanstack-start",
             database: database.status,
+            revision: process.env.RELEASE_REVISION?.trim() || null,
           }),
           {
             status: ok ? 200 : 503,
