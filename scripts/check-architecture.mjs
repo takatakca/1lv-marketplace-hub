@@ -374,8 +374,18 @@ for (const [content, marker, label] of [
   ],
   [
     vendorPaidVisibilityMigration,
-    'policyname',
-    "vendor privacy migration owns explicit paid-order RLS policies",
+    'CREATE POLICY "Vendors view related orders"',
+    "vendor privacy migration protects parent-order reads",
+  ],
+  [
+    vendorPaidVisibilityMigration,
+    'CREATE POLICY "Vendors view own vendor orders"',
+    "vendor privacy migration protects vendor-split reads",
+  ],
+  [
+    vendorPaidVisibilityMigration,
+    'CREATE POLICY "Vendors view own order items"',
+    "vendor privacy migration protects vendor line-item reads",
   ],
   [
     vendorFulfillmentMigration,
