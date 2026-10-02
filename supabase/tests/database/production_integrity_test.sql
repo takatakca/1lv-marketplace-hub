@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(58);
+select plan(62);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002054500',
+  '20261002062000',
   'production schema marker is current'
 );
 
@@ -56,6 +56,50 @@ select ok(
 select ok(
   to_regprocedure('public.finalize_refund_accounting(uuid,text)') is not null,
   'Stripe refund accounting RPC exists'
+);
+
+select ok(
+  to_regprocedure('public.reserve_dispute_refund(uuid,numeric,text,uuid)') is not null,
+  'atomic dispute refund reservation RPC exists'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.reserve_dispute_refund(uuid,numeric,text,uuid)',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.reserve_dispute_refund(uuid,numeric,text,uuid)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.reserve_dispute_refund(uuid,numeric,text,uuid)',
+    'EXECUTE'
+  ),
+  'only service role may reserve an approved dispute refund'
+);
+
+select ok(
+  position(
+    'FOR UPDATE'
+    in pg_get_functiondef(
+      'public.reserve_dispute_refund(uuid,numeric,text,uuid)'::regprocedure
+    )
+  ) > 0,
+  'refund reservation function locks rows before calculating remaining value'
+);
+
+select ok(
+  position(
+    'refund_already_reserved'
+    in pg_get_functiondef(
+      'public.reserve_dispute_refund(uuid,numeric,text,uuid)'::regprocedure
+    )
+  ) > 0,
+  'refund reservation refuses a second live refund for the same dispute'
 );
 
 select ok(
