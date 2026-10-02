@@ -1125,14 +1125,30 @@ if (
   ) ||
   !inventoryMaintenanceRoute.includes("expected.length < 32") ||
   !inventoryMaintenanceRoute.includes(
-    '"release_expired_inventory_reservations" as never',
+    'createFileRoute("/api/internal/inventory/cleanup")',
   ) ||
   !inventoryMaintenanceRoute.includes(
-    'createFileRoute("/api/internal/inventory/cleanup")',
+    '"/cancel"',
+  ) ||
+  !inventoryMaintenanceRoute.includes(
+    '"release_order_inventory" as never',
+  ) ||
+  !inventoryMaintenanceRoute.includes(
+    'status === "succeeded"',
   )
 ) {
   violations.push(
-    "expired checkout inventory cleanup must stay on the authenticated internal route with a dedicated secret",
+    "expired checkout inventory cleanup must cancel/verify Stripe PaymentIntent before releasing inventory",
+  );
+}
+
+if (
+  inventoryMaintenanceRoute.includes(
+    '"release_expired_inventory_reservations" as never',
+  )
+) {
+  violations.push(
+    "inventory maintenance must not bulk-release PI-backed reservations before Stripe cancellation",
   );
 }
 
