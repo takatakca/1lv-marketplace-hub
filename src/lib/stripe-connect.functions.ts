@@ -14,6 +14,7 @@ import { resolveTrustedAppOrigin } from "@/lib/request-origin.server";
  */
 
 const STRIPE_API = "https://api.stripe.com/v1";
+const STRIPE_TIMEOUT_MS = 20_000;
 
 export type ConnectStatus = "not_connected" | "onboarding" | "restricted" | "enabled";
 
@@ -51,6 +52,7 @@ async function stripeCall(
       ...(body ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
     },
     ...(body ? { body: new URLSearchParams(body).toString() } : {}),
+    signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
   });
   const json = (await res.json()) as Record<string, unknown>;
   if (!res.ok) {
