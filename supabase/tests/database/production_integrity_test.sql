@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(79);
+select plan(83);
 
 select is(
   public.get_1lv_schema_version(),
@@ -261,6 +261,68 @@ select ok(
     )
   ) > 0,
   'vendor fulfillment RPC synchronizes line items and parent order state'
+);
+
+select ok(
+  position(
+    'Vendor fulfillment requires committed inventory'
+    in pg_get_functiondef(
+      'public.update_vendor_order_fulfillment(uuid,public.vendor_order_status,text,text)'::regprocedure
+    )
+  ) > 0,
+  'vendor fulfillment RPC blocks paid orders whose inventory was released'
+);
+
+select ok(
+  position(
+    'inventory_committed_at IS NOT NULL'
+    in pg_get_functiondef(
+      'public.vendor_can_view_paid_order(uuid)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'inventory_released_at IS NULL'
+    in pg_get_functiondef(
+      'public.vendor_can_view_paid_order(uuid)'::regprocedure
+    )
+  ) > 0,
+  'vendor order-parent visibility requires committed, unreleased inventory'
+);
+
+select ok(
+  position(
+    'inventory_committed_at IS NOT NULL'
+    in pg_get_functiondef(
+      'public.vendor_can_view_paid_order_scope(uuid,uuid)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'inventory_released_at IS NULL'
+    in pg_get_functiondef(
+      'public.vendor_can_view_paid_order_scope(uuid,uuid)'::regprocedure
+    )
+  ) > 0,
+  'vendor scoped visibility requires committed, unreleased inventory'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'vendor_orders'
+      and policyname = 'Vendors view own vendor orders'
+      and coalesce(qual, '') like '%vendor_can_view_paid_order_scope%'
+  )
+  and exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'order_items'
+      and policyname = 'Vendors view own order items'
+      and coalesce(qual, '') like '%vendor_can_view_paid_order_scope%'
+  ),
+  'inventory-gated vendor policies remain non-recursive'
 );
 
 select ok(
