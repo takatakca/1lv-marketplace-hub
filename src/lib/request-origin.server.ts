@@ -10,7 +10,7 @@ function allowLocalRequestOrigin() {
 
 function configuredPublicOrigin() {
   const raw = (process.env.PUBLIC_APP_ORIGIN ?? DEFAULT_PUBLIC_ORIGIN).trim();
-  let parsed;
+  let parsed: URL;
   try {
     parsed = new URL(raw);
   } catch {
@@ -33,8 +33,8 @@ function configuredPublicOrigin() {
   return parsed.origin;
 }
 
-export function resolveTrustedAppOrigin(requestUrl) {
-  let request;
+export function resolveTrustedAppOrigin(requestUrl: string) {
+  let request: URL;
   try {
     request = new URL(requestUrl);
   } catch {
