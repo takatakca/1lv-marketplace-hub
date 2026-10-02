@@ -214,10 +214,6 @@ const requestOrigin = readFileSync(
   "utf8",
 );
 const productionServer = readFileSync(join(root, "server.cjs"), "utf8");
-const healthRoute = readFileSync(
-  join(root, "src/routes/api/public/health.ts"),
-  "utf8",
-);
 const deployWorkflow = readFileSync(
   join(root, ".github/workflows/deploy.yml"),
   "utf8",
