@@ -107,7 +107,7 @@ AS $revoke_session$
 DECLARE
   revoked_count integer := 0;
 BEGIN
-  IF auth.uid() IS NULL THEN
+  IF auth.uid() IS NULL OR NOT public.is_takatak_authorized_session() THEN
     RETURN false;
   END IF;
 
