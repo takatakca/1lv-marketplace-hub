@@ -5,6 +5,71 @@ import { createClient } from '@supabase/supabase-js'
 import type { Database } from './types'
 
 
+const MASTER_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function requireTakatakSessionClaims(claims: Record<string, unknown>) {
+  const sub = typeof claims['sub'] === 'string' ? claims['sub'] : ''
+  const email =
+    typeof claims['email'] === 'string' ? claims['email'].trim().toLowerCase() : ''
+  const appMetadata =
+    claims['app_metadata'] &&
+    typeof claims['app_metadata'] === 'object' &&
+    !Array.isArray(claims['app_metadata'])
+      ? (claims['app_metadata'] as Record<string, unknown>)
+      : null
+  const masterId =
+    typeof appMetadata?.['takatak_person_id'] === 'string'
+      ? appMetadata['takatak_person_id']
+      : ''
+  const authSource =
+    typeof appMetadata?.['auth_source'] === 'string'
+      ? appMetadata['auth_source']
+      : ''
+  const expectedEmail = masterId
+    ? `takatak.${masterId.toLowerCase()}@auth.1lv.ca`
+    : ''
+
+  const methods = new Set(
+    (Array.isArray(claims['amr']) ? claims['amr'] : [])
+      .map((entry) =>
+        entry && typeof entry === 'object' && !Array.isArray(entry)
+          ? (entry as Record<string, unknown>)['method']
+          : null,
+      )
+      .filter((method): method is string => typeof method === 'string'),
+  )
+
+  const trustedMethod = methods.has('magiclink') || methods.has('otp')
+  const forbiddenMethods = [
+    'password',
+    'oauth',
+    'recovery',
+    'invite',
+    'sso/saml',
+    'email/signup',
+    'email_change',
+    'anonymous',
+  ]
+
+  if (
+    !sub ||
+    authSource !== 'takatak' ||
+    !MASTER_ID_PATTERN.test(masterId) ||
+    email !== expectedEmail ||
+    !trustedMethod ||
+    forbiddenMethods.some((method) => methods.has(method))
+  ) {
+    throw new Response(
+      'Unauthorized: GROUPE TAKATAK verification is required',
+      { status: 401 },
+    )
+  }
+
+  return sub
+}
+
+
 
 export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server(
   async ({ next }) => {
@@ -65,14 +130,13 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
       throw new Response('Unauthorized: Invalid token', { status: 401 });
     }
 
-    if (!data.claims.sub) {
-      throw new Response('Unauthorized: No user ID found in token', { status: 401 });
-    }
+    const claims = data.claims as Record<string, unknown>
+    const userId = requireTakatakSessionClaims(claims)
 
     return next({
       context: {
         supabase,
-        userId: data.claims.sub,
+        userId,
         claims: data.claims,
       },
     })
