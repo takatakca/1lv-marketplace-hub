@@ -10,9 +10,7 @@ CREATE TABLE public.takatak_authorized_sessions (
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   takatak_person_id uuid NOT NULL,
   authorized_at timestamptz NOT NULL DEFAULT now(),
-  revoked_at timestamptz,
-  CONSTRAINT takatak_authorized_sessions_user_master_unique
-    UNIQUE (session_id, user_id, takatak_person_id)
+  revoked_at timestamptz
 );
 
 CREATE INDEX takatak_authorized_sessions_user_idx
@@ -27,7 +25,8 @@ GRANT ALL ON TABLE public.takatak_authorized_sessions
 TO service_role;
 
 -- Keep the global authenticated-table invariant explicit. Browser roles still
--- have no table privileges; the policy is defense in depth only.
+-- have no table privileges; the policy is defense in depth only. The helper is
+-- SECURITY DEFINER and reads the grant table without recursing through RLS.
 CREATE POLICY "TAKATAK authenticated sessions only"
 ON public.takatak_authorized_sessions
 AS RESTRICTIVE
@@ -60,7 +59,11 @@ AS $authorized_session$
     auth.uid() IS NOT NULL
     AND n.subject_id = auth.uid()::text
     AND n.auth_source = 'takatak'
-    AND n.master_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}
+    AND n.master_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    AND lower(n.email) = 'takatak.' || lower(n.master_id) || '@auth.1lv.ca'
+    AND EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(n.amr) AS entry
       WHERE entry ->> 'method' IN ('magiclink', 'otp')
     )
     AND NOT EXISTS (
@@ -86,59 +89,6 @@ AS $authorized_session$
         AND authorized.revoked_at IS NULL
     )
   FROM normalized AS n;
-$authorized_session$;
-
-REVOKE ALL ON FUNCTION public.is_takatak_authorized_session()
-FROM PUBLIC, anon;
-
-GRANT EXECUTE ON FUNCTION public.is_takatak_authorized_session()
-TO authenticated, service_role;
-
-CREATE OR REPLACE FUNCTION public.get_1lv_schema_version()
-RETURNS text
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = ''
-AS $schema_version$
-  SELECT '20261002050000';
-$schema_version$;
-
-REVOKE ALL ON FUNCTION public.get_1lv_schema_version()
-FROM PUBLIC, anon, authenticated;
-
-GRANT EXECUTE ON FUNCTION public.get_1lv_schema_version()
-TO service_role;
-
-    AND lower(n.email) = 'takatak.' || lower(n.master_id) || '@auth.1lv.ca'
-    AND EXISTS (
-      SELECT 1
-      FROM jsonb_array_elements(n.amr) AS entry
-      WHERE entry ->> 'method' IN ('magiclink', 'otp')
-    )
-    AND NOT EXISTS (
-      SELECT 1
-      FROM jsonb_array_elements(amr) AS entry
-      WHERE entry ->> 'method' IN (
-        'password',
-        'oauth',
-        'recovery',
-        'invite',
-        'sso/saml',
-        'email/signup',
-        'email_change',
-        'anonymous'
-      )
-    )
-    AND EXISTS (
-      SELECT 1
-      FROM public.takatak_authorized_sessions AS authorized
-      WHERE authorized.session_id::text = session_id
-        AND authorized.user_id = auth.uid()
-        AND authorized.takatak_person_id::text = master_id
-        AND authorized.revoked_at IS NULL
-    )
-  FROM normalized;
 $authorized_session$;
 
 REVOKE ALL ON FUNCTION public.is_takatak_authorized_session()
