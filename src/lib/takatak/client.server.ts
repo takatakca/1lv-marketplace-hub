@@ -256,9 +256,11 @@ async function callOtp(
 export async function requestTakatakPhoneOtp(
   phone: string,
   metadata: TakatakOtpMetadata = {},
+  intent: "login" | "signup" = "login",
 ): Promise<TakatakOtpResult> {
   const result = await callOtp("/v1/auth/otp/send", {
     phone,
+    intent,
     ...(metadata.fullName ? { full_name: metadata.fullName } : {}),
     ...(metadata.preferredLanguage
       ? { preferred_language: metadata.preferredLanguage }
