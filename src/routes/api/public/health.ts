@@ -17,6 +17,7 @@ const REQUIRED_RUNTIME_ENV = [
   "TAKATAK_MASTER_API_URL",
   "TAKATAK_1LV_API_KEY",
   "TAKATAK_DRAIN_CRON_SECRET",
+  "INVENTORY_MAINTENANCE_CRON_SECRET",
 ] as const;
 
 type DatabaseHealth = "ready" | "skipped" | "unavailable" | "mismatch";
