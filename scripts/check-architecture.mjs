@@ -162,6 +162,14 @@ const requestOrigin = readFileSync(
   "utf8",
 );
 const productionServer = readFileSync(join(root, "server.cjs"), "utf8");
+const healthRoute = readFileSync(
+  join(root, "src/routes/api/public/health.ts"),
+  "utf8",
+);
+const deployWorkflow = readFileSync(
+  join(root, ".github/workflows/deploy.yml"),
+  "utf8",
+);
 
 for (const [content, marker, label] of [
   [masterClient, 'source_application: "1lv"', "1LV source binding"],
@@ -474,6 +482,31 @@ for (const [content, marker, label] of [
     productionServer,
     "const PUBLIC_ORIGIN = configuredPublicOrigin();",
     "production server canonicalizes request URLs before TanStack handles them",
+  ],
+  [
+    productionServer,
+    "CURRENT_RELEASE_FILE",
+    "production server reads the atomic CURRENT release marker",
+  ],
+  [
+    productionServer,
+    "process.env.RELEASE_REVISION = revision.toLowerCase();",
+    "production server exports the active release SHA to the runtime",
+  ],
+  [
+    healthRoute,
+    "revision: process.env.RELEASE_REVISION?.trim() || null",
+    "health endpoint reports the active application revision",
+  ],
+  [
+    deployWorkflow,
+    "RELEASE_REVISION: ${{ github.sha }}",
+    "packaged runtime smoke test binds health to the exact candidate SHA",
+  ],
+  [
+    deployWorkflow,
+    "payload.revision !== process.env.GITHUB_SHA",
+    "production health check rejects an old Passenger process",
   ],
   [
     stripeWebhook,
