@@ -100,9 +100,6 @@ export type TakatakRelationshipPayload = {
   first_seen_at: string | null;
   last_seen_at: string | null;
   order_count: number | null;
-  /** Lifetime value with THIS vendor only. Never cross-merchant. */
-  lifetime_value: number | null;
-  currency: string;
 };
 
 export type TakatakOrderPayload = {
@@ -115,12 +112,8 @@ export type TakatakOrderPayload = {
   merchant_local_ids: string[];
   splits: Array<{
     vendor_local_id: string;
-    subtotal: number;
     status: string;
   }>;
-  total: number;
-  currency: string;
-  payment_status: string;
   fulfillment_status: string;
   created_at: string;
 };
