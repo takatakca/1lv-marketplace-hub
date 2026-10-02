@@ -173,6 +173,10 @@ const legacyPublicHelpersMigration = readFileSync(
   join(root, "supabase/migrations/20261002103000_retire_legacy_public_helpers.sql"),
   "utf8",
 );
+const consolidatedMarketplaceAuthorityMigration = readFileSync(
+  join(root, "supabase/migrations/20261002104500_consolidate_marketplace_authority.sql"),
+  "utf8",
+);
 const marketplaceSettingsMigration = readFileSync(
   join(root, "supabase/migrations/20260930150630_persistent_marketplace_settings.sql"),
   "utf8",
@@ -454,7 +458,37 @@ for (const [content, marker, label] of [
   [
     legacyPublicHelpersMigration,
     "SELECT '20261002103000'",
-    "final production schema marker retires obsolete public helper access",
+    "legacy public helper retirement migration retains its historical schema marker",
+  ],
+  [
+    consolidatedMarketplaceAuthorityMigration,
+    "SELECT '20261002104500'",
+    "final production schema marker consolidates marketplace authority",
+  ],
+  [
+    consolidatedMarketplaceAuthorityMigration,
+    "DROP TRIGGER IF EXISTS enforce_vendor_marketplace_fields_trigger",
+    "superseded vendor marketplace authority trigger is removed",
+  ],
+  [
+    consolidatedMarketplaceAuthorityMigration,
+    "DROP TRIGGER IF EXISTS enforce_product_marketplace_fields_trigger",
+    "superseded product marketplace authority trigger is removed",
+  ],
+  [
+    consolidatedMarketplaceAuthorityMigration,
+    "s.require_vendor_approval",
+    "vendor onboarding remains controlled by marketplace approval settings",
+  ],
+  [
+    consolidatedMarketplaceAuthorityMigration,
+    "s.default_commission_rate",
+    "vendor default commission remains controlled by marketplace settings",
+  ],
+  [
+    consolidatedMarketplaceAuthorityMigration,
+    "s.require_product_approval",
+    "product publication remains controlled by marketplace approval settings",
   ],
   [
     legacyPublicHelpersMigration,
@@ -1763,15 +1797,28 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002103000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002104500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002103000"')
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002104500"')
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002103000",
+    "production health/migration gates must track schema 20261002104500",
+  );
+}
+
+if (
+  consolidatedMarketplaceAuthorityMigration.includes(
+    "CREATE TRIGGER enforce_vendor_marketplace_fields_trigger",
+  ) ||
+  consolidatedMarketplaceAuthorityMigration.includes(
+    "CREATE TRIGGER enforce_product_marketplace_fields_trigger",
+  )
+) {
+  violations.push(
+    "consolidated marketplace authority must not recreate superseded vendor/product triggers",
   );
 }
 
