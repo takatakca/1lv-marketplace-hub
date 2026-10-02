@@ -69,6 +69,30 @@ export type SendResult =
   | { ok: true; remoteId: string | null }
   | { ok: false; setupRequired?: boolean; error: string };
 
+const MASTER_FINANCIAL_KEY =
+  /(?:^|_)(?:amount|total|subtotal|payment|currency|refund|payout|stripe|invoice|card|cvc|fee|commission|lifetime_value|ledger)(?:_|$)/i;
+
+function containsFinancialMasterData(value: unknown, depth = 0): boolean {
+  if (depth > 8 || value === null || typeof value !== "object") return false;
+
+  if (Array.isArray(value)) {
+    return value.some((entry) => containsFinancialMasterData(entry, depth + 1));
+  }
+
+  for (const [rawKey, child] of Object.entries(
+    value as Record<string, unknown>,
+  )) {
+    const normalizedKey = rawKey
+      .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+      .toLowerCase();
+
+    if (MASTER_FINANCIAL_KEY.test(normalizedKey)) return true;
+    if (containsFinancialMasterData(child, depth + 1)) return true;
+  }
+
+  return false;
+}
+
 async function call(
   path: string,
   body: Record<string, unknown>,
@@ -132,6 +156,20 @@ export async function sendTakatakEvent(input: {
   aggregateId: string;
   payload: Record<string, unknown>;
 }): Promise<SendResult> {
+  // GROUPE TAKATAK is the customer/master-data authority, not 1LV's
+  // financial ledger. Historical order outbox rows are acknowledged locally
+  // without transmitting them to the master platform.
+  if (input.aggregateType === "order") {
+    return { ok: true, remoteId: null };
+  }
+
+  if (containsFinancialMasterData(input.payload)) {
+    return {
+      ok: false,
+      error: "TAKATAK customer-data boundary rejected financial payload.",
+    };
+  }
+
   const remoteIdKeys =
     input.aggregateType === "customer"
       ? ["identity_id"]
