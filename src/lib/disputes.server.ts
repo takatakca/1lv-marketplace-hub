@@ -42,6 +42,27 @@ export function stripeConfigured() {
   return Boolean(process.env.STRIPE_SECRET_KEY);
 }
 
+export async function stripeGet(path: string) {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) throw new Error("Stripe not configured");
+
+  const res = await fetch(`${STRIPE_API}${path}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${key}`,
+    },
+    signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
+  });
+  const json = (await res.json()) as Record<string, unknown>;
+  if (!res.ok) {
+    throw new Error(
+      (json.error as { message?: string } | undefined)?.message ??
+        "Stripe error",
+    );
+  }
+  return json;
+}
+
 export async function stripeCall(
   path: string,
   body: Record<string, string>,
