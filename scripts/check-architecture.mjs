@@ -275,7 +275,7 @@ for (const [content, marker, label] of [
   ],
   [
     sessionGrantMigration,
-    "SELECT '20261002050000'",
+    "SELECT '20261002054500'",
     "final production schema requires TAKATAK session grants",
   ],
   [
@@ -332,6 +332,21 @@ for (const [content, marker, label] of [
     stripeWebhook,
     '"finalize_refund_accounting" as never',
     "Stripe refunds reconcile through the atomic 1LV accounting RPC",
+  ],
+  [
+    stripeAccountingMigration,
+    "public.claim_stripe_event",
+    "Stripe webhook claim RPC exists in the production migration",
+  ],
+  [
+    stripeAccountingMigration,
+    "public.finalize_refund_accounting",
+    "Stripe refund accounting RPC exists in the production migration",
+  ],
+  [
+    stripeAccountingMigration,
+    "payout_adjustments_refund_unique",
+    "refund payout clawbacks are idempotent by refund id",
   ],
   [
     stripeWebhook,
