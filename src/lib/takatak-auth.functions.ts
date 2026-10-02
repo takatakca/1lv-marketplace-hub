@@ -22,6 +22,7 @@ const MARKETING_CONSENT_REVISION = "1lv-casl-opt-in-2026-10-01";
 
 type RequestPhoneCodeInput = {
   phone: string;
+  intent?: AuthIntent;
   fullName?: string;
   preferredLanguage?: string;
 };
@@ -61,16 +62,22 @@ export const requestTakatakPhoneLoginCode = createServerFn({
       return { ok: false, error: "Enter a valid Canadian phone number." };
     }
 
+    const intent: AuthIntent = data.intent === "signup" ? "signup" : "login";
+
     const fullName = (data.fullName ?? "").trim().slice(0, 200) || null;
     const requestedLanguage = (data.preferredLanguage ?? "").trim().toLowerCase();
     const preferredLanguage = ["en", "fr", "es"].includes(requestedLanguage)
       ? requestedLanguage
       : null;
 
-    const result = await requestTakatakPhoneOtp(phone, {
-      fullName,
-      preferredLanguage,
-    });
+    const result = await requestTakatakPhoneOtp(
+      phone,
+      {
+        fullName,
+        preferredLanguage,
+      },
+      intent,
+    );
     if (!result.ok) {
       return {
         ok: false,
