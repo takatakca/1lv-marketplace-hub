@@ -273,6 +273,27 @@ jobs:
       - name: Verify real TAKATAK Auth JWT and RLS boundary
         run: node scripts/ci-takatak-local-auth-session.mjs
 
+      - name: Capture local Auth and Postgres diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          echo "=== Supabase containers ==="
+          docker ps --format '{{.Names}}'
+
+          AUTH_CONTAINER="$(docker ps --format '{{.Names}}' | grep '^supabase_auth_' | head -n1)"
+          DB_CONTAINER="$(docker ps --format '{{.Names}}' | grep '^supabase_db_' | head -n1)"
+
+          if [ -n "$AUTH_CONTAINER" ]; then
+            echo "=== Auth logs (tail 200) ==="
+            docker logs "$AUTH_CONTAINER" --tail 200 2>&1
+          fi
+
+          if [ -n "$DB_CONTAINER" ]; then
+            echo "=== Postgres logs (tail 200) ==="
+            docker logs "$DB_CONTAINER" --tail 200 2>&1
+          fi
+
       - name: Stop local Supabase
         if: always()
         run: supabase stop --no-backup || true
