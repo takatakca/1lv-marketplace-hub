@@ -412,6 +412,16 @@ for (const [content, marker, label] of [
     "Stripe payout requests have a bounded network timeout",
   ],
   [
+    stripeWebhook,
+    '"finalize_refund_accounting"',
+    "Stripe webhook uses the atomic refund accounting finalizer",
+  ],
+  [
+    stripeAccountingMigration,
+    "public.finalize_refund_accounting",
+    "Stripe refund accounting RPC exists in the production migration",
+  ],
+  [
     requestOrigin,
     'DEFAULT_PUBLIC_ORIGIN = "https://1lv.ca"',
     "trusted origin helper has the canonical 1LV production origin",
@@ -543,6 +553,16 @@ for (const [content, marker, label] of [
 if (masterOutbox.includes('.in("status", ["pending", "failed"])')) {
   violations.push(
     "failed TAKATAK events must require explicit retry; automatic drain may process only pending events.",
+  );
+}
+
+if (
+  !readFileSync(join(root, "src/lib/disputes.functions.ts"), "utf8").includes(
+    'stripeRefundStatus !== "succeeded"',
+  )
+) {
+  violations.push(
+    "refund accounting must remain blocked until Stripe reports status=succeeded.",
   );
 }
 
