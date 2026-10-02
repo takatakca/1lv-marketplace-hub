@@ -146,7 +146,22 @@ function ProductPage() {
   const { add } = useCart();
   const { has, toggle } = useWishlist();
   const { push } = useRecentlyViewed();
-  useEffect(() => { push(product.id); }, [product.id, push]);
+
+  useEffect(() => {
+    setActiveImg(0);
+    setQty(1);
+
+    const nextVariant: Record<string, string> = {};
+    product.variants?.forEach((item) => {
+      const first = item.options[0];
+      if (first) nextVariant[item.name] = first;
+    });
+    setVariant(nextVariant);
+  }, [product.id]);
+
+  useEffect(() => {
+    push(product.id);
+  }, [product.id, push]);
 
   const off = product.compareAt && product.compareAt > product.price
     ? Math.round(((product.compareAt - product.price) / product.compareAt) * 100)
@@ -510,7 +525,7 @@ function ProductPage() {
 
         <RecentlyViewed excludeId={product.id} />
       </div>
-      <StickyBuyBar product={product} />
+      <StickyBuyBar product={product} quantity={qty} variant={variant} />
     </AppLayout>
   );
 }
