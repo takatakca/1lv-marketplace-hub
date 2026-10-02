@@ -228,10 +228,87 @@ export const createPaymentIntent = createServerFn({ method: "POST" })
         !Number.isSafeInteger(existingAmount) ||
         existingAmount !== amountCents ||
         existingCurrency !== expectedCurrency ||
-        existingOrderId !== order.id ||
-        existingStatus === "canceled" ||
-        !existingSecret
+        existingOrderId !== order.id
       ) {
+        throw new Error(
+          "Stored Stripe payment authorization does not match this order.",
+        );
+      }
+
+      if (existingStatus === "canceled") {
+        const replacement = await stripePost(
+          "/payment_intents",
+          {
+            amount: String(amountCents),
+            currency: expectedCurrency,
+            "automatic_payment_methods[enabled]": "true",
+            "metadata[order_id]": order.id,
+            "metadata[order_number]": order.order_number,
+            "metadata[customer_email]": order.customer_email ?? "",
+            receipt_email: order.customer_email ?? "",
+          },
+          `1lv_order_${order.id}_payment_after_${order.stripe_payment_intent_id}_v1`,
+        );
+
+        const replacementId =
+          typeof replacement.id === "string" ? replacement.id : null;
+        const replacementSecret =
+          typeof replacement.client_secret === "string"
+            ? replacement.client_secret
+            : null;
+
+        if (!replacementId || !replacementSecret) {
+          throw new Error(
+            "Stripe did not return a valid replacement PaymentIntent.",
+          );
+        }
+
+        const { data: rebound, error: reboundError } = await supabaseAdmin
+          .from("orders")
+          .update({ stripe_payment_intent_id: replacementId })
+          .eq("id", order.id)
+          .eq(
+            "stripe_payment_intent_id",
+            order.stripe_payment_intent_id,
+          )
+          .in("payment_status", ["unpaid", "failed"])
+          .select("id, stripe_payment_intent_id")
+          .maybeSingle();
+
+        if (reboundError) {
+          throw new Error(
+            "Could not persist replacement payment authorization.",
+          );
+        }
+
+        if (!rebound) {
+          const { data: currentOrder, error: currentOrderError } =
+            await supabaseAdmin
+              .from("orders")
+              .select("stripe_payment_intent_id, payment_status")
+              .eq("id", order.id)
+              .maybeSingle();
+
+          if (
+            currentOrderError ||
+            currentOrder?.stripe_payment_intent_id !== replacementId ||
+            !["unpaid", "failed"].includes(
+              String(currentOrder?.payment_status ?? ""),
+            )
+          ) {
+            throw new Error(
+              "Replacement payment authorization could not be bound safely to the order.",
+            );
+          }
+        }
+
+        return {
+          clientSecret: replacementSecret,
+          pending: false,
+        };
+      }
+
+      if (!existingSecret) {
         throw new Error(
           "Stored Stripe payment authorization does not match this order.",
         );
