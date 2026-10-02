@@ -85,6 +85,10 @@ const finalAuthMigration = readFileSync(
   join(root, "supabase/migrations/20261002034500_takatak_authenticated_session_guard.sql"),
   "utf8",
 );
+const supabaseConfig = readFileSync(
+  join(root, "supabase/config.toml"),
+  "utf8",
+);
 const payoutSchedulerServer = readFileSync(
   join(root, "src/lib/payout-scheduler.server.ts"),
   "utf8",
@@ -216,8 +220,8 @@ for (const [content, marker, label] of [
   ],
   [
     finalAuthMigration,
-    "NEW.raw_app_meta_data",
-    "database user bootstrap requires immutable Auth app metadata",
+    "normalized_email !~ '^takatak",
+    "database user bootstrap only creates profiles for deterministic TAKATAK synthetic emails",
   ],
   [
     stripeConnectFunctions,
@@ -393,6 +397,18 @@ if (
   violations.push(
     "optional Supabase auth must enforce the same verified TAKATAK JWT claims as protected server functions",
   );
+}
+
+
+for (const [pattern, label] of [
+  [/\[auth\][\s\S]*?enable_signup\s*=\s*false/, "global Supabase signup disabled"],
+  [/\[auth\][\s\S]*?enable_anonymous_sign_ins\s*=\s*false/, "anonymous Supabase sign-in disabled"],
+  [/\[auth\.email\][\s\S]*?enable_signup\s*=\s*false/, "email Supabase signup disabled"],
+  [/\[auth\.sms\][\s\S]*?enable_signup\s*=\s*false/, "SMS Supabase signup disabled"],
+]) {
+  if (!pattern.test(supabaseConfig)) {
+    violations.push("Missing Auth configuration guard: " + label);
+  }
 }
 
 if (violations.length > 0) {
