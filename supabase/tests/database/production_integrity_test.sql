@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(97);
+select plan(98);
 
 select is(
   public.get_1lv_schema_version(),
@@ -518,6 +518,19 @@ select ok(
   and has_table_privilege('service_role','public.stripe_event_log','INSERT')
   and has_table_privilege('service_role','public.stripe_event_log','UPDATE'),
   'only service role may write Stripe webhook event state'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'stripe_event_log'
+      and policyname = 'Admins read stripe events'
+      and coalesce(qual, '') like '%has_role%'
+      and coalesce(qual, '') like '%admin%'
+  ),
+  'Stripe webhook payload log remains readable only through the admin RLS policy'
 );
 
 select ok(
