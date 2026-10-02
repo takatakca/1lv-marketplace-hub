@@ -187,8 +187,16 @@ select ok(
 
 select ok(
   position(
-    '@auth\\.1lv\\.ca'
+    'normalized_email'
     in pg_get_functiondef('public.handle_new_user()'::regprocedure)
+  ) > 0
+  and position(
+    '@auth.1lv.ca'
+    in replace(
+      pg_get_functiondef('public.handle_new_user()'::regprocedure),
+      E'\\\\',
+      ''
+    )
   ) > 0
   and position(
     'raw_app_meta_data'
