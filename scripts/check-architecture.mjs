@@ -405,7 +405,12 @@ for (const [content, marker, label] of [
   [
     refundPayoutRaceMigration,
     "SELECT '20261002084500'",
-    "final production schema marker includes refund/payout race safety",
+    "refund/payout race migration retains its historical schema marker",
+  ],
+  [
+    refundVendorScopeMigration,
+    "SELECT '20261002093000'",
+    "final production schema marker includes vendor-scoped refund enforcement",
   ],
   [
     refundPayoutRaceMigration,
