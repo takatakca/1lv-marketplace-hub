@@ -292,6 +292,22 @@ try {
     "Synthetic email without immutable TAKATAK app_metadata must be denied",
   );
 
+  const { data: revoked, error: revokeError } = await magicClient.rpc(
+    "revoke_current_takatak_session",
+  );
+  assert.equal(revokeError, null, revokeError?.message);
+  assert.equal(revoked, true, "Current TAKATAK session grant was not revoked");
+  assert.equal(
+    await profileVisible(refreshed.session.access_token, takatakUserId),
+    false,
+    "Revoked session must lose RLS access immediately even before JWT expiry",
+  );
+  assert.equal(
+    await hasRole(refreshed.session.access_token, takatakUserId, "customer"),
+    false,
+    "Revoked session must lose SECURITY DEFINER authorization immediately",
+  );
+
   console.log("TAKATAK local Auth / real JWT / RLS integration: PASS");
 } finally {
   if (takatakUserId) {
