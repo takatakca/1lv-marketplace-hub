@@ -116,8 +116,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          test -f "supabase/migrations/${EXPECTED_SCHEMA_VERSION}_takatak_authenticated_session_guard.sql" || {
-            echo "ERROR: expected production schema migration is missing from this checkout."
+          EXPECTED_MIGRATION="supabase/migrations/${EXPECTED_SCHEMA_VERSION}_takatak_authorized_sessions.sql"
+          test -f "$EXPECTED_MIGRATION" || {
+            echo "ERROR: expected production schema migration is missing from this checkout: $EXPECTED_MIGRATION"
             exit 1
           }
 
