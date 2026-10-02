@@ -11,6 +11,7 @@ import {
   setVendorOrderHold,
   stripeCall,
   stripeConfigured,
+  stripeGet,
   vendorOwnerId,
   type DisputeStatus,
   type RefundStatus,
@@ -425,7 +426,7 @@ export const processApprovedRefund = createServerFn({ method: "POST" })
     if (refund.status === "refunded") {
       return { ok: true, status: "refunded" };
     }
-    if (!["approved", "failed", "processing"].includes(refund.status)) {
+    if (!["approved", "processing"].includes(refund.status)) {
       return {
         ok: false,
         status: refund.status,
@@ -486,10 +487,14 @@ export const processApprovedRefund = createServerFn({ method: "POST" })
       .update({ status: "processing", failure_reason: null })
       .eq("id", refund.id);
 
-    let stripeRefundId = refund.stripe_refund_id;
+    let stripeRefund: Record<string, unknown>;
 
-    if (!stripeRefundId) {
-      try {
+    try {
+      if (refund.stripe_refund_id) {
+        stripeRefund = await stripeGet(
+          `/refunds/${encodeURIComponent(refund.stripe_refund_id)}`,
+        );
+      } else {
         const body: Record<string, string> = {
           amount: String(Math.round(Number(refund.amount) * 100)),
           "metadata[refund_record_id]": refund.id,
@@ -501,34 +506,164 @@ export const processApprovedRefund = createServerFn({ method: "POST" })
           body.charge = order.stripe_charge_id;
         }
 
-        const created = await stripeCall(
+        stripeRefund = await stripeCall(
           "/refunds",
           body,
           `1lv_refund_${refund.id}_v1`,
         );
-        stripeRefundId =
-          typeof created.id === "string" && created.id.startsWith("re_")
-            ? created.id
-            : null;
-        if (!stripeRefundId) {
-          throw new Error("Stripe did not return a valid refund id.");
-        }
-      } catch (err) {
-        const reason = err instanceof Error ? err.message : "Refund failed";
-        await db
-          .from("refund_records")
-          .update({ status: "failed", failure_reason: reason })
-          .eq("id", refund.id);
-        if (refund.dispute_id) {
-          await notify(db, await adminUserIds(db), {
-            kind: "refund_failed",
-            title: "Refund failed",
-            body: reason,
-            disputeId: refund.dispute_id,
-          });
-        }
-        return { ok: false, status: "failed", reason };
       }
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : "Refund failed";
+      await db
+        .from("refund_records")
+        .update({ status: "failed", failure_reason: reason })
+        .eq("id", refund.id);
+      if (refund.dispute_id) {
+        await notify(db, await adminUserIds(db), {
+          kind: "refund_failed",
+          title: "Refund failed",
+          body: reason,
+          disputeId: refund.dispute_id,
+        });
+      }
+      return { ok: false, status: "failed", reason };
+    }
+
+    const stripeRefundId =
+      typeof stripeRefund.id === "string" &&
+      stripeRefund.id.startsWith("re_")
+        ? stripeRefund.id
+        : null;
+    const stripeRefundStatus =
+      typeof stripeRefund.status === "string"
+        ? stripeRefund.status
+        : "";
+    const stripeRefundAmount = Number(stripeRefund.amount ?? NaN);
+    const stripeRefundCurrency =
+      typeof stripeRefund.currency === "string"
+        ? stripeRefund.currency.toUpperCase()
+        : "";
+    const expectedRefundAmount = Math.round(Number(refund.amount) * 100);
+    const expectedRefundCurrency = String(refund.currency ?? "CAD").toUpperCase();
+    const stripeMetadata =
+      stripeRefund.metadata &&
+      typeof stripeRefund.metadata === "object" &&
+      !Array.isArray(stripeRefund.metadata)
+        ? (stripeRefund.metadata as Record<string, unknown>)
+        : {};
+    const stripeRecordId =
+      typeof stripeMetadata["refund_record_id"] === "string"
+        ? stripeMetadata["refund_record_id"]
+        : "";
+    const stripeOrderId =
+      typeof stripeMetadata["order_id"] === "string"
+        ? stripeMetadata["order_id"]
+        : "";
+
+    if (
+      !stripeRefundId ||
+      !Number.isSafeInteger(stripeRefundAmount) ||
+      stripeRefundAmount !== expectedRefundAmount ||
+      stripeRefundCurrency !== expectedRefundCurrency ||
+      stripeRecordId !== refund.id ||
+      stripeOrderId !== refund.order_id
+    ) {
+      const reason =
+        "Stripe refund response does not match the approved 1LV refund.";
+      await db
+        .from("refund_records")
+        .update({
+          status: "processing",
+          stripe_refund_id: stripeRefundId,
+          failure_reason: reason,
+        })
+        .eq("id", refund.id);
+      await notify(db, await adminUserIds(db), {
+        kind: "refund_reconciliation_required",
+        title: "Refund response needs reconciliation",
+        body: `${reason} Refund ${refund.id}.`,
+        disputeId: refund.dispute_id ?? undefined,
+      });
+      return { ok: false, status: "processing", reason };
+    }
+
+    await db
+      .from("refund_records")
+      .update({ stripe_refund_id: stripeRefundId })
+      .eq("id", refund.id);
+
+    if (
+      stripeRefundStatus === "pending" ||
+      stripeRefundStatus === "requires_action"
+    ) {
+      const reason =
+        stripeRefundStatus === "requires_action"
+          ? "Stripe requires additional action before the refund can complete. Review the refund in Stripe."
+          : "Stripe accepted the refund and it is still pending.";
+      await db
+        .from("refund_records")
+        .update({
+          status: "processing",
+          failure_reason: reason,
+        })
+        .eq("id", refund.id);
+      await notify(db, await adminUserIds(db), {
+        kind:
+          stripeRefundStatus === "requires_action"
+            ? "refund_action_required"
+            : "refund_pending",
+        title:
+          stripeRefundStatus === "requires_action"
+            ? "Stripe refund requires action"
+            : "Stripe refund pending",
+        body: `${reason} Refund ${refund.id}.`,
+        disputeId: refund.dispute_id ?? undefined,
+      });
+      return { ok: false, status: "processing", reason };
+    }
+
+    if (
+      stripeRefundStatus === "failed" ||
+      stripeRefundStatus === "canceled"
+    ) {
+      const stripeFailure =
+        typeof stripeRefund.failure_reason === "string"
+          ? stripeRefund.failure_reason
+          : stripeRefundStatus;
+      const reason = `Stripe refund ${stripeRefundStatus}: ${stripeFailure}`;
+      await db
+        .from("refund_records")
+        .update({
+          status: "failed",
+          failure_reason: reason.slice(0, 500),
+        })
+        .eq("id", refund.id);
+      await notify(db, await adminUserIds(db), {
+        kind: "refund_failed",
+        title: "Refund failed",
+        body: reason,
+        disputeId: refund.dispute_id ?? undefined,
+      });
+      return { ok: false, status: "failed", reason };
+    }
+
+    if (stripeRefundStatus !== "succeeded") {
+      const reason =
+        "Stripe returned an unknown refund status. Automatic accounting was blocked.";
+      await db
+        .from("refund_records")
+        .update({
+          status: "processing",
+          failure_reason: reason,
+        })
+        .eq("id", refund.id);
+      await notify(db, await adminUserIds(db), {
+        kind: "refund_reconciliation_required",
+        title: "Unknown Stripe refund status",
+        body: `${reason} Refund ${refund.id}.`,
+        disputeId: refund.dispute_id ?? undefined,
+      });
+      return { ok: false, status: "processing", reason };
     }
 
     const { data: accounting, error: accountingError } = await db.rpc(
