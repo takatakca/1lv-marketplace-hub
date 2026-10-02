@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(57);
+select plan(58);
 
 select is(
   public.get_1lv_schema_version(),
@@ -82,6 +82,16 @@ select ok(
     where table_schema='public' and table_name='stripe_event_log' and column_name='last_error'
   ),
   'Stripe event log stores processing state and failure details'
+);
+
+select ok(
+  not has_table_privilege('anon','public.stripe_event_log','INSERT')
+  and not has_table_privilege('anon','public.stripe_event_log','UPDATE')
+  and not has_table_privilege('authenticated','public.stripe_event_log','INSERT')
+  and not has_table_privilege('authenticated','public.stripe_event_log','UPDATE')
+  and has_table_privilege('service_role','public.stripe_event_log','INSERT')
+  and has_table_privilege('service_role','public.stripe_event_log','UPDATE'),
+  'only service role may write Stripe webhook event state'
 );
 
 select ok(
