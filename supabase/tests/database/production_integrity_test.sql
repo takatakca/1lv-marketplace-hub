@@ -2,12 +2,23 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(129);
+select plan(130);
 
 select is(
   public.get_1lv_schema_version(),
   '20261002101500',
   'production schema marker is current'
+);
+
+select ok(
+  not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'products'
+      and policyname = 'Authenticated can view active products'
+  ),
+  'authenticated customers cannot read private active-product rows directly'
 );
 
 select ok(
