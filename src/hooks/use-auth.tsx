@@ -55,9 +55,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const acceptSession = async (
       candidate: Session | null,
       signalMaster: boolean,
+      sequence: number,
     ) => {
-      const sequence = ++validationSequence;
-      if (!active) return;
+      if (!active || sequence !== validationSequence) return;
 
       if (!candidate?.user) {
         setSession(null);
@@ -85,10 +85,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      setSession(candidate);
-      await fetchRoles(candidate.user.id);
+      const nextRoles = await fetchRoles(candidate.user.id);
 
       if (!active || sequence !== validationSequence) return;
+
+      setSession(candidate);
+      setRoles(nextRoles);
 
       if (signalMaster) {
         // This event updates TAKATAK's authorized 1LV projection. It is never
@@ -101,18 +103,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Supabase recommends deferring additional Auth/Data API work outside
       // the auth-state callback to avoid callback lock/deadlock behavior.
       setLoading(true);
+      const sequence = ++validationSequence;
       setTimeout(() => {
-        void acceptSession(s, event === "SIGNED_IN").finally(() => {
-          if (active) setLoading(false);
+        void acceptSession(s, event === "SIGNED_IN", sequence).finally(() => {
+          if (active && sequence === validationSequence) {
+            setLoading(false);
+          }
         });
       }, 0);
     });
 
+    const initialSequence = ++validationSequence;
     void supabase.auth.getSession().then(async ({ data }) => {
       try {
-        await acceptSession(data.session, false);
+        await acceptSession(data.session, false, initialSequence);
       } finally {
-        if (active) setLoading(false);
+        if (active && initialSequence === validationSequence) {
+          setLoading(false);
+        }
       }
     });
 
@@ -122,9 +130,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const fetchRoles = async (userId: string) => {
-    const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-    setRoles((data ?? []).map((r) => r.role as Role));
+  const fetchRoles = async (userId: string): Promise<Role[]> => {
+    const { data, error } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+
+    if (error) return [];
+    return (data ?? []).map((r) => r.role as Role);
   };
 
   const signOut = async () => {
