@@ -145,6 +145,10 @@ const refundPayoutRaceMigration = readFileSync(
   join(root, "supabase/migrations/20261002084500_refund_payout_race_safety.sql"),
   "utf8",
 );
+const atomicPayoutMigration = readFileSync(
+  join(root, "supabase/migrations/20261002090000_atomic_payout_generation.sql"),
+  "utf8",
+);
 const ordersService = readFileSync(
   join(root, "src/services/orders.ts"),
   "utf8",
@@ -1167,12 +1171,19 @@ if (
 }
 
 if (
-  !payoutSchedulerServer.includes('.is("applied_payout_id", null)') ||
-  !payoutSchedulerServer.includes('.select("id")') ||
-  !payoutSchedulerServer.includes("(claimed ?? []).length !== ids.length")
+  !payoutSchedulerServer.includes('"create_vendor_payout_atomic"') ||
+  payoutSchedulerServer.includes('.from("payouts")\n      .insert({') ||
+  payoutSchedulerServer.includes('.from("payout_items").insert(') ||
+  !atomicPayoutMigration.includes("FOR UPDATE OF vo") ||
+  !atomicPayoutMigration.includes("pg_advisory_xact_lock") ||
+  !atomicPayoutMigration.includes("v_inserted_items <> v_item_count") ||
+  !atomicPayoutMigration.includes(
+    "v_claimed_adjustments <> v_adjustment_count",
+  ) ||
+  !atomicPayoutMigration.includes("TO service_role")
 ) {
   violations.push(
-    "payout adjustment claims must verify every expected row before finalizing a payout",
+    "payout generation must be created atomically inside PostgreSQL with locked vendor orders and adjustment count verification",
   );
 }
 
@@ -1488,15 +1499,15 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002084500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002090000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002084500"')
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002090000"')
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002084500",
+    "production health/migration gates must track schema 20261002090000",
   );
 }
 
