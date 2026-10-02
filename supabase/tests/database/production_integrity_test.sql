@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(143);
+select plan(144);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002113000',
+  '20261002114500',
   'production schema marker is current'
 );
 
@@ -48,6 +48,22 @@ select ok(
     )
   ) > 0,
   'first-order uniqueness applies only while redemption is reserved/redeemed and releases on terminal restoration'
+);
+
+select ok(
+  position(
+    'partially_refunded'
+    in pg_get_functiondef(
+      'public.enforce_first_order_promotion_identity()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'Promotion is available on the first paid order only'
+    in pg_get_functiondef(
+      'public.enforce_first_order_promotion_identity()'::regprocedure
+    )
+  ) > 0,
+  'partially refunded orders still count as prior paid orders for first-order promotions'
 );
 
 select ok(
