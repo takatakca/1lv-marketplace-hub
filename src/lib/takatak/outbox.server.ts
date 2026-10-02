@@ -9,7 +9,11 @@ import { mapCustomer, mapGuestCustomer } from "./customer-mapper";
 import { mapMerchant } from "./merchant-mapper";
 import { mapOrder } from "./order-mapper";
 import { mapRelationship } from "./relationship-mapper";
-import { sendTakatakEvent, takatakConfigured } from "./client.server";
+import {
+  normalizeTakatakMasterApiBaseUrl,
+  sendTakatakEvent,
+  takatakConfigured,
+} from "./client.server";
 import type { AggregateType, TakatakEventType } from "./types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -578,8 +582,13 @@ async function countBy(client: Db, filter: (q: any) => any): Promise<number> {
 
 export async function takatakStatus(): Promise<TakatakStatus> {
   const client = await db();
-  const url = Boolean(process.env["TAKATAK_MASTER_API_URL"]);
-  const key = Boolean(process.env["TAKATAK_1LV_API_KEY"]?.trim());
+  const url = Boolean(
+    normalizeTakatakMasterApiBaseUrl(
+      process.env["TAKATAK_MASTER_API_URL"],
+    ),
+  );
+  const key =
+    (process.env["TAKATAK_1LV_API_KEY"]?.trim().length ?? 0) >= 32;
 
   const [pending, processing, delivered, failed] = await Promise.all([
     countBy(client, (q) => q.eq("status", "pending")),
