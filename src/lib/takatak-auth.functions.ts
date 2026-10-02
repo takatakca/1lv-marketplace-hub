@@ -211,6 +211,28 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
       localMetadata["marketing_opt_in"] = data.marketingOptIn === true;
     }
 
+    let createdUserId: string | null = null;
+
+    if (!expectedUserId) {
+      // Supabase documents admin.createUser() as the explicit server-side
+      // user-creation primitive. Do not rely on generateLink("magiclink")
+      // implicitly creating a brand-new local 1LV Auth user.
+      const { data: createdUser, error: createUserError } =
+        await supabaseAdmin.auth.admin.createUser({
+          email: loginEmail,
+          email_confirm: true,
+          user_metadata: localMetadata,
+        });
+
+      if (!createUserError && createdUser.user?.id) {
+        createdUserId = createdUser.user.id;
+      }
+      // If creation raced with a previous verified signup attempt, continue
+      // to generateLink below. The deterministic synthetic email can belong
+      // only to this TAKATAK master identity; generateLink will either recover
+      // that existing user or fail closed.
+    }
+
     const { data: linkData, error: linkError } =
       await supabaseAdmin.auth.admin.generateLink({
         type: "magiclink",
@@ -229,6 +251,13 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
       return {
         ok: false,
         error: "Your verified identity conflicts with another 1LV account.",
+      };
+    }
+
+    if (createdUserId && linkUserId !== createdUserId) {
+      return {
+        ok: false,
+        error: "Could not safely initialize your 1LV account.",
       };
     }
 
