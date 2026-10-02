@@ -137,12 +137,46 @@ function Page() {
         </div>
         <div className="space-y-6">
           <div className="space-y-2 rounded-xl border border-border bg-card p-5">
-            <button onClick={() => update("accepted")} className="w-full rounded-md border border-electric/40 px-3 py-2 text-sm font-semibold text-electric">Accept order</button>
-            <button onClick={() => update("processing")} className="w-full rounded-md bg-electric px-3 py-2 text-sm font-semibold text-electric-foreground">Mark processing</button>
-            <input value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder="Tracking number" className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
-            <input value={carrier} onChange={(e) => setCarrier(e.target.value)} placeholder="Carrier" className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
-            <button onClick={() => update("shipped", true)} className="w-full rounded-md bg-success px-3 py-2 text-sm font-semibold text-white">Mark shipped</button>
-            <button onClick={() => update("delivered")} className="w-full rounded-md border border-border px-3 py-2 text-sm">Mark delivered</button>
+            {!useDemo &&
+            !["paid", "partially_refunded"].includes(vo!.orders.payment_status) ? (
+              <p className="rounded-md bg-muted px-3 py-2 text-xs font-semibold text-muted-foreground">
+                Awaiting confirmed payment before fulfillment can begin.
+              </p>
+            ) : (
+              <>
+                {vo!.status === "pending" && (
+                  <button onClick={() => update("accepted")} className="w-full rounded-md border border-electric/40 px-3 py-2 text-sm font-semibold text-electric">
+                    Accept order
+                  </button>
+                )}
+                {vo!.status === "accepted" && (
+                  <button onClick={() => update("processing")} className="w-full rounded-md bg-electric px-3 py-2 text-sm font-semibold text-electric-foreground">
+                    Mark processing
+                  </button>
+                )}
+                {(vo!.status === "processing" || vo!.status === "shipped") && (
+                  <>
+                    <input value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder="Tracking number" className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
+                    <input value={carrier} onChange={(e) => setCarrier(e.target.value)} placeholder="Carrier" className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
+                  </>
+                )}
+                {vo!.status === "processing" && (
+                  <button onClick={() => update("shipped", true)} className="w-full rounded-md bg-success px-3 py-2 text-sm font-semibold text-white">
+                    Mark shipped
+                  </button>
+                )}
+                {vo!.status === "shipped" && (
+                  <button onClick={() => update("delivered", true)} className="w-full rounded-md border border-border px-3 py-2 text-sm">
+                    Mark delivered
+                  </button>
+                )}
+                {vo!.status === "delivered" && (
+                  <p className="rounded-md bg-success/10 px-3 py-2 text-xs font-semibold text-success">
+                    Fulfillment completed.
+                  </p>
+                )}
+              </>
+            )}
             <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
               Order cancellation and refunds are handled through the admin dispute/refund workflow so a paid customer is never cancelled without financial reconciliation.
             </p>
