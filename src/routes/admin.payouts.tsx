@@ -448,9 +448,11 @@ function Page() {
                         <button type="button" disabled={busy} onClick={() => void handleTransfer(p.id)}
                           className="rounded bg-navy px-2 py-1 font-semibold text-white disabled:opacity-50">Send transfer</button>
                       )}
-                      {p.status === "failed" && (
+                      {(p.status === "failed" || p.status === "processing") && (
                         <button type="button" disabled={busy} onClick={() => void handleRetry(p.id)}
-                          className="rounded border border-electric/40 px-2 py-1 font-semibold text-electric disabled:opacity-50">Retry transfer</button>
+                          className="rounded border border-electric/40 px-2 py-1 font-semibold text-electric disabled:opacity-50">
+                          {p.status === "processing" ? "Recover transfer" : "Retry transfer"}
+                        </button>
                       )}
                       {(p.status === "paid" || p.status === "failed" || p.status === "processing") && (
                         <button type="button" disabled={busy} onClick={() => void handleReconcileOne(p.id)}
