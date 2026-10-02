@@ -367,6 +367,69 @@ async function handleEvent(evt: StripeEvent) {
       }
       break;
     }
+    case "payment_intent.canceled": {
+      const orderId = meta.order_id;
+      const paymentIntentId = typeof obj.id === "string" ? obj.id : null;
+
+      if (orderId && paymentIntentId) {
+        const { data: order, error: orderError } = await supabaseAdmin
+          .from("orders")
+          .select(
+            "id, order_number, payment_status, status, stripe_payment_intent_id, inventory_committed_at, inventory_released_at",
+          )
+          .eq("id", orderId)
+          .maybeSingle();
+
+        if (orderError) throw orderError;
+
+        if (!order || order.stripe_payment_intent_id !== paymentIntentId) {
+          await notifyAdmins(
+            supabaseAdmin,
+            "stripe_payment_cancel_order_mismatch",
+            "Stripe payment cancellation/order mismatch",
+            `Canceled PaymentIntent ${paymentIntentId} did not match the stored 1LV payment authorization. Automatic cancellation was blocked.`,
+          );
+          break;
+        }
+
+        if (
+          ["paid", "partially_refunded", "refunded"].includes(
+            order.payment_status,
+          ) ||
+          order.inventory_committed_at
+        ) {
+          await notifyAdmins(
+            supabaseAdmin,
+            "stripe_payment_cancel_after_commit",
+            `Canceled payment needs review for order ${order.order_number}`,
+            "Stripe reported a canceled PaymentIntent after 1LV considered payment/inventory committed. Automatic cancellation was blocked.",
+          );
+          break;
+        }
+
+        if (!order.inventory_released_at) {
+          const { error: releaseError } = await supabaseAdmin.rpc(
+            "release_order_inventory" as never,
+            { _order_id: order.id } as never,
+          );
+          if (releaseError) throw releaseError;
+        }
+
+        const { error: cancelError } = await supabaseAdmin
+          .from("orders")
+          .update({
+            payment_status: "failed",
+            status: "cancelled",
+          })
+          .eq("id", order.id)
+          .eq("stripe_payment_intent_id", paymentIntentId)
+          .in("payment_status", ["unpaid", "failed"])
+          .is("inventory_committed_at", null);
+
+        if (cancelError) throw cancelError;
+      }
+      break;
+    }
     case "charge.refunded": {
       const paymentIntentId =
         typeof (obj as { payment_intent?: string }).payment_intent === "string"
