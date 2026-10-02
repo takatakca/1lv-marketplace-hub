@@ -11,6 +11,7 @@ CREATE TABLE public.profile_consent_events (
   terms_accepted boolean NOT NULL,
   privacy_accepted boolean NOT NULL,
   marketing_opt_in boolean NOT NULL DEFAULT false,
+  marketing_consent_revision text,
   source text NOT NULL DEFAULT '1lv_signup',
   captured_at timestamptz NOT NULL DEFAULT now(),
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -20,6 +21,15 @@ CREATE TABLE public.profile_consent_events (
     CHECK (privacy_accepted),
   CONSTRAINT profile_consent_events_revision_required
     CHECK (length(btrim(consent_revision)) > 0),
+  CONSTRAINT profile_consent_events_marketing_revision
+    CHECK (
+      (NOT marketing_opt_in AND marketing_consent_revision IS NULL)
+      OR (
+        marketing_opt_in
+        AND marketing_consent_revision IS NOT NULL
+        AND length(btrim(marketing_consent_revision)) > 0
+      )
+    ),
   CONSTRAINT profile_consent_events_source_required
     CHECK (length(btrim(source)) > 0)
 );
