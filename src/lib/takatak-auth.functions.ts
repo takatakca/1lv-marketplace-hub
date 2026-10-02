@@ -562,7 +562,7 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
       authMethods.has("oauth") ||
       authMethods.has("recovery")
     ) {
-      await exchangeClient.auth.signOut();
+      await exchangeClient.auth.signOut({ scope: "local" });
       return {
         ok: false,
         error: "Could not validate your verified 1LV session.",
@@ -578,7 +578,7 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
       } as never);
 
     if (grantError) {
-      await exchangeClient.auth.signOut();
+      await exchangeClient.auth.signOut({ scope: "local" });
       return {
         ok: false,
         error: "Could not authorize your verified 1LV session.",
