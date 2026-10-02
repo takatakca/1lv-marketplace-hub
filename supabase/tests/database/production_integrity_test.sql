@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(38);
+select plan(39);
 
 select is(
   public.get_1lv_schema_version(),
@@ -187,14 +187,14 @@ select ok(
 
 select ok(
   position(
-    'raw_app_meta_data'
+    '@auth\\.1lv\\.ca'
     in pg_get_functiondef('public.handle_new_user()'::regprocedure)
   ) > 0
   and position(
-    'GROUPE TAKATAK'
+    'raw_app_meta_data'
     in pg_get_functiondef('public.handle_new_user()'::regprocedure)
-  ) > 0,
-  'direct local Supabase signup cannot bootstrap a 1LV user'
+  ) = 0,
+  'Auth trigger bootstraps only deterministic TAKATAK synthetic-email profiles without relying on GoTrue app-metadata timing'
 );
 
 select ok(
@@ -226,6 +226,17 @@ select set_config(
 select ok(
   public.is_takatak_authorized_session(),
   'a synthetic TAKATAK local magic-link session is authorized'
+);
+
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-4222-8222-222222222222","email":"takatak.11111111-1111-4111-8111-111111111111@auth.1lv.ca","app_metadata":{},"amr":[{"method":"magiclink"}]}',
+  true
+);
+
+select ok(
+  not public.is_takatak_authorized_session(),
+  'a synthetic local email without TAKATAK app metadata is rejected'
 );
 
 select set_config(
