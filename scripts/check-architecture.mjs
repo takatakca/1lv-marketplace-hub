@@ -72,6 +72,11 @@ for (const [content, marker, label] of [
   [masterClient, 'source_application: "1lv"', "1LV source binding"],
   [
     masterClient,
+    'process.env["TAKATAK_1LV_API_KEY"]',
+    "dedicated 1LV API credential",
+  ],
+  [
+    masterClient,
     'json["authority"] !== "takatak_supabase_phone"',
     "TAKATAK OTP authority assertion",
   ],
@@ -122,6 +127,12 @@ for (const [content, marker, label] of [
   if (!content.includes(marker)) {
     violations.push("Missing architecture guard: " + label);
   }
+}
+
+if (masterClient.includes("TAKATAK_MASTER_API_KEY")) {
+  violations.push(
+    "src/lib/takatak/client.server.ts: generic TAKATAK_MASTER_API_KEY must not return",
+  );
 }
 
 if (violations.length > 0) {
