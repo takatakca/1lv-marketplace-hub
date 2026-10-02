@@ -73,6 +73,18 @@ const masterOutbox = readFileSync(
   join(root, "src/lib/takatak/outbox.server.ts"),
   "utf8",
 );
+const authMiddleware = readFileSync(
+  join(root, "src/integrations/supabase/auth-middleware.ts"),
+  "utf8",
+);
+const authProvider = readFileSync(
+  join(root, "src/hooks/use-auth.tsx"),
+  "utf8",
+);
+const finalAuthMigration = readFileSync(
+  join(root, "supabase/migrations/20261001214500_profile_consent_audit.sql"),
+  "utf8",
+);
 const payoutSchedulerServer = readFileSync(
   join(root, "src/lib/payout-scheduler.server.ts"),
   "utf8",
@@ -155,13 +167,53 @@ for (const [content, marker, label] of [
   ],
   [
     authBridge,
-    'metadata["takatak_person_id"] !== identity.id',
-    "duplicate local auth user must match the exact TAKATAK identity",
+    "app_metadata: immutableAppMetadata",
+    "TAKATAK authorization marker is stored in immutable app_metadata",
   ],
   [
     authBridge,
-    'metadata["auth_source"] !== "takatak"',
-    "duplicate local auth user must already be TAKATAK-owned",
+    "appMetadataMatchesIdentity",
+    "duplicate/local Auth users must match the exact TAKATAK identity",
+  ],
+  [
+    authBridge,
+    "supabaseAdmin.auth.admin.updateUserById",
+    "existing linked users are promoted to immutable TAKATAK local auth",
+  ],
+  [
+    authMiddleware,
+    "requireTakatakSessionClaims",
+    "server functions reject non-TAKATAK Supabase sessions",
+  ],
+  [
+    authMiddleware,
+    "methods.has('magiclink') || methods.has('otp')",
+    "server functions require the local TAKATAK bridge authentication method",
+  ],
+  [
+    authMiddleware,
+    "'password'",
+    "server session gate explicitly rejects local password authentication",
+  ],
+  [
+    authProvider,
+    "isTakatakLocalUser",
+    "browser AuthProvider ignores stray local Supabase sessions",
+  ],
+  [
+    finalAuthMigration,
+    "public.is_takatak_authorized_session()",
+    "database has a TAKATAK session authority helper",
+  ],
+  [
+    finalAuthMigration,
+    "AS RESTRICTIVE",
+    "database RLS applies a restrictive TAKATAK session gate",
+  ],
+  [
+    finalAuthMigration,
+    "NEW.raw_app_meta_data",
+    "database user bootstrap requires immutable Auth app metadata",
   ],
   [
     masterClient,
@@ -235,6 +287,25 @@ for (const [content, marker, label] of [
 if (masterOutbox.includes('.in("status", ["pending", "failed"])')) {
   violations.push(
     "failed TAKATAK events must require explicit retry; automatic drain may process only pending events.",
+  );
+}
+
+if (
+  authMiddleware.includes("user_metadata") ||
+  finalAuthMigration.includes("auth.jwt() -> 'user_metadata'")
+) {
+  violations.push(
+    "authorization must never trust mutable user_metadata; use immutable app_metadata only.",
+  );
+}
+
+if (
+  !finalAuthMigration.includes(
+    "'password',\n        'oauth',\n        'recovery'",
+  )
+) {
+  violations.push(
+    "database TAKATAK session gate must explicitly reject alternate local authentication methods.",
   );
 }
 
