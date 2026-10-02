@@ -91,6 +91,13 @@ for (const [content, marker, label] of [
     'pathname = "/api"',
     "TAKATAK origin-to-/api normalization",
   ],
+  [
+    masterClient,
+    'input.aggregateType === "customer"',
+    "customer aggregate remote-id routing",
+  ],
+  [masterClient, '["identity_id"]', "TAKATAK master identity response key"],
+  [masterClient, '["merchant_id"]', "TAKATAK master merchant response key"],
   [authBridge, 'auth_source: "takatak"', "TAKATAK local session marker"],
   [
     authBridge,
