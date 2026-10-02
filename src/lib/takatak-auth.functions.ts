@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { createClient } from "@supabase/supabase-js";
 
 import {
   requestTakatakPhoneOtp,
@@ -12,7 +13,7 @@ type PhoneActionResult =
   | { ok: false; error: string; setupRequired?: boolean };
 
 type PhoneLoginResult =
-  | { ok: true; tokenHash: string }
+  | { ok: true; accessToken: string; refreshToken: string }
   | { ok: false; error: string; setupRequired?: boolean };
 
 type AuthIntent = "login" | "signup";
@@ -474,5 +475,119 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
       // cannot be queued on this request.
     }
 
-    return { ok: true, tokenHash };
+    // Exchange the one-time local magic-link on the trusted server. The
+    // browser never performs the bootstrap exchange directly, which lets 1LV
+    // record the exact Supabase session_id that was created only after TAKATAK
+    // phone verification succeeded.
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabasePublishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
+    if (!supabaseUrl || !supabasePublishableKey) {
+      return {
+        ok: false,
+        error: "Local 1LV session service is not configured.",
+        setupRequired: true,
+      };
+    }
+
+    const exchangeClient = createClient(
+      supabaseUrl,
+      supabasePublishableKey,
+      {
+        auth: {
+          storage: undefined,
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      },
+    );
+
+    const { data: localAuth, error: localAuthError } =
+      await exchangeClient.auth.verifyOtp({
+        type: "magiclink",
+        token_hash: tokenHash,
+      });
+
+    const localSession = localAuth.session;
+    if (
+      localAuthError ||
+      !localSession?.access_token ||
+      !localSession.refresh_token
+    ) {
+      return {
+        ok: false,
+        error: "Could not establish your verified 1LV session.",
+      };
+    }
+
+    const { data: claimData, error: claimError } =
+      await exchangeClient.auth.getClaims(localSession.access_token);
+    const claims =
+      (claimData?.claims ?? {}) as Record<string, unknown>;
+    const sessionId =
+      typeof claims["session_id"] === "string"
+        ? claims["session_id"]
+        : "";
+    const sessionUserId =
+      typeof claims["sub"] === "string" ? claims["sub"] : "";
+    const sessionEmail =
+      typeof claims["email"] === "string"
+        ? claims["email"].trim().toLowerCase()
+        : "";
+    const sessionAppMetadata =
+      claims["app_metadata"] &&
+      typeof claims["app_metadata"] === "object" &&
+      !Array.isArray(claims["app_metadata"])
+        ? (claims["app_metadata"] as Record<string, unknown>)
+        : {};
+    const authMethods = new Set(
+      (Array.isArray(claims["amr"]) ? claims["amr"] : [])
+        .map((entry) =>
+          entry && typeof entry === "object" && !Array.isArray(entry)
+            ? (entry as Record<string, unknown>)["method"]
+            : null,
+        )
+        .filter((method): method is string => typeof method === "string"),
+    );
+
+    if (
+      claimError ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        sessionId,
+      ) ||
+      sessionUserId !== linkUserId ||
+      sessionEmail !== loginEmail.toLowerCase() ||
+      !appMetadataMatchesIdentity(sessionAppMetadata, identity.id) ||
+      (!authMethods.has("magiclink") && !authMethods.has("otp")) ||
+      authMethods.has("password") ||
+      authMethods.has("oauth") ||
+      authMethods.has("recovery")
+    ) {
+      await exchangeClient.auth.signOut();
+      return {
+        ok: false,
+        error: "Could not validate your verified 1LV session.",
+      };
+    }
+
+    const { error: grantError } = await supabaseAdmin
+      .from("takatak_authorized_sessions" as never)
+      .insert({
+        session_id: sessionId,
+        user_id: linkUserId,
+        takatak_person_id: identity.id,
+      } as never);
+
+    if (grantError) {
+      await exchangeClient.auth.signOut();
+      return {
+        ok: false,
+        error: "Could not authorize your verified 1LV session.",
+      };
+    }
+
+    return {
+      ok: true,
+      accessToken: localSession.access_token,
+      refreshToken: localSession.refresh_token,
+    };
   });
