@@ -121,6 +121,10 @@ const vendorPaidVisibilityMigration = readFileSync(
   join(root, "supabase/migrations/20261002073000_vendor_paid_order_visibility.sql"),
   "utf8",
 );
+const vendorInventoryGateMigration = readFileSync(
+  join(root, "supabase/migrations/20261002074500_vendor_inventory_commit_gate.sql"),
+  "utf8",
+);
 const vendorInventoryCommitMigration = readFileSync(
   join(root, "supabase/migrations/20261002074500_vendor_inventory_commit_gate.sql"),
   "utf8",
@@ -379,9 +383,29 @@ for (const [content, marker, label] of [
     "session grant lookup can enforce a private registry without exposing it",
   ],
   [
-    vendorPaidVisibilityMigration,
-    "SELECT '20261002073000'",
-    "final production schema marker includes paid-order vendor privacy",
+    vendorInventoryGateMigration,
+    "SELECT '20261002074500'",
+    "final production schema marker includes committed-inventory vendor gate",
+  ],
+  [
+    vendorInventoryGateMigration,
+    "Vendor fulfillment requires committed inventory",
+    "paid inventory-conflict orders remain blocked from vendor fulfillment",
+  ],
+  [
+    vendorInventoryGateMigration,
+    "inventory_committed_at IS NOT NULL",
+    "vendor visibility requires inventory commitment",
+  ],
+  [
+    vendorInventoryGateMigration,
+    "inventory_released_at IS NULL",
+    "released inventory orders stay hidden from vendors",
+  ],
+  [
+    vendorInventoryGateMigration,
+    "public.vendor_can_view_paid_order_scope",
+    "inventory-gated vendor visibility remains non-recursive through narrow helpers",
   ],
   [
     vendorInventoryCommitMigration,
