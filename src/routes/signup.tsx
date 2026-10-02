@@ -193,7 +193,7 @@ function Signup() {
               className="mt-0.5 h-4 w-4 rounded border-border accent-electric"
             />
             <span className="text-muted-foreground">
-              Send me 1LV deals, coupons, and new arrivals. I can opt out later.
+              I agree to receive promotional emails or texts from 1LV.CA about deals, coupons, and new arrivals. I can unsubscribe at any time. Questions: support@1lv.ca.
             </span>
           </label>
 
