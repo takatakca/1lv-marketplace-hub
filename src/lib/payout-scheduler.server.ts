@@ -621,12 +621,28 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
       typeof json.destination === "string"
         ? json.destination
         : ((json.destination as { id?: string } | undefined)?.id ?? null);
+    const actualMetadata =
+      json.metadata &&
+      typeof json.metadata === "object" &&
+      !Array.isArray(json.metadata)
+        ? (json.metadata as Record<string, unknown>)
+        : {};
+    const actualPayoutId =
+      typeof actualMetadata["payout_id"] === "string"
+        ? actualMetadata["payout_id"]
+        : "";
+    const actualVendorId =
+      typeof actualMetadata["vendor_id"] === "string"
+        ? actualMetadata["vendor_id"]
+        : "";
 
     if (
       !Number.isSafeInteger(actualAmount) ||
       actualAmount !== expectedAmount ||
       actualCurrency !== expectedCurrency ||
-      actualDestination !== destination
+      actualDestination !== destination ||
+      actualPayoutId !== payout.id ||
+      actualVendorId !== payout.vendor_id
     ) {
       await db
         .from("payouts")
@@ -755,6 +771,7 @@ export type ReconClass =
   | "amount_mismatch"
   | "currency_mismatch"
   | "destination_mismatch"
+  | "metadata_mismatch"
   | "failed"
   | "unknown";
 
@@ -865,6 +882,23 @@ export async function reconcileOne(db: Db, payoutId: string): Promise<ReconResul
       "Transfer destination does not match the vendor payout account.",
     );
   }
+
+  const transferMetadata =
+    transfer.metadata &&
+    typeof transfer.metadata === "object" &&
+    !Array.isArray(transfer.metadata)
+      ? (transfer.metadata as Record<string, unknown>)
+      : {};
+  if (
+    transferMetadata["payout_id"] !== payout.id ||
+    transferMetadata["vendor_id"] !== payout.vendor_id
+  ) {
+    return finish(
+      "metadata_mismatch",
+      "Stripe transfer metadata does not match this 1LV payout.",
+    );
+  }
+
   if (transfer.reversed === true) {
     return finish("failed", "Stripe reports this transfer as reversed.");
   }
