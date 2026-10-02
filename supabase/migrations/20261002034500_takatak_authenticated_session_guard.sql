@@ -64,8 +64,12 @@ FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.is_takatak_authorized_session()
 TO authenticated, service_role;
 
--- Reject direct local Supabase user creation at the auth.users trigger boundary.
--- Server-side TAKATAK provisioning writes immutable raw_app_meta_data first.
+-- Bootstrap the local 1LV profile only for the deterministic synthetic
+-- email that the trusted server creates after GROUPE TAKATAK phone
+-- verification. Do not reject auth.users INSERTs here: GoTrue does not
+-- guarantee raw_app_meta_data is visible to this trigger at the same point
+-- during admin provisioning. Authorization remains fail-closed at the Auth
+-- configuration + JWT/RLS layers below.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -73,21 +77,10 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 DECLARE
-  master_id text :=
-    COALESCE(NEW.raw_app_meta_data ->> 'takatak_person_id', '');
-  auth_source text :=
-    COALESCE(NEW.raw_app_meta_data ->> 'auth_source', '');
-  expected_email text;
+  normalized_email text := lower(COALESCE(NEW.email, ''));
 BEGIN
-  expected_email :=
-    'takatak.' || lower(master_id) || '@auth.1lv.ca';
-
-  IF auth_source <> 'takatak'
-     OR master_id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
-     OR lower(COALESCE(NEW.email, '')) <> expected_email THEN
-    RAISE EXCEPTION
-      '1LV Auth users must be provisioned through GROUPE TAKATAK'
-      USING ERRCODE = '42501';
+  IF normalized_email !~ '^takatak\.[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}@auth\.1lv\.ca$' THEN
+    RETURN NEW;
   END IF;
 
   INSERT INTO public.profiles (id, display_name, avatar_url)
@@ -98,10 +91,12 @@ BEGIN
       split_part(NEW.email, '@', 1)
     ),
     NEW.raw_user_meta_data ->> 'avatar_url'
-  );
+  )
+  ON CONFLICT (id) DO NOTHING;
 
   INSERT INTO public.user_roles (user_id, role)
-  VALUES (NEW.id, 'customer');
+  VALUES (NEW.id, 'customer')
+  ON CONFLICT (user_id, role) DO NOTHING;
 
   RETURN NEW;
 END;
