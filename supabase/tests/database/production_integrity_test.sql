@@ -2,12 +2,85 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(115);
+select plan(121);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002094500',
+  '20261002100000',
   'production schema marker is current'
+);
+
+select ok(
+  to_regprocedure('public.enforce_vendor_product_authority()') is not null
+  and exists (
+    select 1
+    from pg_trigger
+    where tgname = 'products_vendor_authority'
+      and tgrelid = 'public.products'::regclass
+      and not tgisinternal
+  ),
+  'vendor product authority trigger is installed'
+);
+
+select ok(
+  not (
+    select p.prosecdef
+    from pg_proc as p
+    where p.oid = 'public.enforce_vendor_product_authority()'::regprocedure
+  ),
+  'vendor product authority trigger runs as SECURITY INVOKER'
+);
+
+select ok(
+  position(
+    'Only marketplace admins may approve or reject products'
+    in pg_get_functiondef(
+      'public.enforce_vendor_product_authority()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'NEW.status := ''pending_review''::public.product_status'
+    in pg_get_functiondef(
+      'public.enforce_vendor_product_authority()'::regprocedure
+    )
+  ) > 0,
+  'vendors cannot self-approve and commercial edits return active products to review'
+);
+
+select ok(
+  position(
+    'subscription_status IN (''active'', ''trialing'')'
+    in pg_get_functiondef(
+      'public.enforce_vendor_product_authority()'::regprocedure
+    )
+  ) > 0,
+  'product review submission requires an active subscribed vendor'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'products'
+      and policyname = 'Vendors update own products'
+      and coalesce(qual, '') like '%user_id%'
+      and coalesce(with_check, '') like '%user_id%'
+  ),
+  'vendor product update policy preserves ownership in USING and WITH CHECK'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'products'
+      and policyname = 'Vendors insert own products'
+      and coalesce(with_check, '') like '%pending_review%'
+      and coalesce(with_check, '') like '%draft%'
+  ),
+  'vendor product insert policy permits only draft or pending-review status'
 );
 
 select ok(
