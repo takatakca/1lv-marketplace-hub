@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { getOptionalSupabaseUserId } from "@/integrations/supabase/optional-auth.server";
 import { verifyGuestPaymentToken } from "@/lib/guest-payment-token.server";
@@ -233,7 +234,6 @@ export const createVendorSubscriptionCheckout = createServerFn({
     (data: {
       vendorId: string;
       plan: "starter" | "growth" | "scale";
-      returnOrigin: string;
     }) => data,
   )
   .handler(async ({ data, context }): Promise<VendorCheckoutResult> => {
@@ -277,7 +277,20 @@ export const createVendorSubscriptionCheckout = createServerFn({
         .eq("id", vendor.id);
     }
 
-    const origin = data.returnOrigin.replace(/\/$/, "");
+    const request = getRequest();
+    if (!request?.url) {
+      throw new Error("Could not resolve the trusted 1LV return origin.");
+    }
+
+    const requestUrl = new URL(request.url);
+    const localDevelopment =
+      requestUrl.hostname === "localhost" ||
+      requestUrl.hostname === "127.0.0.1";
+    if (requestUrl.protocol !== "https:" && !localDevelopment) {
+      throw new Error("Stripe subscription return origin must use HTTPS.");
+    }
+
+    const origin = requestUrl.origin;
     const session = await stripePost("/checkout/sessions", {
       mode: "subscription",
       customer: customerId,
