@@ -650,6 +650,8 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
     };
   }
 
+  let confirmedTransferId: string | null = null;
+
   try {
     const key = process.env.STRIPE_SECRET_KEY!;
     const expectedAmount = Math.round(Number(payout.net_amount) * 100);
@@ -723,6 +725,8 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
       };
     }
 
+    confirmedTransferId = transferId;
+
     const { data: paid, error: paidError } = await db
       .from("payouts")
       .update({
@@ -747,6 +751,53 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
     return { ok: true, status: "paid" };
   } catch (err) {
     const reason = err instanceof Error ? err.message : "Transfer failed";
+
+    if (confirmedTransferId) {
+      // Stripe has already returned a transfer that matches this payout. Never
+      // downgrade that known transfer to a retryable "failed" state: a second
+      // logical transfer is unnecessary. Persist the transfer reference when
+      // possible and require reconciliation to repair the local paid state.
+      const { data: current } = await db
+        .from("payouts")
+        .select("status, stripe_transfer_id")
+        .eq("id", payout.id)
+        .maybeSingle();
+
+      if (
+        current?.status === "paid" &&
+        current.stripe_transfer_id === confirmedTransferId
+      ) {
+        return { ok: true, status: "paid" };
+      }
+
+      await db
+        .from("payouts")
+        .update({
+          status: "processing",
+          stripe_transfer_id: confirmedTransferId,
+          failure_reason:
+            "Stripe transfer succeeded; local finalization requires reconciliation.",
+          next_retry_at: null,
+        })
+        .eq("id", payout.id)
+        .eq("status", "processing")
+        .is("stripe_transfer_id", null);
+
+      await notifyAdmins(
+        db,
+        "payout_transfer_reconciliation_required",
+        "Payout transfer needs reconciliation",
+        `Payout ${payout.id.slice(0, 8)} has a confirmed Stripe transfer but local finalization did not complete.`,
+      );
+
+      return {
+        ok: false,
+        status: "processing",
+        reason:
+          "Stripe transfer succeeded but the payout could not be finalized locally. Reconcile before any further action.",
+      };
+    }
+
     const exhausted = attempt >= settings.maxTransferAttempts;
     await db
       .from("payouts")
@@ -793,7 +844,7 @@ export async function reconcileOne(db: Db, payoutId: string): Promise<ReconResul
   const checkedAt = new Date().toISOString();
   const { data: row } = await db
     .from("payouts")
-    .select("id, vendor_id, status, net_amount, currency, stripe_transfer_id")
+    .select("id, vendor_id, status, net_amount, currency, stripe_transfer_id, paid_at")
     .eq("id", payoutId)
     .maybeSingle();
   const payout = row as {
@@ -803,6 +854,7 @@ export async function reconcileOne(db: Db, payoutId: string): Promise<ReconResul
     net_amount: number;
     currency: string;
     stripe_transfer_id: string | null;
+    paid_at: string | null;
   } | null;
 
   if (!payout) return { payoutId, classification: "unknown", note: "Payout not found", checkedAt };
@@ -823,10 +875,22 @@ export async function reconcileOne(db: Db, payoutId: string): Promise<ReconResul
     return { payoutId: payout.id, classification, note, checkedAt };
   };
 
-  if (payout.status === "failed") return finish("failed", "Local payout is marked failed.");
   if (!payout.stripe_transfer_id) {
-    if (payout.status === "paid") return finish("missing_transfer", "Marked paid but no transfer reference.");
-    return { payoutId: payout.id, classification: "unknown", note: "No transfer to reconcile yet.", checkedAt };
+    if (payout.status === "paid") {
+      return finish("missing_transfer", "Marked paid but no transfer reference.");
+    }
+    if (payout.status === "failed") {
+      return finish(
+        "failed",
+        "Local payout failed before a Stripe transfer reference was recorded.",
+      );
+    }
+    return {
+      payoutId: payout.id,
+      classification: "unknown",
+      note: "No transfer to reconcile yet.",
+      checkedAt,
+    };
   }
   if (!stripeConfigured()) {
     return {
@@ -874,6 +938,24 @@ export async function reconcileOne(db: Db, payoutId: string): Promise<ReconResul
   }
   if (transfer.reversed === true) {
     return finish("failed", "Stripe reports this transfer as reversed.");
+  }
+
+  const { error: repairError } = await db
+    .from("payouts")
+    .update({
+      status: "paid",
+      paid_at: payout.paid_at ?? checkedAt,
+      failure_reason: null,
+      next_retry_at: null,
+    })
+    .eq("id", payout.id)
+    .eq("stripe_transfer_id", payout.stripe_transfer_id);
+
+  if (repairError) {
+    return finish(
+      "unknown",
+      "Stripe transfer matches, but the local paid state could not be repaired.",
+    );
   }
 
   return finish("matched", "Local payout matches the Stripe transfer.");
