@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(63);
+select plan(66);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002062000',
+  '20261002064000',
   'production schema marker is current'
 );
 
@@ -166,6 +166,47 @@ select is(
   ),
   false,
   'duplicate processing Stripe event claim is rejected'
+);
+
+update public.stripe_event_log
+set updated_at = now() - interval '11 minutes'
+where id = 'evt_pgtap_atomic_claim';
+
+select is(
+  public.claim_stripe_event(
+    'evt_pgtap_atomic_claim',
+    'payment_intent.succeeded',
+    '{"id":"evt_pgtap_atomic_claim","type":"payment_intent.succeeded"}'::jsonb
+  ),
+  true,
+  'stale processing Stripe event claim can be recovered after the lease expires'
+);
+
+select is(
+  public.claim_stripe_event(
+    'evt_pgtap_atomic_claim',
+    'payment_intent.succeeded',
+    '{"id":"evt_pgtap_atomic_claim","type":"payment_intent.succeeded"}'::jsonb
+  ),
+  false,
+  'freshly reclaimed Stripe event remains exclusive'
+);
+
+update public.stripe_event_log
+set
+  status = 'processed',
+  processed_at = now(),
+  updated_at = now() - interval '11 minutes'
+where id = 'evt_pgtap_atomic_claim';
+
+select is(
+  public.claim_stripe_event(
+    'evt_pgtap_atomic_claim',
+    'payment_intent.succeeded',
+    '{"id":"evt_pgtap_atomic_claim","type":"payment_intent.succeeded"}'::jsonb
+  ),
+  false,
+  'processed Stripe event is never reclaimed even when old'
 );
 
 select ok(
