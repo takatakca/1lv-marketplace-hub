@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(121);
+select plan(122);
 
 select is(
   public.get_1lv_schema_version(),
@@ -81,6 +81,19 @@ select ok(
       and coalesce(with_check, '') like '%draft%'
   ),
   'vendor product insert policy permits only draft or pending-review status'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'products'
+      and policyname = 'Vendors delete own products'
+      and coalesce(qual, '') like '%draft%'
+      and coalesce(qual, '') like '%user_id%'
+  ),
+  'vendors may hard-delete only their own draft products'
 );
 
 select ok(
