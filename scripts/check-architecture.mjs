@@ -1948,6 +1948,23 @@ if (
 }
 
 if (
+  !healthRoute.includes(
+    'EXPECTED_SUPABASE_PROJECT_REF = "odoybkshqszucvoxzjyz"',
+  ) ||
+  !healthRoute.includes("supabaseTargetConfigured") ||
+  !deployWorkflow.includes(
+    'EXPECTED_SUPABASE_URL="https://odoybkshqszucvoxzjyz.supabase.co"',
+  ) ||
+  !deployWorkflow.includes(
+    'VITE_SUPABASE_URL%/}" != "$EXPECTED_SUPABASE_URL"',
+  )
+) {
+  violations.push(
+    "frontend build and server runtime must remain pinned to the exact 1LV Supabase production project",
+  );
+}
+
+if (
   !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002120000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
   !readFileSync(
