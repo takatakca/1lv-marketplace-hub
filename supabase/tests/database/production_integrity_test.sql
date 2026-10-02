@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(31);
+select plan(38);
 
 select is(
   public.get_1lv_schema_version(),
@@ -163,6 +163,91 @@ select ok(
   has_table_privilege('service_role', 'public.profile_consent_events', 'SELECT')
   and has_table_privilege('service_role', 'public.profile_consent_events', 'INSERT'),
   'service role can append and inspect signup consent evidence'
+);
+
+
+select ok(
+  to_regprocedure('public.is_takatak_authorized_session()') is not null,
+  'TAKATAK session authority helper exists'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.is_takatak_authorized_session()',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.is_takatak_authorized_session()',
+    'EXECUTE'
+  ),
+  'TAKATAK session authority helper is available only to authenticated/server roles'
+);
+
+select ok(
+  position(
+    'raw_app_meta_data'
+    in pg_get_functiondef('public.handle_new_user()'::regprocedure)
+  ) > 0
+  and position(
+    'GROUPE TAKATAK'
+    in pg_get_functiondef('public.handle_new_user()'::regprocedure)
+  ) > 0,
+  'direct local Supabase signup cannot bootstrap a 1LV user'
+);
+
+select ok(
+  not exists (
+    select 1
+    from pg_class as c
+    join pg_namespace as n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relkind = 'r'
+      and c.relrowsecurity
+      and not exists (
+        select 1
+        from pg_policies as p
+        where p.schemaname = 'public'
+          and p.tablename = c.relname
+          and p.policyname = 'TAKATAK authenticated sessions only'
+          and p.permissive = 'RESTRICTIVE'
+      )
+  ),
+  'every public RLS table has the restrictive TAKATAK authenticated-session gate'
+);
+
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-4222-8222-222222222222","email":"takatak.11111111-1111-4111-8111-111111111111@auth.1lv.ca","app_metadata":{"auth_source":"takatak","takatak_person_id":"11111111-1111-4111-8111-111111111111"},"amr":[{"method":"magiclink"}]}',
+  true
+);
+
+select ok(
+  public.is_takatak_authorized_session(),
+  'a synthetic TAKATAK local magic-link session is authorized'
+);
+
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-4222-8222-222222222222","email":"takatak.11111111-1111-4111-8111-111111111111@auth.1lv.ca","app_metadata":{"auth_source":"takatak","takatak_person_id":"11111111-1111-4111-8111-111111111111"},"amr":[{"method":"password"}]}',
+  true
+);
+
+select ok(
+  not public.is_takatak_authorized_session(),
+  'a direct local password session is rejected even with TAKATAK app metadata'
+);
+
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-4222-8222-222222222222","email":"attacker@example.invalid","app_metadata":{"auth_source":"takatak","takatak_person_id":"11111111-1111-4111-8111-111111111111"},"amr":[{"method":"magiclink"}]}',
+  true
+);
+
+select ok(
+  not public.is_takatak_authorized_session(),
+  'TAKATAK metadata cannot authorize a non-synthetic local email'
 );
 
 select ok(
