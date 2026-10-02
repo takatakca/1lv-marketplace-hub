@@ -342,6 +342,30 @@ select ok(
 
 set local session_replication_role = replica;
 
+insert into auth.users (
+  id,
+  aud,
+  role,
+  email,
+  email_confirmed_at,
+  raw_app_meta_data,
+  raw_user_meta_data,
+  created_at,
+  updated_at
+)
+values (
+  '22222222-2222-4222-8222-222222222222'::uuid,
+  'authenticated',
+  'authenticated',
+  'takatak.11111111-1111-4111-8111-111111111111@auth.1lv.ca',
+  now(),
+  '{"auth_source":"takatak","takatak_person_id":"11111111-1111-4111-8111-111111111111"}'::jsonb,
+  '{}'::jsonb,
+  now(),
+  now()
+)
+on conflict (id) do nothing;
+
 insert into public.takatak_authorized_sessions (
   session_id,
   user_id,
@@ -418,14 +442,10 @@ select set_config(
   true
 );
 
-set local session_replication_role = replica;
-
 select ok(
   public.revoke_current_takatak_session(),
   'an active TAKATAK session can revoke only its own grant'
 );
-
-set local session_replication_role = origin;
 
 select ok(
   not public.is_takatak_authorized_session(),
