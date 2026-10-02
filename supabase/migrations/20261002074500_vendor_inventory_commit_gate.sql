@@ -277,6 +277,66 @@ TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.vendor_can_view_paid_order_scope(uuid, uuid)
 TO authenticated, service_role;
 
+CREATE OR REPLACE FUNCTION public.vendor_can_view_paid_order(
+  _order_id uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT
+    auth.uid() IS NOT NULL
+    AND public.is_takatak_authorized_session()
+    AND EXISTS (
+      SELECT 1
+      FROM public.orders AS o
+      JOIN public.order_items AS oi ON oi.order_id = o.id
+      JOIN public.vendors AS v ON v.id = oi.vendor_id
+      WHERE o.id = _order_id
+        AND o.payment_status::text IN ('paid', 'partially_refunded')
+        AND o.inventory_committed_at IS NOT NULL
+        AND o.inventory_released_at IS NULL
+        AND v.user_id = auth.uid()
+    );
+$$;
+
+CREATE OR REPLACE FUNCTION public.vendor_can_view_paid_order_scope(
+  _order_id uuid,
+  _vendor_id uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT
+    auth.uid() IS NOT NULL
+    AND public.is_takatak_authorized_session()
+    AND EXISTS (
+      SELECT 1
+      FROM public.orders AS o
+      JOIN public.vendors AS v ON v.id = _vendor_id
+      WHERE o.id = _order_id
+        AND o.payment_status::text IN ('paid', 'partially_refunded')
+        AND o.inventory_committed_at IS NOT NULL
+        AND o.inventory_released_at IS NULL
+        AND v.user_id = auth.uid()
+    );
+$$;
+
+REVOKE ALL ON FUNCTION public.vendor_can_view_paid_order(uuid)
+FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.vendor_can_view_paid_order_scope(uuid, uuid)
+FROM PUBLIC, anon;
+
+GRANT EXECUTE ON FUNCTION public.vendor_can_view_paid_order(uuid)
+TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.vendor_can_view_paid_order_scope(uuid, uuid)
+TO authenticated, service_role;
+
 DROP POLICY IF EXISTS "Vendors view related orders" ON public.orders;
 CREATE POLICY "Vendors view related orders"
 ON public.orders
