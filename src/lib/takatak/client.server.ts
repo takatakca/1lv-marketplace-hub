@@ -57,7 +57,7 @@ export function takatakConfig(): TakatakConfig {
     process.env["TAKATAK_MASTER_API_URL"],
   );
   const key = process.env["TAKATAK_1LV_API_KEY"]?.trim();
-  if (!url || !key) return null;
+  if (!url || !key || key.length < 32) return null;
   return { url, key };
 }
 
