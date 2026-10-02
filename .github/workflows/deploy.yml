@@ -65,6 +65,10 @@ jobs:
           set -euo pipefail
           npm audit --omit=dev --audit-level=high
 
+      - name: Enforce GROUPE TAKATAK architecture boundary
+        shell: bash
+        run: npm run check:architecture
+
       # ------------------------------------------------------------
       # 5. Re-run repository lint before any production build
       # Protects production even if main is updated outside the normal PR path.
