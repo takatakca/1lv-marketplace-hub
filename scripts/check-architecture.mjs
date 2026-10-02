@@ -1766,6 +1766,18 @@ if (
 }
 
 if (
+  !stripeWebhook.includes("quarantineLinkedSubscription") ||
+  !stripeWebhook.includes('subscription_status: "needs_review"') ||
+  !stripeWebhook.includes(
+    "current.stripe_subscription_id !== subscriptionId",
+  )
+) {
+  violations.push(
+    "a linked Stripe subscription with vendor/customer/price inconsistency must fail closed into needs_review",
+  );
+}
+
+if (
   !checkoutIdempotencyMigration.includes("Checkout idempotency key conflict") ||
   !checkoutIdempotencyMigration.includes("checkout_request_hash") ||
   !checkoutIdempotencyMigration.includes(
