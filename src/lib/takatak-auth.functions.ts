@@ -17,6 +17,8 @@ type PhoneLoginResult =
 
 type AuthIntent = "login" | "signup";
 
+const SIGNUP_CONSENT_REVISION = "1lv-terms-privacy-2026-10-01";
+
 type RequestPhoneCodeInput = {
   phone: string;
   fullName?: string;
@@ -241,6 +243,27 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
             ? "This TAKATAK identity is already linked to another 1LV account."
             : "Could not link your 1LV profile.",
       };
+    }
+
+    if (intent === "signup") {
+      const { error: consentError } = await supabaseAdmin
+        .from("profile_consent_events")
+        .insert({
+          profile_id: linkUserId,
+          takatak_person_id: identity.id,
+          consent_revision: SIGNUP_CONSENT_REVISION,
+          terms_accepted: true,
+          privacy_accepted: true,
+          marketing_opt_in: data.marketingOptIn === true,
+          source: "1lv_signup",
+        });
+
+      if (consentError) {
+        return {
+          ok: false,
+          error: "Could not record your 1LV signup consent.",
+        };
+      }
     }
 
     try {
