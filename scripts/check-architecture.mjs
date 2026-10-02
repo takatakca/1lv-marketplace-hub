@@ -177,6 +177,10 @@ const consolidatedMarketplaceAuthorityMigration = readFileSync(
   join(root, "supabase/migrations/20261002104500_consolidate_marketplace_authority.sql"),
   "utf8",
 );
+const authorityRlsAlignmentMigration = readFileSync(
+  join(root, "supabase/migrations/20261002110000_align_authority_rls_states.sql"),
+  "utf8",
+);
 const marketplaceSettingsMigration = readFileSync(
   join(root, "supabase/migrations/20260930150630_persistent_marketplace_settings.sql"),
   "utf8",
@@ -463,7 +467,27 @@ for (const [content, marker, label] of [
   [
     consolidatedMarketplaceAuthorityMigration,
     "SELECT '20261002104500'",
-    "final production schema marker consolidates marketplace authority",
+    "consolidated marketplace authority migration retains its historical schema marker",
+  ],
+  [
+    authorityRlsAlignmentMigration,
+    "SELECT '20261002110000'",
+    "final production schema marker aligns authority-generated RLS states",
+  ],
+  [
+    authorityRlsAlignmentMigration,
+    "'pending'::public.vendor_status",
+    "vendor insert RLS accepts the server-generated pending state",
+  ],
+  [
+    authorityRlsAlignmentMigration,
+    "'active'::public.vendor_status",
+    "vendor insert RLS accepts the server-generated active state",
+  ],
+  [
+    authorityRlsAlignmentMigration,
+    "'pending_review'::public.product_status",
+    "product insert RLS accepts the server-generated review state",
   ],
   [
     consolidatedMarketplaceAuthorityMigration,
@@ -1797,15 +1821,15 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002104500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002110000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002104500"')
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002110000"')
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002104500",
+    "production health/migration gates must track schema 20261002110000",
   );
 }
 
