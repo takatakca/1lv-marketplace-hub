@@ -96,8 +96,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
       // Supabase recommends deferring additional Auth/Data API work outside
       // the auth-state callback to avoid callback lock/deadlock behavior.
+      setLoading(true);
       setTimeout(() => {
-        void acceptSession(s, true);
+        void acceptSession(s, true).finally(() => {
+          if (active) setLoading(false);
+        });
       }, 0);
     });
 
