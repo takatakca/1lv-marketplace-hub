@@ -470,6 +470,11 @@ for (const [content, marker, label] of [
     '["approved", "processing", "failed"].includes(refund.status)',
     "failed and in-flight Stripe refunds remain safely recoverable with the stable idempotency key",
   ],
+  [
+    disputesFunctions,
+    '"Use the explicit resolution action so payout holds and refund accounting stay consistent."',
+    "terminal dispute status changes cannot bypass payout-hold side effects",
+  ],
 
   [
     stripeWebhook,
