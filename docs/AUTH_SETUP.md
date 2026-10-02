@@ -38,17 +38,28 @@ The 1LV signup screen collects:
 
 - full name;
 - verified Canadian mobile number;
-- optional email;
 - acceptance of 1LV terms/privacy;
-- optional 1LV marketing consent.
+- optional 1LV marketing consent, off by default.
 
-Name/email are supplied to TAKATAK only through the authorized OTP request.
-After verification, 1LV trusts the identity returned by TAKATAK rather than
-the unverified browser input.
+The OTP bridge is phone-only. An unverified email is never sent to TAKATAK
+Phone Auth and never becomes a master identity key. Name and locale may enrich
+the verified master identity only after Supabase confirms the exact phone and
+Auth user; they are never used to merge identities.
+
+Login and signup are separate operations. Login OTP uses
+`shouldCreateUser: false`; only an explicit signup may create a TAKATAK Auth
+user. A linked 1LV account cannot complete login until server-side 1LV
+Terms/Privacy consent evidence exists.
 
 For a new 1LV local auth user, 1LV uses a synthetic local email derived from
 the TAKATAK master identity UUID. A TAKATAK email address is never used as an
 implicit local account-merge key.
+
+1LV stores signup consent in `public.profile_consent_events`. Browser roles
+cannot read or forge this audit evidence. The table is append-only through the
+service-role Data API: no UPDATE or DELETE privilege is granted. Legal
+Terms/Privacy revision and optional marketing-consent revision are recorded
+separately.
 
 ## Authentication methods prohibited inside 1LV
 
