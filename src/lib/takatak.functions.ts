@@ -32,7 +32,7 @@ const MERCHANT_EVENTS = [
   "merchant.approved",
   "merchant.suspended",
 ] as const;
-const ORDER_EVENTS = ["order.created", "order.paid", "order.fulfilled", "order.refunded"] as const;
+const ORDER_EVENTS = ["order.created"] as const;
 
 type CustomerEvent = (typeof CUSTOMER_EVENTS)[number];
 type MerchantEvent = (typeof MERCHANT_EVENTS)[number];
@@ -165,30 +165,6 @@ export const syncTakatakMerchant = createServerFn({ method: "POST" })
     }
     const { queueMerchantEvent } = await import("./takatak/outbox.server");
     await queueMerchantEvent(data.vendorId, data.event);
-    return { ok: true };
-  });
-
-/**
- * Order created. Guest checkout has no session, so this is unauthenticated —
- * but it only accepts an order id, rebuilds everything from the database, and
- * refuses anything that is not a freshly created order. Duplicate calls are
- * absorbed by the outbox event_key unique index.
- */
-export const syncTakatakOrderCreated = createServerFn({ method: "POST" })
-  .inputValidator((data: { orderId: string }) => data)
-  .handler(async ({ data }): Promise<{ ok: boolean }> => {
-    if (!/^[0-9a-f-]{36}$/i.test(data.orderId ?? "")) return { ok: false };
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: order } = await supabaseAdmin
-      .from("orders")
-      .select("id, created_at")
-      .eq("id", data.orderId)
-      .maybeSingle();
-    if (!order) return { ok: false };
-    const ageMs = Date.now() - new Date(order.created_at).getTime();
-    if (ageMs > 30 * 60_000) return { ok: false };
-    const { queueOrderEvent } = await import("./takatak/outbox.server");
-    await queueOrderEvent(order.id, "order.created");
     return { ok: true };
   });
 
