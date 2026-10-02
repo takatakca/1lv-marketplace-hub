@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Database } from "@/integrations/supabase/types";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";\nimport { resolveTrustedAppOrigin } from "@/lib/request-origin.server";
 
 /**
  * Stripe Connect (Express) server functions.
@@ -175,15 +175,7 @@ export const createStripeConnectAccountLink = createServerFn({ method: "POST" })
       throw new Error("Could not resolve the trusted 1LV return origin.");
     }
 
-    const requestUrl = new URL(request.url);
-    const localDevelopment =
-      requestUrl.hostname === "localhost" ||
-      requestUrl.hostname === "127.0.0.1";
-    if (requestUrl.protocol !== "https:" && !localDevelopment) {
-      throw new Error("Stripe Connect return origin must use HTTPS.");
-    }
-
-    const origin = requestUrl.origin;
+    const origin = resolveTrustedAppOrigin(request.url);
     const link = await stripeCall("/account_links", "POST", {
       account: vendor.stripe_connect_account_id,
       refresh_url: `${origin}/vendor/payouts?connect=refresh`,
