@@ -17,6 +17,7 @@ type Db = SupabaseClient<Database>;
 type PayoutDbStatus = Database["public"]["Enums"]["payout_status"];
 
 const STRIPE_API = "https://api.stripe.com/v1";
+const STRIPE_TIMEOUT_MS = 20_000;
 
 export const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -34,6 +35,7 @@ async function stripeGet(path: string): Promise<Record<string, unknown>> {
   if (!key) throw new Error("Stripe not configured");
   const res = await fetch(`${STRIPE_API}${path}`, {
     headers: { Authorization: `Bearer ${key}` },
+    signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
   });
   const json = (await res.json()) as Record<string, unknown>;
   if (!res.ok) {
@@ -604,6 +606,7 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
         "metadata[period_start]": payout.period_start,
         "metadata[period_end]": payout.period_end,
       }).toString(),
+      signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
     });
     const json = (await res.json()) as Record<string, unknown>;
     if (!res.ok) {
@@ -653,7 +656,7 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
       };
     }
 
-    const { error: paidError } = await db
+    const { data: paid, error: paidError } = await db
       .from("payouts")
       .update({
         status: "paid",
@@ -663,9 +666,17 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
         next_retry_at: null,
       })
       .eq("id", payout.id)
-      .eq("status", "processing");
+      .eq("status", "processing")
+      .is("stripe_transfer_id", null)
+      .select("id")
+      .maybeSingle();
 
     if (paidError) throw new Error(paidError.message);
+    if (!paid) {
+      throw new Error(
+        "Stripe transfer succeeded but the payout could not be finalized locally.",
+      );
+    }
     return { ok: true, status: "paid" };
   } catch (err) {
     const reason = err instanceof Error ? err.message : "Transfer failed";
