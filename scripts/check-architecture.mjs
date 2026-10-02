@@ -82,6 +82,16 @@ for (const [content, marker, label] of [
     "dedicated 1LV API credential",
   ],
   [
+    masterOutbox,
+    'process.env["TAKATAK_1LV_API_KEY"]',
+    "1LV integration status uses the dedicated API credential",
+  ],
+  [
+    masterOutbox,
+    "normalizeTakatakMasterApiBaseUrl",
+    "1LV integration status validates the TAKATAK API URL",
+  ],
+  [
     masterClient,
     "key.length < 32",
     "minimum 32-character 1LV credential",
