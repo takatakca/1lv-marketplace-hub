@@ -170,6 +170,10 @@ const deployWorkflow = readFileSync(
   join(root, ".github/workflows/deploy.yml"),
   "utf8",
 );
+const ciWorkflow = readFileSync(
+  join(root, ".github/workflows/ci.yml"),
+  "utf8",
+);
 
 for (const [content, marker, label] of [
   [masterClient, 'source_application: "1lv"', "1LV source binding"],
@@ -507,6 +511,16 @@ for (const [content, marker, label] of [
     deployWorkflow,
     "payload.revision !== process.env.GITHUB_SHA",
     "production health check rejects an old Passenger process",
+  ],
+  [
+    ciWorkflow,
+    "RELEASE_REVISION: ${{ github.sha }}",
+    "PR runtime smoke tests bind health to the exact candidate SHA",
+  ],
+  [
+    ciWorkflow,
+    "payload.revision !== process.env.GITHUB_SHA",
+    "PR runtime smoke tests verify the exact candidate SHA",
   ],
   [
     stripeWebhook,
