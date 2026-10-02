@@ -134,9 +134,21 @@ function Page() {
             { key: "tracking", label: "Tracking", render: (r) => r.tracking || "—" },
             { key: "actions", label: "", render: (r) => {
               const n = nextStep(r.fulfillment as VendorOrderStatus);
+              const canFulfill = ["paid", "partially_refunded"].includes(
+                String(r.payment),
+              );
               return (
                 <div className="flex items-center gap-2">
-                  {n && <button onClick={() => quickUpdate(r.id as string, n)} className="text-xs font-semibold text-electric capitalize">{n}</button>}
+                  {n && canFulfill && (
+                    <button onClick={() => quickUpdate(r.id as string, n)} className="text-xs font-semibold text-electric capitalize">
+                      {n}
+                    </button>
+                  )}
+                  {n && !canFulfill && (
+                    <span className="text-[11px] font-semibold text-muted-foreground">
+                      Awaiting payment
+                    </span>
+                  )}
                   <Link to="/vendor/orders/$id" params={{ id: r.id as string }} className="text-xs font-semibold text-muted-foreground">View</Link>
                 </div>
               );
