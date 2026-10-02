@@ -81,6 +81,10 @@ const payoutSchedulerFunctions = readFileSync(
   join(root, "src/lib/payout-scheduler.functions.ts"),
   "utf8",
 );
+const optionalAuth = readFileSync(
+  join(root, "src/integrations/supabase/optional-auth.server.ts"),
+  "utf8",
+);
 
 for (const [content, marker, label] of [
   [masterClient, 'source_application: "1lv"', "1LV source binding"],
@@ -288,6 +292,15 @@ if (
 ) {
   violations.push(
     "payout generation must fail loudly if cleanup of a partial payout fails",
+  );
+}
+
+if (
+  !optionalAuth.includes("requireTakatakSessionClaims") ||
+  !optionalAuth.includes("client.auth.getClaims(token)")
+) {
+  violations.push(
+    "optional Supabase auth must enforce the same verified TAKATAK JWT claims as protected server functions",
   );
 }
 
