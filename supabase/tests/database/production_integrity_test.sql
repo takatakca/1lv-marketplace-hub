@@ -2,12 +2,77 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(130);
+select plan(134);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002101500',
+  '20261002103000',
   'production schema marker is current'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.get_vendor_commission_rates(uuid[])',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.get_vendor_commission_rates(uuid[])',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.get_vendor_commission_rates(uuid[])',
+    'EXECUTE'
+  ),
+  'vendor commission helper is service-role only'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.get_public_product_by_slug(text)',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.get_public_product_by_slug(text)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.get_public_product_by_slug(text)',
+    'EXECUTE'
+  ),
+  'legacy single-product public RPC is retired from browser roles'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.list_public_products(integer)',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.list_public_products(integer)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.list_public_products(integer)',
+    'EXECUTE'
+  ),
+  'legacy product-list public RPC is retired from browser roles'
+);
+
+select ok(
+  not has_table_privilege('anon', 'public.public_products', 'SELECT')
+  and not has_table_privilege('authenticated', 'public.public_products', 'SELECT')
+  and not has_table_privilege('anon', 'public.public_vendors', 'SELECT')
+  and not has_table_privilege('authenticated', 'public.public_vendors', 'SELECT'),
+  'legacy public catalog views remain inaccessible to browser roles'
 );
 
 select ok(
