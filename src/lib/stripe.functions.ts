@@ -455,7 +455,11 @@ export const createVendorSubscriptionCheckout = createServerFn({
     }
 
     const origin = resolveTrustedAppOrigin(request.url);
-    const checkoutDay = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+    // The key only needs to collapse concurrent/retried creation attempts.
+    // Do not reuse it for an entire day: Stripe can retain idempotent results
+    // for at least 24 hours, which could otherwise resurrect an expired or
+    // completed Checkout Session on a legitimate later retry.
+    const checkoutWindow = Math.floor(Date.now() / (5 * 60_000));
     const session = await stripePost(
       "/checkout/sessions",
       {
@@ -472,7 +476,7 @@ export const createVendorSubscriptionCheckout = createServerFn({
         "subscription_data[metadata][vendor_id]": vendor.id,
         "subscription_data[metadata][plan]": data.plan,
       },
-      `1lv_vendor_${vendor.id}_subscription_checkout_${checkoutDay}_v1`,
+      `1lv_vendor_${vendor.id}_subscription_checkout_${checkoutWindow}_v1`,
     );
 
     return {
