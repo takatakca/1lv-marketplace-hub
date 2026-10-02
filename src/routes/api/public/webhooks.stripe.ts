@@ -241,26 +241,33 @@ async function handleEvent(evt: StripeEvent) {
       break;
     }
     case "charge.refunded": {
-      const metadataOrderId = meta.order_id;
       const paymentIntentId =
         typeof (obj as { payment_intent?: string }).payment_intent === "string"
           ? (obj as { payment_intent: string }).payment_intent
           : null;
-      const amountRefunded = Number(
-        (obj as { amount_refunded?: number }).amount_refunded ?? 0,
-      );
-      const amount = Number((obj as { amount?: number }).amount ?? 0);
-      const refundCurrency =
+      const chargeAmount = Number((obj as { amount?: number }).amount ?? NaN);
+      const chargeCurrency =
         typeof (obj as { currency?: string }).currency === "string"
           ? (obj as { currency: string }).currency.toLowerCase()
           : "";
+      const chargeMetadata =
+        ((obj as { metadata?: Record<string, string> }).metadata) ?? {};
+      const refundList = (
+        obj as {
+          refunds?: {
+            data?: Array<Record<string, unknown>>;
+            has_more?: boolean;
+          };
+        }
+      ).refunds;
+      const refunds = Array.isArray(refundList?.data) ? refundList.data : [];
 
       if (!paymentIntentId) {
         await notifyAdmins(
           supabaseAdmin,
-          "stripe_refund_payment_intent_missing",
-          "Stripe refund missing payment authorization",
-          "A refund event did not include its PaymentIntent. Automatic refund state changes were blocked.",
+          "stripe_refund_payment_mismatch",
+          "Stripe refund needs reconciliation",
+          "A charge.refunded event did not include a PaymentIntent. Automatic 1LV accounting was blocked.",
         );
         break;
       }
@@ -282,53 +289,133 @@ async function handleEvent(evt: StripeEvent) {
 
       if (
         !order ||
-        (metadataOrderId && metadataOrderId !== order.id) ||
-        !Number.isSafeInteger(amount) ||
-        amount !== expectedAmount ||
-        refundCurrency !== expectedCurrency
+        order.stripe_payment_intent_id !== paymentIntentId ||
+        !Number.isSafeInteger(chargeAmount) ||
+        chargeAmount !== expectedAmount ||
+        chargeCurrency !== expectedCurrency ||
+        (chargeMetadata.order_id && chargeMetadata.order_id !== order.id)
       ) {
         await notifyAdmins(
           supabaseAdmin,
           "stripe_refund_order_mismatch",
           "Stripe refund/order mismatch",
-          `Refund for PaymentIntent ${paymentIntentId} did not match the stored order authorization, amount, currency, or optional order metadata. Automatic refund state changes were blocked.`,
+          "A refund event did not match the stored 1LV PaymentIntent, order amount, currency, or order metadata. Automatic accounting was blocked.",
         );
         break;
       }
 
-      if (
-        !Number.isSafeInteger(amountRefunded) ||
-        amountRefunded < 0 ||
-        amountRefunded > amount
-      ) {
+      let reconciledAny = false;
+      let untrackedSuccessfulRefunds = 0;
+
+      for (const refundObj of refunds) {
+        const stripeRefundId =
+          typeof refundObj.id === "string" && refundObj.id.startsWith("re_")
+            ? refundObj.id
+            : null;
+        const refundStatus =
+          typeof refundObj.status === "string" ? refundObj.status : "";
+        if (!stripeRefundId || refundStatus !== "succeeded") continue;
+
+        const refundMetadata =
+          refundObj.metadata &&
+          typeof refundObj.metadata === "object" &&
+          !Array.isArray(refundObj.metadata)
+            ? (refundObj.metadata as Record<string, unknown>)
+            : {};
+        const refundRecordId =
+          typeof refundMetadata["refund_record_id"] === "string"
+            ? refundMetadata["refund_record_id"]
+            : "";
+        const refundOrderId =
+          typeof refundMetadata["order_id"] === "string"
+            ? refundMetadata["order_id"]
+            : "";
+        const refundAmount = Number(refundObj.amount ?? NaN);
+        const refundCurrency =
+          typeof refundObj.currency === "string"
+            ? refundObj.currency.toLowerCase()
+            : chargeCurrency;
+
+        if (
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+            refundRecordId,
+          ) ||
+          refundOrderId !== order.id
+        ) {
+          untrackedSuccessfulRefunds += 1;
+          continue;
+        }
+
+        const { data: refundRecord, error: refundRecordError } =
+          await supabaseAdmin
+            .from("refund_records")
+            .select(
+              "id, order_id, amount, currency, status, stripe_refund_id",
+            )
+            .eq("id", refundRecordId)
+            .maybeSingle();
+
+        if (refundRecordError) throw refundRecordError;
+
+        const expectedRefundAmount = refundRecord
+          ? Math.round(Number(refundRecord.amount) * 100)
+          : NaN;
+        const expectedRefundCurrency = String(
+          refundRecord?.currency ?? expectedCurrency,
+        ).toLowerCase();
+
+        if (
+          !refundRecord ||
+          refundRecord.order_id !== order.id ||
+          !Number.isSafeInteger(refundAmount) ||
+          refundAmount !== expectedRefundAmount ||
+          refundCurrency !== expectedRefundCurrency ||
+          (refundRecord.stripe_refund_id &&
+            refundRecord.stripe_refund_id !== stripeRefundId)
+        ) {
+          untrackedSuccessfulRefunds += 1;
+          continue;
+        }
+
+        const { data: accounting, error: accountingError } =
+          await supabaseAdmin.rpc(
+            "finalize_refund_accounting" as never,
+            {
+              _refund_id: refundRecord.id,
+              _stripe_refund_id: stripeRefundId,
+            } as never,
+          );
+
+        if (accountingError) throw accountingError;
+        if (
+          !accounting ||
+          typeof accounting !== "object" ||
+          (accounting as Record<string, unknown>)["ok"] !== true
+        ) {
+          throw new Error(
+            `Refund accounting did not finalize for ${refundRecord.id}.`,
+          );
+        }
+
+        reconciledAny = true;
+      }
+
+      if (refundList?.has_more === true) {
+        untrackedSuccessfulRefunds += 1;
+      }
+
+      if (untrackedSuccessfulRefunds > 0 || refunds.length === 0) {
         await notifyAdmins(
           supabaseAdmin,
-          "stripe_refund_amount_mismatch",
-          `Refund mismatch on order ${order.order_number}`,
-          "Stripe reported an invalid refunded amount. Automatic refund state changes were blocked.",
+          "stripe_external_refund_detected",
+          `Stripe refund needs reconciliation for order ${order.order_number}`,
+          "Stripe reported one or more successful refunds that are not tied to a verified 1LV refund record. Automatic accounting for those refunds was blocked; review Stripe and 1LV before adjusting payouts.",
         );
-        break;
       }
 
-      const fullyRefunded = amount > 0 && amountRefunded >= amount;
-      const status = fullyRefunded ? "refunded" : "partially_refunded";
-      const { error: refundUpdateError } = await supabaseAdmin
-        .from("orders")
-        .update({ payment_status: status })
-        .eq("id", order.id)
-        .eq("stripe_payment_intent_id", paymentIntentId);
-
-      if (refundUpdateError) throw refundUpdateError;
-
-      if (fullyRefunded) {
-        const { error: promotionRefundError } = await supabaseAdmin.rpc(
-          "mark_order_promotion_refunded" as never,
-          { _order_id: order.id } as never,
-        );
-        if (promotionRefundError) throw promotionRefundError;
+      if (reconciledAny) {
+        await takatakOrder(order.id, "order.refunded");
       }
-
-      await takatakOrder(order.id, "order.refunded");
       break;
     }
     case "checkout.session.completed": {
