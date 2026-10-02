@@ -458,35 +458,44 @@ select ok(
 );
 
 select ok(
-  position(
+  to_regprocedure(
+    'public.create_marketplace_order_locked_unchecked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'
+  ) is not null
+  and position(
     'checkout_request_hash'
     in pg_get_functiondef(
-      'public.create_marketplace_order_locked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'::regprocedure
+      'public.create_marketplace_order_locked_unchecked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'::regprocedure
     )
   ) > 0
   and position(
     'Checkout idempotency key conflict'
     in pg_get_functiondef(
+      'public.create_marketplace_order_locked_unchecked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'create_marketplace_order_locked_unchecked'
+    in pg_get_functiondef(
       'public.create_marketplace_order_locked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'::regprocedure
     )
   ) > 0,
-  'checkout idempotency key is bound to the normalized request payload'
+  'checkout wrapper delegates to the payload-bound idempotent implementation'
 );
 
 select ok(
   position(
     'hashtextextended(v_idempotency_hash, 0)'
     in pg_get_functiondef(
-      'public.create_marketplace_order_locked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'::regprocedure
+      'public.create_marketplace_order_locked_unchecked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'::regprocedure
     )
   ) > 0
   and position(
     'hashtextextended(v_product_id::text, 42117)'
     in pg_get_functiondef(
-      'public.create_marketplace_order_locked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'::regprocedure
+      'public.create_marketplace_order_locked_unchecked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'::regprocedure
     )
   ) > 0,
-  'checkout wrapper serializes the idempotency key and then deterministically locks products'
+  'checkout implementation serializes the idempotency key and then deterministically locks products'
 );
 
 select ok(
