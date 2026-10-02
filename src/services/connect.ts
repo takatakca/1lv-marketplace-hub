@@ -33,8 +33,7 @@ export async function createConnectAccount(vendorId: string): Promise<ConnectRes
 
 export async function createConnectOnboardingLink(vendorId: string): Promise<ConnectLinkResult> {
   try {
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    return await createLinkFn({ data: { vendorId, returnOrigin: origin } });
+    return await createLinkFn({ data: { vendorId } });
   } catch (err) {
     return { url: null, pending: true, reason: err instanceof Error ? err.message : "Stripe setup required" };
   }
