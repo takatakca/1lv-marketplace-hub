@@ -268,72 +268,84 @@ export const adminDisputeAction = createServerFn({ method: "POST" })
           return { ok: false, reason: `Refund exceeds the remaining refundable amount (${remaining.toFixed(2)}).` };
         }
 
-        let currency = "CAD";
         let splitPayoutAmount = requested;
-
         if (dispute.vendor_order_id) {
-          const { data: vendorOrder } = await db
+          const { data: vendorOrder, error: vendorOrderError } = await db
             .from("vendor_orders")
-            .select("subtotal, vendor_payout_amount")
+            .select("vendor_payout_amount")
             .eq("id", dispute.vendor_order_id)
             .maybeSingle();
-          const split = vendorOrder as
-            | { subtotal: number; vendor_payout_amount: number }
-            | null;
-          if (!split) return { ok: false, reason: "Vendor split not found." };
-
-          const { data: splitRefunds } = await db
-            .from("refund_records")
-            .select("amount, status")
-            .eq("vendor_order_id", dispute.vendor_order_id)
-            .in("status", ["approved", "processing", "refunded"]);
-          const reservedForSplit = (
-            (splitRefunds ?? []) as Array<{ amount: number; status: RefundStatus }>
-          ).reduce((sum, refund) => sum + Number(refund.amount ?? 0), 0);
-          const splitRemaining = round2(
-            Math.max(0, Number(split.subtotal) - reservedForSplit),
-          );
-          if (requested > splitRemaining) {
-            return {
-              ok: false,
-              reason: `Refund exceeds the remaining refundable vendor amount (${splitRemaining.toFixed(2)}).`,
-            };
+          if (vendorOrderError || !vendorOrder) {
+            return { ok: false, reason: "Vendor split not found." };
           }
-          splitPayoutAmount = Number(split.vendor_payout_amount ?? requested);
+          splitPayoutAmount = Number(
+            (vendorOrder as { vendor_payout_amount?: number })
+              .vendor_payout_amount ?? requested,
+          );
         }
 
-        const { data: orderCurrency } = await db
-          .from("orders")
-          .select("currency")
-          .eq("id", dispute.order_id)
-          .maybeSingle();
-        if (
-          orderCurrency &&
-          typeof (orderCurrency as { currency?: string }).currency === "string"
-        ) {
-          currency = (orderCurrency as { currency: string }).currency.toUpperCase();
-        }
+        // Financial authority lives in PostgreSQL: the RPC locks the dispute
+        // and order, re-computes order/split reservations, inserts the approved
+        // refund, and resolves the dispute in one transaction. The preliminary
+        // remainingRefundable() check above is UX only and is not trusted for
+        // concurrency safety.
+        const { data: reserved, error: reserveError } = await db.rpc(
+          "reserve_dispute_refund",
+          {
+            _dispute_id: dispute.id,
+            _amount: requested,
+            _reason: data.note ?? "Dispute resolution",
+            _actor: context.userId,
+          },
+        );
 
-        const { data: refund, error: rErr } = await db
-          .from("refund_records")
-          .insert({
-            order_id: dispute.order_id,
-            vendor_order_id: dispute.vendor_order_id,
-            dispute_id: dispute.id,
-            amount: requested,
-            currency,
-            reason: data.note ?? "Dispute resolution",
-            status: "approved",
-            created_by: context.userId,
-            approved_by: context.userId,
-            approved_at: new Date().toISOString(),
-          })
-          .select("id")
-          .single();
-        if (rErr || !refund) {
+        if (reserveError) {
           return {
             ok: false,
-            reason: rErr?.message ?? "Could not create refund record",
+            reason: "Could not reserve the refund safely.",
+          };
+        }
+
+        const reservation = (reserved ?? {}) as Record<string, unknown>;
+        if (reservation.ok !== true) {
+          const reason = String(reservation.reason ?? "refund_reservation_failed");
+          const remainingAmount = Number(reservation.remaining ?? NaN);
+          if (
+            (reason === "order_refund_limit" ||
+              reason === "vendor_refund_limit") &&
+            Number.isFinite(remainingAmount)
+          ) {
+            return {
+              ok: false,
+              reason: `Refund exceeds the remaining refundable amount (${remainingAmount.toFixed(2)}).`,
+            };
+          }
+          if (reason === "refund_already_reserved") {
+            return {
+              ok: false,
+              reason: "This dispute already has a reserved refund.",
+            };
+          }
+          if (reason === "invalid_dispute_state") {
+            return {
+              ok: false,
+              reason: "This dispute is no longer eligible for a new refund.",
+            };
+          }
+          return {
+            ok: false,
+            reason: "Refund could not be reserved safely.",
+          };
+        }
+
+        const refundId =
+          typeof reservation.refund_id === "string"
+            ? reservation.refund_id
+            : "";
+        if (!refundId) {
+          return {
+            ok: false,
+            reason: "Refund reservation did not return a valid record.",
           };
         }
 
@@ -345,11 +357,6 @@ export const adminDisputeAction = createServerFn({ method: "POST" })
           );
         }
 
-        patch.approved_refund_amount = requested;
-        patch.status = "resolved_customer";
-        patch.resolved_at = new Date().toISOString();
-
-        await db.from("disputes").update(patch).eq("id", dispute.id);
         await notify(db, [dispute.customer_id, owner], {
           kind: "refund_approved",
           title: "Refund approved",
@@ -358,7 +365,7 @@ export const adminDisputeAction = createServerFn({ method: "POST" })
         });
         return {
           ok: true,
-          refundId: (refund as { id: string }).id,
+          refundId,
           adjustment: false,
         };
       }
