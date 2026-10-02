@@ -73,6 +73,14 @@ const masterOutbox = readFileSync(
   join(root, "src/lib/takatak/outbox.server.ts"),
   "utf8",
 );
+const payoutSchedulerServer = readFileSync(
+  join(root, "src/lib/payout-scheduler.server.ts"),
+  "utf8",
+);
+const payoutSchedulerFunctions = readFileSync(
+  join(root, "src/lib/payout-scheduler.functions.ts"),
+  "utf8",
+);
 
 for (const [content, marker, label] of [
   [masterClient, 'source_application: "1lv"', "1LV source binding"],
@@ -235,6 +243,17 @@ if (
 ) {
   violations.push(
     "TAKATAK login OTP must default to non-creating intent.",
+  );
+}
+
+if (
+  !payoutSchedulerServer.includes('.eq("locked_by", owner)') ||
+  !payoutSchedulerFunctions.includes(
+    "releaseLock(db, s.PAYOUT_LOCK, context.userId)",
+  )
+) {
+  violations.push(
+    "payout scheduler lock release must be scoped to the current lease owner",
   );
 }
 
