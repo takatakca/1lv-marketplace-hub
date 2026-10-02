@@ -1274,6 +1274,26 @@ if (
 
 if (
   !payoutSchedulerServer.includes(
+    'boundedIntegerSetting(r.hold_days, 7, "hold_days", 0, 365)',
+  ) ||
+  !payoutSchedulerServer.includes(
+    'boundedIntegerSetting(r.payout_day, 1, "payout_day", 0, 6)',
+  ) ||
+  !payoutSchedulerServer.includes(
+    '"payout_hour_utc",\n      0,\n      23',
+  ) ||
+  !payoutSchedulerServer.includes(
+    '"max_transfer_attempts",\n      1,\n      10',
+  ) ||
+  !payoutSchedulerServer.includes('frequency !== "weekly"')
+) {
+  violations.push(
+    "payout settings must fail closed on invalid hold, cadence, hour, or retry-limit values",
+  );
+}
+
+if (
+  !payoutSchedulerServer.includes(
     "Recovered a stale processing transfer lease for safe idempotent retry.",
   )
 ) {
