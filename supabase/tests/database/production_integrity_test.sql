@@ -2,12 +2,50 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(103);
+select plan(106);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002090000',
+  '20261002091500',
   'production schema marker is current'
+);
+
+select ok(
+  to_regprocedure('public.enforce_refund_vendor_scope()') is not null
+  and exists (
+    select 1
+    from pg_trigger
+    where tgname = 'refund_records_enforce_vendor_scope'
+      and tgrelid = 'public.refund_records'::regclass
+      and not tgisinternal
+  ),
+  'refund vendor-scope trigger is installed'
+);
+
+select ok(
+  position(
+    'Automatic marketplace refunds require a vendor order'
+    in pg_get_functiondef('public.enforce_refund_vendor_scope()'::regprocedure)
+  ) > 0
+  and position(
+    'vo.order_id = NEW.order_id'
+    in pg_get_functiondef('public.enforce_refund_vendor_scope()'::regprocedure)
+  ) > 0,
+  'refund scope trigger requires a matching vendor order before automatic processing'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.enforce_refund_vendor_scope()',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.enforce_refund_vendor_scope()',
+    'EXECUTE'
+  ),
+  'browser roles cannot invoke the refund scope trigger function directly'
 );
 
 select ok(
