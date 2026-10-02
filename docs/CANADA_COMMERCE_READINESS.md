@@ -44,7 +44,7 @@ Official references:
 
 ## Server-authoritative atomic checkout
 
-This branch now contains the P0 checkout boundary. It is **code-complete but not production-active until the new Supabase migration is applied and the required server secret is configured**.
+This branch contains the P0 checkout boundary and its production migration. The code and migration suite are CI-validated; production activation remains fail-closed until the exact 1LV Supabase project is migrated to schema version `20261001214500` and the required server secrets are configured.
 
 The new flow:
 
@@ -89,15 +89,9 @@ The current admin coupon screen is still local/demo state. Do not advertise arbi
 
 ## Persistent marketplace settings
 
-The admin settings screen currently stores values in browser localStorage and is not the production source for checkout rules.
+Operational settings are now stored in the protected `public.marketplace_settings` table rather than browser localStorage. Admin access is enforced with RLS, every update advances a version and writes audit evidence to `marketplace_settings_audit`, checkout reads trusted server-side values, and the storefront receives only the safe projection exposed by the dedicated public settings function.
 
-A later phase should move operational settings into a protected database table with:
-
-- admin-only writes
-- audit history
-- versioning/effective dates where necessary
-- server-side reads for checkout
-- safe public projection for storefront messaging
+Production still requires the exact 1LV migration set to be applied before these settings become authoritative on the live site.
 
 ## Tax-engine roadmap
 
@@ -123,7 +117,7 @@ Recommended release sequence:
 1. apply and verify the server-authoritative checkout migration on the correct 1LV.CA Supabase project;
 2. configure the dedicated guest checkout signing secret;
 3. merge this Canada commerce/security upgrade only after CI and database verification are green;
-4. implement the persistent coupon engine;
-5. persist marketplace settings;
+4. verify the persisted marketplace settings and audit history in production;
+5. implement the persistent coupon engine before advertising arbitrary coupon codes;
 6. run targeted Stripe test-mode orders across representative provinces and inventory edge cases;
 7. only then widen production traffic and automation.
