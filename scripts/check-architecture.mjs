@@ -513,6 +513,21 @@ for (const [content, marker, label] of [
     "vendors may hard-delete only draft products; reviewed products remain auditable through archive",
   ],
   [
+    vendorProductAuthorityMigration,
+    'DROP POLICY IF EXISTS "Authenticated can view active products"',
+    "authenticated customers cannot query private product rows through the base table",
+  ],
+  [
+    marketplaceSettingsMigration,
+    "public.list_public_catalog_products",
+    "public storefront product listing uses a fixed-column RPC",
+  ],
+  [
+    marketplaceSettingsMigration,
+    "public.get_public_catalog_product_by_slug",
+    "public storefront product detail uses a fixed-column RPC",
+  ],
+  [
     expiredOrderTerminalMigration,
     "payment_status = 'failed'::public.payment_status",
     "released unpaid checkout becomes payment-failed",
