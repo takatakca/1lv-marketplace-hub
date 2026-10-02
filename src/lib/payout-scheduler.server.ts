@@ -298,253 +298,39 @@ export async function generatePayoutsCore(
   }
 
   let created = 0;
+
   for (const [vendorId, items] of groups) {
-    const gross = round2(
-      items.reduce((sum, item) => sum + Number(item.subtotal ?? 0), 0),
-    );
-    const commission = round2(
-      items.reduce(
-        (sum, item) => sum + Number(item.commission_amount ?? 0),
-        0,
-      ),
-    );
-    const refunds = round2(
-      items.reduce((sum, item) => sum + Number(item.refund_amount ?? 0), 0),
-    );
-    const holds = round2(
-      items.reduce(
-        (sum, item) => sum + Number(item.dispute_hold_amount ?? 0),
-        0,
-      ),
-    );
-
-    type PendingAdjustment = {
-      id: string;
-      amount: number;
-      kind: string;
-      payout_id: string | null;
-    };
-
-    const adjustmentRows: PendingAdjustment[] = [];
-    let adjustmentOffset = 0;
-    while (true) {
-      const { data, error } = await db
-        .from("payout_adjustments")
-        .select("id, amount, kind, payout_id")
-        .eq("vendor_id", vendorId)
-        .is("applied_payout_id", null)
-        .order("created_at", { ascending: true })
-        .order("id", { ascending: true })
-        .range(adjustmentOffset, adjustmentOffset + pageSize - 1);
-      if (error) throw new Error(error.message);
-
-      const page = (data ?? []) as PendingAdjustment[];
-      adjustmentRows.push(...page);
-      if (page.length < pageSize) break;
-      adjustmentOffset += pageSize;
-    }
-
-    // A refund finalized while an earlier payout is in-flight creates a
-    // provisional clawback. Never consume that clawback until the source
-    // payout is conclusively paid. A transfer reference alone is insufficient:
-    // amount/destination mismatches still require reconciliation.
-    type ClawbackSource = {
-      id: string;
-      status: string;
-      stripe_transfer_id: string | null;
-      reconciliation_status: string | null;
-    };
-
-    const clawbackSources = new Map<string, ClawbackSource>();
-    const clawbackPayoutIds = Array.from(
-      new Set(
-        adjustmentRows
-          .filter(
-            (adjustment) =>
-              adjustment.kind === "refund_clawback" &&
-              typeof adjustment.payout_id === "string",
-          )
-          .map((adjustment) => adjustment.payout_id as string),
-      ),
-    );
-
-    for (const ids of batches(clawbackPayoutIds)) {
-      const { data, error } = await db
-        .from("payouts")
-        .select("id, status, stripe_transfer_id, reconciliation_status")
-        .in("id", ids);
-      if (error) throw new Error(error.message);
-
-      for (const source of (data ?? []) as ClawbackSource[]) {
-        clawbackSources.set(source.id, source);
-      }
-    }
-
-    let unresolvedClawback = false;
-    const eligibleAdjustmentRows = adjustmentRows.filter((adjustment) => {
-      if (adjustment.kind !== "refund_clawback") return true;
-
-      if (typeof adjustment.payout_id !== "string") {
-        unresolvedClawback = true;
-        return false;
-      }
-
-      const source = clawbackSources.get(adjustment.payout_id);
-      if (!source) {
-        unresolvedClawback = true;
-        return false;
-      }
-
-      if (
-        source.status === "paid" &&
-        source.stripe_transfer_id &&
-        (!source.reconciliation_status ||
-          source.reconciliation_status === "matched")
-      ) {
-        return true;
-      }
-
-      // A definitively cancelled payout with no Stripe transfer never paid the
-      // vendor, so its provisional clawback is intentionally not applied.
-      if (
-        source.status === "cancelled" &&
-        !source.stripe_transfer_id
-      ) {
-        return false;
-      }
-
-      // Processing/failed/held or any payout carrying an unreconciled transfer
-      // reference is financially ambiguous. Do not create another payout for
-      // this vendor until the source payout is reconciled or cancelled.
-      unresolvedClawback = true;
-      return false;
+    const { data, error } = await db.rpc("create_vendor_payout_atomic", {
+      _vendor_id: vendorId,
+      _period_start: periodStart,
+      _period_end: periodEnd,
+      _eligible_through: eligibleThrough,
     });
 
-    if (unresolvedClawback) {
-      skipped += items.length;
-      continue;
-    }
-
-    const adjustments = round2(
-      eligibleAdjustmentRows.reduce(
-        (sum, adjustment) => sum + Number(adjustment.amount ?? 0),
-        0,
-      ),
-    );
-    const baseNet = round2(
-      items.reduce(
-        (sum, item) => sum + Number(item.vendor_payout_amount ?? 0),
-        0,
-      ) -
-        refunds -
-        holds,
-    );
-    const net = round2(baseNet + adjustments);
-
-    // Do not consume earnings or clawbacks into a payout Stripe can never send.
-    // Both remain unapplied and the backlog is reconsidered on the next cycle.
-    if (net <= 0) {
-      skipped += items.length;
-      continue;
-    }
-
-    const { data: payout, error: payoutError } = await db
-      .from("payouts")
-      .insert({
-        vendor_id: vendorId,
-        period_start: periodStart,
-        period_end: periodEnd,
-        gross_amount: gross,
-        commission_amount: commission,
-        refund_amount: refunds,
-        dispute_hold_amount: holds,
-        net_amount: net,
-        status: "pending_review",
-      })
-      .select("id")
-      .single();
-
-    if (payoutError || !payout) {
-      skipped += items.length;
-      continue;
-    }
-
-    const payoutId = payout.id;
-    let itemInsertFailed = false;
-    for (const chunk of batches(items, 250)) {
-      const { error } = await db.from("payout_items").insert(
-        chunk.map((item) => ({
-          payout_id: payoutId,
-          vendor_order_id: item.id,
-          gross_amount: Number(item.subtotal ?? 0),
-          commission_amount: Number(item.commission_amount ?? 0),
-          refund_amount: Number(item.refund_amount ?? 0),
-          net_amount:
-            Number(item.vendor_payout_amount ?? 0) -
-            Number(item.refund_amount ?? 0),
-        })),
+    if (error) {
+      throw new Error(
+        `Atomic payout generation failed for vendor ${vendorId}: ${error.message}`,
       );
-      if (error) {
-        itemInsertFailed = true;
-        break;
-      }
     }
 
-    if (itemInsertFailed) {
-      // Deleting the payout cascades any chunks inserted before a concurrent
-      // uniqueness conflict or transient failure.
-      const { error: cleanupError } = await db
-        .from("payouts")
-        .delete()
-        .eq("id", payoutId);
-      if (cleanupError) {
-        throw new Error(
-          `Could not roll back incomplete payout ${payoutId}: ${cleanupError.message}`,
-        );
-      }
-      skipped += items.length;
+    const result = (data ?? {}) as Record<string, unknown>;
+    if (result["ok"] !== true) {
+      throw new Error(
+        `Atomic payout generation was rejected for vendor ${vendorId}: ${String(
+          result["reason"] ?? "unknown",
+        )}`,
+      );
+    }
+
+    if (result["created"] === true) {
+      created++;
       continue;
     }
 
-    if (eligibleAdjustmentRows.length > 0) {
-      const adjustmentIds = eligibleAdjustmentRows.map(
-        (adjustment) => adjustment.id,
-      );
-      let adjustmentFailed = false;
-
-      for (const ids of batches(adjustmentIds)) {
-        const { data: claimed, error } = await db
-          .from("payout_adjustments")
-          .update({ applied_payout_id: payoutId })
-          .in("id", ids)
-          .is("applied_payout_id", null)
-          .select("id");
-
-        if (error || (claimed ?? []).length !== ids.length) {
-          adjustmentFailed = true;
-          break;
-        }
-      }
-
-      if (adjustmentFailed) {
-        // applied_payout_id uses ON DELETE SET NULL, so deleting this payout
-        // releases any adjustments this candidate managed to claim before a
-        // concurrent generator won one of the remaining rows.
-        const { error: cleanupError } = await db
-          .from("payouts")
-          .delete()
-          .eq("id", payoutId);
-        if (cleanupError) {
-          throw new Error(
-            `Could not roll back payout adjustment claim ${payoutId}: ${cleanupError.message}`,
-          );
-        }
-        skipped += items.length;
-        continue;
-      }
-    }
-
-    created++;
+    // The discovery pass is intentionally advisory. A refund, dispute, payout
+    // or vendor-setting change may make these rows ineligible before the
+    // transaction starts. The RPC re-checks everything under row locks.
+    skipped += items.length;
   }
 
   return { ok: true, created, skipped, vendors: groups.size };
