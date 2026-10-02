@@ -6,6 +6,23 @@ const { URL, pathToFileURL } = require("url");
 
 const CLIENT_DIR = path.join(__dirname, "dist", "client");
 const SERVER_ENTRY = path.join(__dirname, "dist", "server", "server.js");
+const CURRENT_RELEASE_FILE = path.join(__dirname, "CURRENT");
+
+// Production deploys atomically update CURRENT before asking Passenger to
+// restart. Export that exact release SHA into the TanStack runtime so the
+// public health endpoint can prove the newly activated process is running.
+if (!process.env.RELEASE_REVISION && fs.existsSync(CURRENT_RELEASE_FILE)) {
+  try {
+    const revision = fs.readFileSync(CURRENT_RELEASE_FILE, "utf8").trim();
+    if (/^[0-9a-f]{40}$/i.test(revision)) {
+      process.env.RELEASE_REVISION = revision.toLowerCase();
+    } else if (revision) {
+      console.error("[1lv.ca] CURRENT contains an invalid release revision.");
+    }
+  } catch (error) {
+    console.error("[1lv.ca] Could not read CURRENT release revision:", error);
+  }
+}
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
