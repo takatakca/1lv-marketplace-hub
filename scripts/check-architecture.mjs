@@ -169,6 +169,10 @@ const vendorProfileAuthorityMigration = readFileSync(
   join(root, "supabase/migrations/20261002101500_vendor_profile_authority.sql"),
   "utf8",
 );
+const legacyPublicHelpersMigration = readFileSync(
+  join(root, "supabase/migrations/20261002103000_retire_legacy_public_helpers.sql"),
+  "utf8",
+);
 const marketplaceSettingsMigration = readFileSync(
   join(root, "supabase/migrations/20260930150630_persistent_marketplace_settings.sql"),
   "utf8",
@@ -445,7 +449,32 @@ for (const [content, marker, label] of [
   [
     vendorProfileAuthorityMigration,
     "SELECT '20261002101500'",
-    "final production schema marker includes server-authoritative vendor profile fields",
+    "vendor profile authority migration retains its historical schema marker",
+  ],
+  [
+    legacyPublicHelpersMigration,
+    "SELECT '20261002103000'",
+    "final production schema marker retires obsolete public helper access",
+  ],
+  [
+    legacyPublicHelpersMigration,
+    "REVOKE ALL ON FUNCTION public.get_vendor_commission_rates(uuid[])",
+    "vendor commission rates are not browser-readable",
+  ],
+  [
+    legacyPublicHelpersMigration,
+    "REVOKE ALL ON FUNCTION public.get_public_product_by_slug(text)",
+    "legacy single-product RPC cannot bypass the curated catalog",
+  ],
+  [
+    legacyPublicHelpersMigration,
+    "REVOKE ALL ON FUNCTION public.list_public_products(integer)",
+    "legacy product-list RPC cannot bypass the curated catalog",
+  ],
+  [
+    legacyPublicHelpersMigration,
+    "REVOKE ALL ON TABLE public.public_vendors",
+    "legacy public vendor view is inaccessible to browser roles",
   ],
   [
     vendorProfileAuthorityMigration,
@@ -1734,15 +1763,15 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002101500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002103000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002101500"')
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002103000"')
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002101500",
+    "production health/migration gates must track schema 20261002103000",
   );
 }
 
