@@ -7,9 +7,6 @@ export type RelationshipInput = {
   firstSeenAt?: string | null;
   lastSeenAt?: string | null;
   orderCount?: number | null;
-  /** Lifetime value WITH THIS VENDOR ONLY. Never aggregate across merchants. */
-  lifetimeValue?: number | null;
-  currency?: string;
 };
 
 /**
@@ -30,7 +27,5 @@ export function mapRelationship(input: RelationshipInput): TakatakRelationshipPa
     first_seen_at: input.firstSeenAt ?? null,
     last_seen_at: input.lastSeenAt ?? null,
     order_count: input.orderCount ?? null,
-    lifetime_value: input.lifetimeValue ?? null,
-    currency: input.currency ?? "CAD",
   };
 }
