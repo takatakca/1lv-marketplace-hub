@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(134);
+select plan(136);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002103000',
+  '20261002104500',
   'production schema marker is current'
 );
 
@@ -137,7 +137,19 @@ select ok(
 
 select ok(
   position(
-    'NEW.status := ''pending''::public.vendor_status'
+    'require_vendor_approval'
+    in pg_get_functiondef(
+      'public.enforce_vendor_profile_authority()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'default_commission_rate'
+    in pg_get_functiondef(
+      'public.enforce_vendor_profile_authority()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'NEW.commission_rate := v_default_commission'
     in pg_get_functiondef(
       'public.enforce_vendor_profile_authority()'::regprocedure
     )
@@ -154,7 +166,7 @@ select ok(
       'public.enforce_vendor_profile_authority()'::regprocedure
     )
   ) > 0,
-  'new vendor records force safe marketplace defaults'
+  'new vendor records use marketplace approval/commission settings while preserving safe server-owned defaults'
 );
 
 select ok(
@@ -238,6 +250,41 @@ select ok(
     )
   ) > 0,
   'product review submission requires an active subscribed vendor'
+);
+
+select ok(
+  position(
+    'require_product_approval'
+    in pg_get_functiondef(
+      'public.enforce_vendor_product_authority()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'NOT v_require_approval'
+    in pg_get_functiondef(
+      'public.enforce_vendor_product_authority()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'NEW.status := ''active''::public.product_status'
+    in pg_get_functiondef(
+      'public.enforce_vendor_product_authority()'::regprocedure
+    )
+  ) > 0,
+  'product authority honors the admin approval setting without allowing browser self-approval'
+);
+
+select ok(
+  not exists (
+    select 1
+    from pg_trigger
+    where tgname in (
+      'enforce_vendor_marketplace_fields_trigger',
+      'enforce_product_marketplace_fields_trigger'
+    )
+      and not tgisinternal
+  ),
+  'superseded marketplace authority triggers are removed'
 );
 
 select ok(
