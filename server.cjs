@@ -49,16 +49,71 @@ function getServerEntry() {
   return serverEntryPromise;
 }
 
+const DEFAULT_PUBLIC_ORIGIN = "https://1lv.ca";
+const ALLOW_LOCAL_ORIGIN =
+  process.env.GITHUB_ACTIONS === "true" ||
+  process.env.NODE_ENV === "development" ||
+  process.env.NODE_ENV === "test";
+
+function configuredPublicOrigin() {
+  const raw = String(
+    process.env.PUBLIC_APP_ORIGIN || DEFAULT_PUBLIC_ORIGIN,
+  ).trim();
+
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error("[1lv.ca] PUBLIC_APP_ORIGIN is not a valid URL.");
+  }
+
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== "/" ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    throw new Error(
+      "[1lv.ca] PUBLIC_APP_ORIGIN must be a clean HTTPS origin.",
+    );
+  }
+
+  return parsed.origin;
+}
+
+const PUBLIC_ORIGIN = configuredPublicOrigin();
+
 function requestUrl(req) {
-  const forwardedProto = String(req.headers["x-forwarded-proto"] || "")
-    .split(",")[0]
-    .trim();
-  const forwardedHost = String(req.headers["x-forwarded-host"] || "")
-    .split(",")[0]
-    .trim();
-  const protocol = forwardedProto || "http";
-  const host = forwardedHost || req.headers.host || "localhost";
-  return `${protocol}://${host}${req.url || "/"}`;
+  let pathAndQuery = "/";
+  try {
+    const parsedPath = new URL(req.url || "/", "http://localhost");
+    pathAndQuery = `${parsedPath.pathname}${parsedPath.search}`;
+  } catch {
+    pathAndQuery = "/";
+  }
+
+  if (ALLOW_LOCAL_ORIGIN) {
+    const directHost = String(req.headers.host || "").split(",")[0].trim();
+    try {
+      const candidate = new URL(`http://${directHost}`);
+      const hostname = candidate.hostname.toLowerCase();
+      const loopback =
+        hostname === "localhost" ||
+        hostname === "127.0.0.1" ||
+        hostname === "::1" ||
+        hostname === "[::1]";
+
+      if (loopback) {
+        return `http://${candidate.host}${pathAndQuery}`;
+      }
+    } catch {
+      // Fall through to the canonical production origin.
+    }
+  }
+
+  return `${PUBLIC_ORIGIN}${pathAndQuery}`;
 }
 
 function toWebRequest(req) {
