@@ -394,7 +394,9 @@ export async function generatePayoutsCore(
         return false;
       }
 
-      if (source.status === "paid") return true;
+      if (source.status === "paid" && source.stripe_transfer_id) {
+        return true;
+      }
 
       // A definitively cancelled payout with no Stripe transfer never paid the
       // vendor, so its provisional clawback is intentionally not applied.
