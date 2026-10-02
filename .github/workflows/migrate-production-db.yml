@@ -27,6 +27,7 @@ jobs:
     timeout-minutes: 30
     env:
       EXPECTED_PROJECT_REF: odoybkshqszucvoxzjyz
+      EXPECTED_SCHEMA_VERSION: "20261001202000"
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_TELEMETRY_DISABLED: "1"
@@ -52,7 +53,13 @@ jobs:
             exit 1
           fi
 
+          test -f "supabase/migrations/${EXPECTED_SCHEMA_VERSION}_protect_takatak_profile_identity.sql" || {
+            echo "ERROR: expected production schema migration is missing from this checkout."
+            exit 1
+          }
+
           echo "Confirmed exact 1LV production project: $EXPECTED_PROJECT_REF"
+          echo "Expected 1LV schema version: $EXPECTED_SCHEMA_VERSION"
           echo "Apply requested: ${{ inputs.apply }}"
 
       - name: Checkout repository
@@ -111,7 +118,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          supabase migration list --linked
+          HISTORY_OUTPUT="$(supabase migration list --linked)"
+          printf '%s\n' "$HISTORY_OUTPUT"
+
+          if ! printf '%s\n' "$HISTORY_OUTPUT" | grep -q "$EXPECTED_SCHEMA_VERSION"; then
+            echo "ERROR: expected schema migration $EXPECTED_SCHEMA_VERSION is not recorded remotely."
+            exit 1
+          fi
 
           VERIFY_OUTPUT="$(supabase db push --linked --dry-run 2>&1)"
           printf '%s\n' "$VERIFY_OUTPUT"
