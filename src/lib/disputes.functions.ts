@@ -89,7 +89,15 @@ export const openDispute = createServerFn({ method: "POST" })
       })
       .select("id")
       .single();
-    if (insErr || !created) return { ok: false, reason: insErr?.message ?? "Could not open dispute" };
+    if (insErr || !created) {
+      return {
+        ok: false,
+        reason:
+          insErr?.code === "23505"
+            ? "There is already an open dispute for this vendor."
+            : insErr?.message ?? "Could not open dispute",
+      };
+    }
     const disputeId = (created as { id: string }).id;
 
     if (data.description?.trim()) {
