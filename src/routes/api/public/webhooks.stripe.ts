@@ -62,6 +62,46 @@ type StripeEvent = {
 
 type AdminDb = SupabaseClient<Database>;
 
+const MAX_STRIPE_WEBHOOK_BYTES = 1024 * 1024;
+
+async function readLimitedBody(request: Request): Promise<string | null> {
+  const declaredLength = request.headers.get("content-length");
+  if (declaredLength) {
+    const parsed = Number(declaredLength);
+    if (Number.isFinite(parsed) && parsed > MAX_STRIPE_WEBHOOK_BYTES) {
+      return null;
+    }
+  }
+
+  if (!request.body) return "";
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+
+    total += value.byteLength;
+    if (total > MAX_STRIPE_WEBHOOK_BYTES) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+
+  const payload = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    payload.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return new TextDecoder().decode(payload);
+}
+
 type VendorSubscriptionState = {
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
@@ -624,7 +664,10 @@ export const Route = createFileRoute("/api/public/webhooks/stripe")({
         if (!secret) {
           return new Response("Stripe webhook secret not configured", { status: 503 });
         }
-        const body = await request.text();
+        const body = await readLimitedBody(request);
+        if (body === null) {
+          return new Response("Payload too large", { status: 413 });
+        }
         const sig = request.headers.get("stripe-signature");
         const ok = await verifyStripeSignature(body, sig, secret);
         if (!ok) return new Response("Invalid signature", { status: 401 });
