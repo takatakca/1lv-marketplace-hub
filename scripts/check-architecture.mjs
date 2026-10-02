@@ -141,6 +141,10 @@ const vendorOrderProjectionMigration = readFileSync(
   join(root, "supabase/migrations/20261002083000_vendor_order_safe_projection.sql"),
   "utf8",
 );
+const refundPayoutRaceMigration = readFileSync(
+  join(root, "supabase/migrations/20261002084500_refund_payout_race_safety.sql"),
+  "utf8",
+);
 const ordersService = readFileSync(
   join(root, "src/services/orders.ts"),
   "utf8",
@@ -391,9 +395,24 @@ for (const [content, marker, label] of [
     "session grant lookup can enforce a private registry without exposing it",
   ],
   [
-    vendorOrderProjectionMigration,
-    "SELECT '20261002083000'",
-    "final production schema marker includes curated vendor order projection",
+    refundPayoutRaceMigration,
+    "SELECT '20261002084500'",
+    "final production schema marker includes refund/payout race safety",
+  ],
+  [
+    refundPayoutRaceMigration,
+    "Refund changed payout amount; review before transfer.",
+    "pre-transfer payouts are recalculated and forced back through review after refunds",
+  ],
+  [
+    refundPayoutRaceMigration,
+    "refund_clawback",
+    "processing or paid payouts receive an idempotent future refund clawback",
+  ],
+  [
+    refundPayoutRaceMigration,
+    "mark_order_promotion_refunded",
+    "full refund accounting restores promotion usage when configured",
   ],
   [
     checkoutProductLockMigration,
@@ -1457,7 +1476,7 @@ if (
   ).includes('EXPECTED_SCHEMA_VERSION: "20261002083000"')
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002083000",
+    "production health/migration gates must track schema 20261002084500",
   );
 }
 
