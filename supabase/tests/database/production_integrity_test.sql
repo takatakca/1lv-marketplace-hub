@@ -248,15 +248,20 @@ select ok(
 );
 
 select ok(
-  exists (
+  not exists (
     select 1
     from pg_policies
     where schemaname = 'public'
       and tablename = 'orders'
       and policyname = 'Vendors view related orders'
-      and coalesce(qual, '') like '%vendor_can_view_paid_order%'
-  ),
-  'vendor parent-order policy uses the non-recursive paid-order helper'
+  )
+  and to_regprocedure(
+    'public.list_vendor_orders_for_current_user(uuid)'
+  ) is not null
+  and to_regprocedure(
+    'public.get_vendor_order_for_current_user(uuid)'
+  ) is not null,
+  'vendor parent orders are exposed only through curated projection RPCs'
 );
 
 select ok(
