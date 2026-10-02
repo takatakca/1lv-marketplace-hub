@@ -85,6 +85,18 @@ const finalAuthMigration = readFileSync(
   join(root, "supabase/migrations/20261002034500_takatak_authenticated_session_guard.sql"),
   "utf8",
 );
+const sessionGrantMigration = readFileSync(
+  join(root, "supabase/migrations/20261002050000_takatak_authorized_sessions.sql"),
+  "utf8",
+);
+const loginRoute = readFileSync(
+  join(root, "src/routes/login.tsx"),
+  "utf8",
+);
+const signupRoute = readFileSync(
+  join(root, "src/routes/signup.tsx"),
+  "utf8",
+);
 const supabaseConfig = readFileSync(
   join(root, "supabase/config.toml"),
   "utf8",
@@ -203,6 +215,16 @@ for (const [content, marker, label] of [
   ],
   [
     authMiddleware,
+    "requireTakatakAuthorizedSession",
+    "server functions require a server-recorded TAKATAK session grant",
+  ],
+  [
+    authMiddleware,
+    '"is_takatak_authorized_session" as never',
+    "server middleware validates the exact granted Supabase session_id",
+  ],
+  [
+    authMiddleware,
     "methods.has('magiclink') || methods.has('otp')",
     "server functions require the local TAKATAK bridge authentication method",
   ],
@@ -215,6 +237,51 @@ for (const [content, marker, label] of [
     authProvider,
     "isTakatakLocalUser",
     "browser AuthProvider ignores stray local Supabase sessions",
+  ],
+  [
+    authBridge,
+    "exchangeClient.auth.verifyOtp",
+    "TAKATAK bridge performs the local magic-link exchange on the server",
+  ],
+  [
+    authBridge,
+    '.from("takatak_authorized_sessions" as never)',
+    "TAKATAK bridge records the exact authorized Supabase session_id",
+  ],
+  [
+    loginRoute,
+    "supabase.auth.setSession",
+    "login installs only the server-authorized local session",
+  ],
+  [
+    signupRoute,
+    "supabase.auth.setSession",
+    "signup installs only the server-authorized local session",
+  ],
+  [
+    sessionGrantMigration,
+    "CREATE TABLE public.takatak_authorized_sessions",
+    "database stores explicit TAKATAK-authorized local sessions",
+  ],
+  [
+    sessionGrantMigration,
+    "authorized.session_id::text = n.session_id",
+    "database session gate binds access to the exact granted session_id",
+  ],
+  [
+    sessionGrantMigration,
+    "SECURITY DEFINER",
+    "session grant lookup can enforce a private registry without exposing it",
+  ],
+  [
+    sessionGrantMigration,
+    "SELECT '20261002050000'",
+    "final production schema requires TAKATAK session grants",
+  ],
+  [
+    optionalAuth,
+    "requireTakatakAuthorizedSession",
+    "optional auth cannot bypass the TAKATAK session grant",
   ],
   [
     finalAuthMigration,
@@ -400,6 +467,17 @@ if (
 ) {
   violations.push(
     "database TAKATAK session gate must explicitly reject alternate local authentication methods.",
+  );
+}
+
+if (
+  loginRoute.includes(".auth.verifyOtp(") ||
+  signupRoute.includes(".auth.verifyOtp(") ||
+  loginRoute.includes("tokenHash") ||
+  signupRoute.includes("tokenHash")
+) {
+  violations.push(
+    "browser auth routes must not exchange local magic-link tokens directly; the TAKATAK server bridge must create and grant the session.",
   );
 }
 
