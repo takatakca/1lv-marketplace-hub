@@ -108,13 +108,13 @@ function deriveStatus(acct: Record<string, unknown>): ConnectResult {
 
 async function persist(vendorId: string, r: ConnectResult, accountId?: string) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const statusPatch = {
+  const statusPatch: Database["public"]["Tables"]["vendors"]["Update"] = {
     charges_enabled: r.chargesEnabled,
     payouts_enabled: r.payoutsEnabled,
     stripe_details_submitted: r.detailsSubmitted,
     stripe_connect_status: r.status,
     stripe_connect_last_checked_at: new Date().toISOString(),
-  } as never;
+  };
 
   if (!accountId) {
     const { data: updated, error } = await supabaseAdmin
@@ -136,7 +136,7 @@ async function persist(vendorId: string, r: ConnectResult, accountId?: string) {
     .update({
       ...statusPatch,
       stripe_connect_account_id: accountId,
-    } as never)
+    })
     .eq("id", vendorId)
     .is("stripe_connect_account_id", null)
     .select("id, stripe_connect_account_id")
