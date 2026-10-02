@@ -312,7 +312,13 @@ async function handleEvent(evt: StripeEvent) {
           break;
         }
 
-        if (order.payment_status === "paid") break;
+        if (
+          ["paid", "partially_refunded", "refunded"].includes(
+            order.payment_status,
+          )
+        ) {
+          break;
+        }
 
         const { data: inventoryCommitted, error: inventoryError } =
           await supabaseAdmin.rpc(
@@ -356,7 +362,8 @@ async function handleEvent(evt: StripeEvent) {
           .from("orders")
           .update({ payment_status: "failed" })
           .eq("id", orderId)
-          .eq("stripe_payment_intent_id", paymentIntentId);
+          .eq("stripe_payment_intent_id", paymentIntentId)
+          .in("payment_status", ["pending", "failed"]);
       }
       break;
     }
