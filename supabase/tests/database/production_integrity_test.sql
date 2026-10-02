@@ -2,12 +2,70 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(83);
+select plan(87);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002080000',
+  '20261002081500',
   'production schema marker is current'
+);
+
+select ok(
+  to_regprocedure(
+    'public.create_marketplace_order_locked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'
+  ) is not null,
+  'locked server-authoritative checkout RPC exists'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.create_marketplace_order_locked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.create_marketplace_order_locked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.create_marketplace_order_locked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)',
+    'EXECUTE'
+  ),
+  'only service role may execute the locked checkout RPC'
+);
+
+select ok(
+  position(
+    'checkout_request_hash'
+    in pg_get_functiondef(
+      'public.create_marketplace_order_locked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'Checkout idempotency key conflict'
+    in pg_get_functiondef(
+      'public.create_marketplace_order_locked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'::regprocedure
+    )
+  ) > 0,
+  'checkout idempotency key is bound to the normalized request payload'
+);
+
+select ok(
+  position(
+    'hashtextextended(v_idempotency_hash, 0)'
+    in pg_get_functiondef(
+      'public.create_marketplace_order_locked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'hashtextextended(v_product_id::text, 42117)'
+    in pg_get_functiondef(
+      'public.create_marketplace_order_locked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'::regprocedure
+    )
+  ) > 0,
+  'checkout wrapper serializes the idempotency key and then deterministically locks products'
 );
 
 select ok(
