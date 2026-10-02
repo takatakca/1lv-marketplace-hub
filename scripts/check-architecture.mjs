@@ -795,6 +795,18 @@ if (
 }
 
 if (
+  !payoutSchedulerServer.includes("recoveredStaleProcessing") ||
+  !payoutSchedulerServer.includes("!recoveredStaleProcessing") ||
+  !payoutSchedulerServer.includes("Math.max(previousAttempts, 1)") ||
+  !payoutSchedulerFunctions.includes('payout.status === "failed"') ||
+  !payoutSchedulerFunctions.includes('payout.status === "processing" ? attempts : attempts + 1')
+) {
+  violations.push(
+    "stale processing payout recovery must replay the same logical Stripe attempt even at the normal retry ceiling",
+  );
+}
+
+if (
   authBridge.includes(".auth.signOut();") ||
   authProvider.includes(".auth.signOut();")
 ) {
