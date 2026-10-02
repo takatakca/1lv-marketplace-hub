@@ -352,6 +352,7 @@ export async function drainTakatakOutbox(limit = 25): Promise<DrainResult> {
     .from("takatak_outbox")
     .select("*")
     .eq("status", "pending")
+    .lt("attempt_count", MAX_ATTEMPTS)
     .lte("next_attempt_at", new Date().toISOString())
     .order("created_at", { ascending: true })
     .limit(limit);
