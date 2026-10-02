@@ -174,6 +174,11 @@ USING (
   )
 );
 
+-- Customer storefront reads use fixed-column public catalog RPCs. Authenticated
+-- customers must never gain SELECT * access to cost/SKU/supplier fields on the
+-- private products base table.
+DROP POLICY IF EXISTS "Authenticated can view active products" ON public.products;
+
 CREATE OR REPLACE FUNCTION public.get_1lv_schema_version()
 RETURNS text
 LANGUAGE sql
