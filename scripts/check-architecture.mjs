@@ -119,6 +119,11 @@ for (const [content, marker, label] of [
     "login must never create an unconsented 1LV account",
   ],
   [
+    authBridge,
+    '.from("profile_consent_events")',
+    "login requires recorded 1LV consent",
+  ],
+  [
     masterClient,
     "requestTakatakPhoneOtp",
     "phone-only TAKATAK OTP payload",
