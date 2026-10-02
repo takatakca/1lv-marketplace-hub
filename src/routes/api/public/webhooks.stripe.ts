@@ -62,6 +62,34 @@ type StripeEvent = {
 
 type AdminDb = SupabaseClient<Database>;
 
+type VendorSubscriptionState = {
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  subscription_status: string;
+};
+
+function terminalSubscriptionStatus(status: string | null | undefined) {
+  return ["none", "canceled", "incomplete_expired"].includes(
+    String(status ?? "none").toLowerCase(),
+  );
+}
+
+async function loadVendorSubscriptionState(
+  db: AdminDb,
+  vendorId: string,
+): Promise<VendorSubscriptionState | null> {
+  const { data, error } = await db
+    .from("vendors")
+    .select(
+      "stripe_customer_id, stripe_subscription_id, subscription_status",
+    )
+    .eq("id", vendorId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as VendorSubscriptionState | null;
+}
+
 async function notifyAdmins(
   db: AdminDb,
   kind: string,
@@ -415,44 +443,137 @@ async function handleEvent(evt: StripeEvent) {
     }
     case "checkout.session.completed": {
       const vendorId = meta.vendor_id;
-      const customerId = (obj as { customer?: string }).customer;
-      const subscriptionId = (obj as { subscription?: string }).subscription;
-      if (vendorId) {
-        await supabaseAdmin
+      const customerId =
+        typeof (obj as { customer?: string }).customer === "string"
+          ? (obj as { customer: string }).customer
+          : null;
+      const subscriptionId =
+        typeof (obj as { subscription?: string }).subscription === "string"
+          ? (obj as { subscription: string }).subscription
+          : null;
+
+      if (vendorId && subscriptionId) {
+        const current = await loadVendorSubscriptionState(
+          supabaseAdmin,
+          vendorId,
+        );
+        if (!current) break;
+
+        const customerConflict =
+          current.stripe_customer_id &&
+          customerId &&
+          current.stripe_customer_id !== customerId;
+        const subscriptionConflict =
+          current.stripe_subscription_id &&
+          current.stripe_subscription_id !== subscriptionId &&
+          !terminalSubscriptionStatus(current.subscription_status);
+
+        if (customerConflict || subscriptionConflict) {
+          await notifyAdmins(
+            supabaseAdmin,
+            "stripe_subscription_binding_conflict",
+            "Stripe subscription binding conflict",
+            `A completed Checkout Session attempted to replace the active Stripe billing identity for vendor ${vendorId.slice(0, 8)}. Automatic rebinding was blocked.`,
+          );
+          break;
+        }
+
+        const { error: updateError } = await supabaseAdmin
           .from("vendors")
           .update({
-            stripe_customer_id: customerId ?? null,
-            stripe_subscription_id: subscriptionId ?? null,
+            ...(customerId ? { stripe_customer_id: customerId } : {}),
+            stripe_subscription_id: subscriptionId,
             subscription_plan: meta.plan ?? null,
           } as never)
           .eq("id", vendorId);
+
+        if (updateError) throw updateError;
       }
       break;
     }
     case "customer.subscription.created":
     case "customer.subscription.updated": {
       const vendorId = meta.vendor_id;
-      const status = (obj as { status?: string }).status ?? "active";
-      const subId = (obj as { id?: string }).id;
-      if (vendorId) {
-        await supabaseAdmin
+      const status =
+        typeof (obj as { status?: string }).status === "string"
+          ? (obj as { status: string }).status
+          : "active";
+      const subId =
+        typeof (obj as { id?: string }).id === "string"
+          ? (obj as { id: string }).id
+          : null;
+
+      if (vendorId && subId) {
+        const current = await loadVendorSubscriptionState(
+          supabaseAdmin,
+          vendorId,
+        );
+        if (!current) break;
+
+        if (
+          current.stripe_subscription_id &&
+          current.stripe_subscription_id !== subId &&
+          !terminalSubscriptionStatus(current.subscription_status)
+        ) {
+          await notifyAdmins(
+            supabaseAdmin,
+            "stripe_subscription_event_conflict",
+            "Stripe subscription event conflict",
+            `A Stripe subscription event attempted to replace another non-terminal subscription for vendor ${vendorId.slice(0, 8)}. The stale/conflicting event was ignored.`,
+          );
+          break;
+        }
+
+        const { error: updateError } = await supabaseAdmin
           .from("vendors")
           .update({
-            stripe_subscription_id: subId ?? null,
+            stripe_subscription_id: subId,
             subscription_status: status,
             subscription_plan: meta.plan ?? null,
           } as never)
           .eq("id", vendorId);
+
+        if (updateError) throw updateError;
       }
       break;
     }
     case "customer.subscription.deleted": {
       const vendorId = meta.vendor_id;
-      if (vendorId) {
-        await supabaseAdmin
+      const subId =
+        typeof (obj as { id?: string }).id === "string"
+          ? (obj as { id: string }).id
+          : null;
+
+      if (vendorId && subId) {
+        const current = await loadVendorSubscriptionState(
+          supabaseAdmin,
+          vendorId,
+        );
+        if (!current) break;
+
+        if (
+          current.stripe_subscription_id &&
+          current.stripe_subscription_id !== subId
+        ) {
+          await notifyAdmins(
+            supabaseAdmin,
+            "stripe_stale_subscription_deleted",
+            "Stale Stripe cancellation ignored",
+            `A cancellation for an old Stripe subscription was ignored for vendor ${vendorId.slice(0, 8)} because another subscription is currently linked.`,
+          );
+          break;
+        }
+
+        const { error: updateError } = await supabaseAdmin
           .from("vendors")
-          .update({ subscription_status: "canceled" } as never)
+          .update({
+            stripe_subscription_id:
+              current.stripe_subscription_id ?? subId,
+            subscription_status: "canceled",
+          } as never)
           .eq("id", vendorId);
+
+        if (updateError) throw updateError;
       }
       break;
     }
@@ -474,15 +595,18 @@ async function handleEvent(evt: StripeEvent) {
         null;
 
       if (subscriptionId) {
-        await supabaseAdmin
+        const { error: updateError } = await supabaseAdmin
           .from("vendors")
           .update({ subscription_status: status } as never)
           .eq("stripe_subscription_id", subscriptionId);
+        if (updateError) throw updateError;
       } else if (customerId) {
-        await supabaseAdmin
-          .from("vendors")
-          .update({ subscription_status: status } as never)
-          .eq("stripe_customer_id", customerId);
+        await notifyAdmins(
+          supabaseAdmin,
+          "stripe_invoice_missing_subscription",
+          "Stripe invoice needs subscription reconciliation",
+          "A subscription invoice event did not contain a subscription id. Automatic vendor subscription status mutation was blocked.",
+        );
       }
       break;
     }
