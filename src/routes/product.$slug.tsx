@@ -157,9 +157,13 @@ function ProductPage() {
           1000 * 60 * 60 * 24 * (product.shipping === "fast" ? 2 : 6),
       )
     : null;
+  const soldOut =
+    product.trackInventory &&
+    typeof product.inventoryQuantity === "number" &&
+    product.inventoryQuantity <= 0;
   const maxQty =
     product.trackInventory && typeof product.inventoryQuantity === "number"
-      ? Math.max(1, product.inventoryQuantity)
+      ? Math.max(0, product.inventoryQuantity)
       : 99;
 
   return (
@@ -366,35 +370,56 @@ function ProductPage() {
 
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wide text-navy">Quantity</span>
-                <div className="flex items-center gap-1 rounded-md border border-border">
-                  <button onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label="Decrease quantity" className="grid h-9 w-9 place-items-center text-muted-foreground hover:text-navy">
-                    <Minus size={15} />
-                  </button>
-                  <span className="w-8 text-center text-sm font-bold text-navy">{qty}</span>
-                  <button
-                    onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
-                    disabled={qty >= maxQty}
-                    aria-label="Increase quantity"
-                    className="grid h-9 w-9 place-items-center text-muted-foreground hover:text-navy disabled:cursor-not-allowed disabled:opacity-35"
-                  >
-                    <Plus size={15} />
-                  </button>
-                </div>
+                {soldOut ? (
+                  <span className="rounded-md bg-muted px-3 py-2 text-xs font-bold text-muted-foreground">
+                    Sold out
+                  </span>
+                ) : (
+                  <div className="flex items-center gap-1 rounded-md border border-border">
+                    <button onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label="Decrease quantity" className="grid h-9 w-9 place-items-center text-muted-foreground hover:text-navy">
+                      <Minus size={15} />
+                    </button>
+                    <span className="w-8 text-center text-sm font-bold text-navy">{qty}</span>
+                    <button
+                      onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
+                      disabled={qty >= maxQty}
+                      aria-label="Increase quantity"
+                      className="grid h-9 w-9 place-items-center text-muted-foreground hover:text-navy disabled:cursor-not-allowed disabled:opacity-35"
+                    >
+                      <Plus size={15} />
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
-                <Link
-                  to="/checkout"
-                  onClick={() => add(product, qty, variant)}
-                  className="block w-full rounded-md bg-gradient-deal px-4 py-3 text-center text-sm font-bold text-white transition hover:opacity-90"
-                >
-                  Buy now
-                </Link>
+                {soldOut ? (
+                  <button
+                    type="button"
+                    disabled
+                    className="block w-full cursor-not-allowed rounded-md bg-muted px-4 py-3 text-center text-sm font-bold text-muted-foreground"
+                  >
+                    Sold out
+                  </button>
+                ) : (
+                  <Link
+                    to="/checkout"
+                    onClick={() => add(product, qty, variant)}
+                    className="block w-full rounded-md bg-gradient-deal px-4 py-3 text-center text-sm font-bold text-white transition hover:opacity-90"
+                  >
+                    Buy now
+                  </Link>
+                )}
                 <button
-                  onClick={() => { add(product, qty, variant); toast.success("Added to cart"); }}
-                  className="w-full rounded-md border-2 border-electric bg-electric/5 px-4 py-2.5 text-sm font-bold text-electric transition hover:bg-electric hover:text-electric-foreground"
+                  disabled={soldOut}
+                  onClick={() => {
+                    if (soldOut) return;
+                    add(product, qty, variant);
+                    toast.success("Added to cart");
+                  }}
+                  className="w-full rounded-md border-2 border-electric bg-electric/5 px-4 py-2.5 text-sm font-bold text-electric transition hover:bg-electric hover:text-electric-foreground disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground"
                 >
-                  Add to cart
+                  {soldOut ? "Sold out" : "Add to cart"}
                 </button>
                 <button
                   onClick={() => toggle(product.id)}
