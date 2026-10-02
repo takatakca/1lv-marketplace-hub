@@ -2009,10 +2009,15 @@ if (
 }
 
 if (
-  firstOrderEmailHistoryMigration.includes("NEW.customer_id IS NULL") ||
+  !firstOrderEmailHistoryMigration.includes(
+    "NEW.customer_id IS NOT NULL",
+  ) ||
   !firstOrderEmailHistoryMigration.includes("o.customer_id = NEW.customer_id") ||
   !firstOrderEmailHistoryMigration.includes(
     "lower(btrim(COALESCE(o.customer_email",
+  ) ||
+  !firstOrderEmailHistoryMigration.includes(
+    "OR lower(btrim(COALESCE(o.customer_email",
   )
 ) {
   violations.push(
