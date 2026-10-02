@@ -2,7 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Database } from "@/integrations/supabase/types";
-import type { SupabaseClient } from "@supabase/supabase-js";\nimport { resolveTrustedAppOrigin } from "@/lib/request-origin.server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolveTrustedAppOrigin } from "@/lib/request-origin.server";
 
 /**
  * Stripe Connect (Express) server functions.
