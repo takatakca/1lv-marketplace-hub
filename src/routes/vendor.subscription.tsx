@@ -42,8 +42,9 @@ function Page() {
         data: { vendorId: vendor.id, plan },
       });
       if (res.pending || !res.url) {
-        toast.message("Stripe setup required", {
-          description: res.reason ?? "Billing will activate once Stripe is connected.",
+        toast.message("Subscription checkout unavailable", {
+          description:
+            res.reason ?? "Billing will activate once Stripe is connected.",
         });
         return;
       }
