@@ -133,6 +133,10 @@ const optionalAuth = readFileSync(
   join(root, "src/integrations/supabase/optional-auth.server.ts"),
   "utf8",
 );
+const disputesFunctions = readFileSync(
+  join(root, "src/lib/disputes.functions.ts"),
+  "utf8",
+);
 const requestOrigin = readFileSync(
   join(root, "src/lib/request-origin.server.ts"),
   "utf8",
@@ -461,6 +465,12 @@ for (const [content, marker, label] of [
     '"stripe_external_refund_detected"',
     "external Stripe refunds are surfaced for manual reconciliation",
   ],
+  [
+    disputesFunctions,
+    '["approved", "processing", "failed"].includes(refund.status)',
+    "failed and in-flight Stripe refunds remain safely recoverable with the stable idempotency key",
+  ],
+
   [
     stripeWebhook,
     '"stripe_subscription_binding_conflict"',
