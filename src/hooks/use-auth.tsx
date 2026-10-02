@@ -49,45 +49,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
-      if (s?.user && !isTakatakLocalUser(s.user)) {
+    let active = true;
+
+    const acceptSession = async (
+      candidate: Session | null,
+      signalMaster: boolean,
+    ) => {
+      if (!active) return;
+
+      if (!candidate?.user) {
         setSession(null);
         setRoles([]);
-        // Defer Auth calls outside the callback to avoid Supabase auth
-        // callback deadlocks. A stray local Supabase session is never trusted.
-        setTimeout(() => {
-          void supabase.auth.signOut();
-        }, 0);
         return;
       }
 
-      setSession(s);
-      if (s?.user) {
-        // defer to avoid deadlocks
-        setTimeout(() => fetchRoles(s.user.id), 0);
-        // The browser session is local to 1LV and is issued only after
-        // GROUPE TAKATAK verifies the master identity. This non-blocking event
-        // updates TAKATAK's authorized 1LV projection; it is not authentication.
-        setTimeout(() => signalCustomer("customer.created"), 0);
-      } else {
-        setRoles([]);
-      }
-    });
-
-    supabase.auth.getSession().then(({ data }) => {
-      const current = data.session;
-      if (current?.user && !isTakatakLocalUser(current.user)) {
+      if (!isTakatakLocalUser(candidate.user)) {
         setSession(null);
         setRoles([]);
-        void supabase.auth.signOut();
-      } else {
-        setSession(current);
-        if (current?.user) fetchRoles(current.user.id);
+        await supabase.auth.signOut();
+        return;
       }
-      setLoading(false);
+
+      const { data: granted, error: grantError } = await supabase.rpc(
+        "is_takatak_authorized_session" as never,
+      );
+
+      if (!active) return;
+
+      if (grantError || (granted as unknown) !== true) {
+        setSession(null);
+        setRoles([]);
+        await supabase.auth.signOut();
+        return;
+      }
+
+      setSession(candidate);
+      await fetchRoles(candidate.user.id);
+
+      if (signalMaster) {
+        // This event updates TAKATAK's authorized 1LV projection. It is never
+        // used to establish identity or to authorize the local session.
+        void signalCustomer("customer.created");
+      }
+    };
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+      // Supabase recommends deferring additional Auth/Data API work outside
+      // the auth-state callback to avoid callback lock/deadlock behavior.
+      setTimeout(() => {
+        void acceptSession(s, true);
+      }, 0);
     });
 
-    return () => sub.subscription.unsubscribe();
+    void supabase.auth.getSession().then(async ({ data }) => {
+      try {
+        await acceptSession(data.session, false);
+      } finally {
+        if (active) setLoading(false);
+      }
+    });
+
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
   const fetchRoles = async (userId: string) => {
