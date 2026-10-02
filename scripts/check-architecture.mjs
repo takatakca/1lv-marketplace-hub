@@ -76,6 +76,21 @@ for (const [content, marker, label] of [
     "syntheticIdentityEmail(identity.id)",
     "master-UUID local session isolation",
   ],
+  [
+    masterClient,
+    "normalizeTakatakMasterApiBaseUrl",
+    "TAKATAK master API base URL normalization",
+  ],
+  [
+    masterClient,
+    'pathname.endsWith("/api/v1")',
+    "TAKATAK /api/v1 normalization",
+  ],
+  [
+    masterClient,
+    'pathname = "/api"',
+    "TAKATAK origin-to-/api normalization",
+  ],
   [authBridge, 'auth_source: "takatak"', "TAKATAK local session marker"],
   [
     authBridge,
