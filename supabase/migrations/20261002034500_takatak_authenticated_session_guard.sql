@@ -78,7 +78,7 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = ''
-AS $
+AS $secure_1$
   SELECT
     (
       COALESCE(auth.jwt() ->> 'role', '') = 'service_role'
@@ -93,7 +93,7 @@ AS $
       WHERE user_id = _user_id
         AND role = _role
     );
-$;
+$secure_1$;
 
 CREATE OR REPLACE FUNCTION public.owns_vendor(
   _vendor_id uuid,
@@ -104,7 +104,7 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = ''
-AS $
+AS $secure_2$
   SELECT
     (
       COALESCE(auth.jwt() ->> 'role', '') = 'service_role'
@@ -119,7 +119,7 @@ AS $
       WHERE v.id = _vendor_id
         AND v.user_id = _user_id
     );
-$;
+$secure_2$;
 
 CREATE OR REPLACE FUNCTION public.can_access_dispute(
   _dispute_id uuid,
@@ -130,7 +130,7 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = ''
-AS $
+AS $secure_3$
   SELECT
     (
       COALESCE(auth.jwt() ->> 'role', '') = 'service_role'
@@ -149,7 +149,7 @@ AS $
           OR public.has_role(_user_id, 'admin'::public.app_role)
         )
     );
-$;
+$secure_3$;
 
 REVOKE ALL ON FUNCTION public.has_role(uuid, public.app_role)
 FROM PUBLIC, anon;
