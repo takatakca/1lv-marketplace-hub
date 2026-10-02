@@ -403,7 +403,15 @@ export async function generatePayoutsCore(
     if (itemInsertFailed) {
       // Deleting the payout cascades any chunks inserted before a concurrent
       // uniqueness conflict or transient failure.
-      await db.from("payouts").delete().eq("id", payoutId);
+      const { error: cleanupError } = await db
+        .from("payouts")
+        .delete()
+        .eq("id", payoutId);
+      if (cleanupError) {
+        throw new Error(
+          `Could not roll back incomplete payout ${payoutId}: ${cleanupError.message}`,
+        );
+      }
       skipped += items.length;
       continue;
     }
@@ -411,20 +419,34 @@ export async function generatePayoutsCore(
     if (adjustmentRows.length > 0) {
       const adjustmentIds = adjustmentRows.map((adjustment) => adjustment.id);
       let adjustmentFailed = false;
+
       for (const ids of batches(adjustmentIds)) {
-        const { error } = await db
+        const { data: claimed, error } = await db
           .from("payout_adjustments")
           .update({ applied_payout_id: payoutId })
           .in("id", ids)
-          .is("applied_payout_id", null);
-        if (error) {
+          .is("applied_payout_id", null)
+          .select("id");
+
+        if (error || (claimed ?? []).length !== ids.length) {
           adjustmentFailed = true;
           break;
         }
       }
 
       if (adjustmentFailed) {
-        await db.from("payouts").delete().eq("id", payoutId);
+        // applied_payout_id uses ON DELETE SET NULL, so deleting this payout
+        // releases any adjustments this candidate managed to claim before a
+        // concurrent generator won one of the remaining rows.
+        const { error: cleanupError } = await db
+          .from("payouts")
+          .delete()
+          .eq("id", payoutId);
+        if (cleanupError) {
+          throw new Error(
+            `Could not roll back payout adjustment claim ${payoutId}: ${cleanupError.message}`,
+          );
+        }
         skipped += items.length;
         continue;
       }
