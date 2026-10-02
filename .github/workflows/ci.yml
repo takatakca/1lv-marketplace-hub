@@ -99,6 +99,7 @@ jobs:
           TAKATAK_MASTER_API_URL: "https://takatak.invalid"
           TAKATAK_1LV_API_KEY: ${{ github.sha }}
           TAKATAK_DRAIN_CRON_SECRET: "ci-takatak-drain-secret-000000000000000000"
+          INVENTORY_MAINTENANCE_CRON_SECRET: "ci-inventory-maintenance-secret-000000000000000"
           HEALTH_SKIP_DATABASE_CHECK: "1"
           RELEASE_REVISION: ${{ github.sha }}
         run: |
@@ -128,6 +129,12 @@ jobs:
               TAKATAK_STATUS="$(curl                 --silent                 --output /dev/null                 --write-out '%{http_code}'                 --max-time 5                 --request POST                 "http://127.0.0.1:$PORT/api/internal/takatak/drain")"
               test "$TAKATAK_STATUS" = "401" || {
                 echo "Expected unauthenticated TAKATAK drain to return 401, got $TAKATAK_STATUS"
+                exit 1
+              }
+
+              INVENTORY_STATUS="$(curl                 --silent                 --output /dev/null                 --write-out '%{http_code}'                 --max-time 5                 --request POST                 "http://127.0.0.1:$PORT/api/internal/inventory/cleanup")"
+              test "$INVENTORY_STATUS" = "401" || {
+                echo "Expected unauthenticated inventory cleanup to return 401, got $INVENTORY_STATUS"
                 exit 1
               }
 
@@ -172,6 +179,7 @@ jobs:
           TAKATAK_MASTER_API_URL: "https://takatak.invalid"
           TAKATAK_1LV_API_KEY: ${{ github.sha }}
           TAKATAK_DRAIN_CRON_SECRET: "ci-takatak-drain-secret-000000000000000000"
+          INVENTORY_MAINTENANCE_CRON_SECRET: "ci-inventory-maintenance-secret-000000000000000"
           HEALTH_SKIP_DATABASE_CHECK: "1"
           RELEASE_REVISION: ${{ github.sha }}
         run: |
