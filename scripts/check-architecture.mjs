@@ -1262,6 +1262,9 @@ if (
   !atomicPayoutMigration.includes(
     "v_claimed_adjustments <> v_adjustment_count",
   ) ||
+  !atomicPayoutMigration.includes("FOR UPDATE OF source") ||
+  !atomicPayoutMigration.includes("SECURITY INVOKER") ||
+  atomicPayoutMigration.includes("SECURITY DEFINER") ||
   !atomicPayoutMigration.includes("TO service_role")
 ) {
   violations.push(
