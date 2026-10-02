@@ -186,7 +186,7 @@ const marketplaceTimestampAuthorityMigration = readFileSync(
   "utf8",
 );
 const firstOrderPromotionUniquenessMigration = readFileSync(
-  join(root, "supabase/migrations/20261002114500_first_order_promotion_uniqueness.sql"),
+  join(root, "supabase/migrations/20261002113000_first_order_promotion_uniqueness.sql"),
   "utf8",
 );
 const firstOrderPartialRefundMigration = readFileSync(
