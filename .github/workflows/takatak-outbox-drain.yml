@@ -27,6 +27,21 @@ jobs:
           test -n "$SITE_URL" || (echo "Missing PRODUCTION_URL repository variable" && exit 1)
           test -n "$DRAIN_SECRET" || (echo "Missing TAKATAK_DRAIN_CRON_SECRET repository secret" && exit 1)
 
+          node -e '
+            const url = new URL(process.argv[1]);
+            if (
+              url.protocol !== "https:" ||
+              url.username ||
+              url.password ||
+              url.pathname !== "/" ||
+              url.search ||
+              url.hash
+            ) process.exit(1);
+          ' "$SITE_URL" || {
+            echo "PRODUCTION_URL must be a clean HTTPS origin."
+            exit 1
+          }
+
       - name: Drain queued TAKATAK events
         shell: bash
         env:
@@ -36,4 +51,27 @@ jobs:
           set -euo pipefail
           SITE_URL="${SITE_URL%/}"
 
-          curl             --fail             --silent             --show-error             --retry 3             --retry-delay 10             --max-time 60             --request POST             --header "Authorization: Bearer $DRAIN_SECRET"             --header "Content-Type: application/json"             "$SITE_URL/api/internal/takatak/drain"
+          RESPONSE="$(curl \
+            --fail \
+            --silent \
+            --show-error \
+            --retry 3 \
+            --retry-delay 10 \
+            --max-time 60 \
+            --request POST \
+            --header "Authorization: Bearer $DRAIN_SECRET" \
+            --header "Content-Type: application/json" \
+            "$SITE_URL/api/internal/takatak/drain")"
+
+          node -e '
+            const payload = JSON.parse(process.argv[1]);
+            if (
+              payload.ok !== true ||
+              !Number.isInteger(payload.processed) ||
+              !Number.isInteger(payload.delivered) ||
+              !Number.isInteger(payload.failed) ||
+              payload.failed !== 0
+            ) process.exit(1);
+          ' "$RESPONSE"
+
+          echo "TAKATAK outbox drain completed without delivery failures."
