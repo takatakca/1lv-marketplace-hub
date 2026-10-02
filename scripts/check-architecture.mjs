@@ -189,6 +189,10 @@ const firstOrderPromotionUniquenessMigration = readFileSync(
   join(root, "supabase/migrations/20261002113000_first_order_promotion_uniqueness.sql"),
   "utf8",
 );
+const firstOrderPartialRefundMigration = readFileSync(
+  join(root, "supabase/migrations/20261002114500_first_order_partial_refund_guard.sql"),
+  "utf8",
+);
 const marketplaceSettingsMigration = readFileSync(
   join(root, "supabase/migrations/20260930150630_persistent_marketplace_settings.sql"),
   "utf8",
@@ -490,7 +494,22 @@ for (const [content, marker, label] of [
   [
     firstOrderPromotionUniquenessMigration,
     "SELECT '20261002113000'",
-    "final production schema marker includes first-order promotion uniqueness",
+    "first-order promotion uniqueness migration retains its historical schema marker",
+  ],
+  [
+    firstOrderPartialRefundMigration,
+    "SELECT '20261002114500'",
+    "final production schema marker includes partial-refund first-order guard",
+  ],
+  [
+    firstOrderPartialRefundMigration,
+    "payment_status::text IN ('paid', 'partially_refunded')",
+    "partially refunded orders remain prior paid orders for first-order promotion eligibility",
+  ],
+  [
+    firstOrderPartialRefundMigration,
+    "Promotion is available on the first paid order only",
+    "first-order promotion trigger fails closed when prior paid history exists",
   ],
   [
     firstOrderPromotionUniquenessMigration,
@@ -1899,15 +1918,15 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002113000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002114500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002113000"')
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002114500"')
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002113000",
+    "production health/migration gates must track schema 20261002114500",
   );
 }
 
