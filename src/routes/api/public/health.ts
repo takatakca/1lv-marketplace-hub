@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { takatakConfigured } from "@/lib/takatak/client.server";
 
-const EXPECTED_SCHEMA_VERSION = "20261002070000";
+const EXPECTED_SCHEMA_VERSION = "20261002071500";
 
 const REQUIRED_RUNTIME_ENV = [
   "SUPABASE_URL",
