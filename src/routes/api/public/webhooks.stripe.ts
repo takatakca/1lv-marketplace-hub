@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/integrations/supabase/types";
+import type { Database, Json } from "@/integrations/supabase/types";
 
 /**
  * Stripe webhook endpoint — verifies signature, then applies idempotent
@@ -88,10 +88,11 @@ async function notifyAdmins(
 }
 
 async function claimEvent(db: AdminDb, evt: StripeEvent): Promise<boolean> {
+  const payload = JSON.parse(JSON.stringify(evt)) as Json;
   const { data, error } = await db.rpc("claim_stripe_event", {
     _id: evt.id,
     _type: evt.type,
-    _payload: evt,
+    _payload: payload,
   });
   if (error) throw error;
   return data === true;
