@@ -62,6 +62,54 @@ async function stripeGet(path: string): Promise<Record<string, unknown>> {
   return json;
 }
 
+async function makePaymentIntentNonPayable(
+  paymentIntentId: string,
+  orderId: string,
+): Promise<"canceled" | "succeeded"> {
+  const intent = await stripeGet(
+    `/payment_intents/${encodeURIComponent(paymentIntentId)}`,
+  );
+  const intentId = typeof intent.id === "string" ? intent.id : "";
+  const status = typeof intent.status === "string" ? intent.status : "";
+  const metadata =
+    intent.metadata &&
+    typeof intent.metadata === "object" &&
+    !Array.isArray(intent.metadata)
+      ? (intent.metadata as Record<string, unknown>)
+      : {};
+  const stripeOrderId =
+    typeof metadata["order_id"] === "string"
+      ? String(metadata["order_id"])
+      : "";
+
+  if (intentId !== paymentIntentId || stripeOrderId !== orderId) {
+    throw new Error(
+      "Stored Stripe payment authorization does not match this order.",
+    );
+  }
+
+  if (status === "succeeded") return "succeeded";
+  if (status === "canceled") return "canceled";
+
+  const canceled = await stripePost(
+    `/payment_intents/${encodeURIComponent(paymentIntentId)}/cancel`,
+    { cancellation_reason: "abandoned" },
+    `1lv_order_${orderId}_expire_${paymentIntentId}_v1`,
+  );
+  const canceledId =
+    typeof canceled.id === "string" ? canceled.id : "";
+  const canceledStatus =
+    typeof canceled.status === "string" ? canceled.status : "";
+
+  if (canceledId !== paymentIntentId || canceledStatus !== "canceled") {
+    throw new Error(
+      "Stripe payment authorization could not be made non-payable safely.",
+    );
+  }
+
+  return "canceled";
+}
+
 async function findOpenVendorSubscriptionCheckout(
   customerId: string,
   vendorId: string,
@@ -182,12 +230,31 @@ export const createPaymentIntent = createServerFn({ method: "POST" })
       new Date(order.inventory_reserved_until as string).getTime() <= Date.now();
 
     if (order.inventory_released_at || reservationExpired) {
+      if (order.stripe_payment_intent_id) {
+        const paymentState = await makePaymentIntentNonPayable(
+          order.stripe_payment_intent_id,
+          order.id,
+        );
+        if (paymentState === "succeeded") {
+          return {
+            clientSecret: null,
+            pending: true,
+            reason:
+              "Stripe already reports this payment as succeeded. The order is being reconciled before any inventory is released.",
+          };
+        }
+      }
+
       if (!order.inventory_released_at && reservationExpired) {
-        await supabaseAdmin.rpc(
+        const { error: releaseError } = await supabaseAdmin.rpc(
           "release_order_inventory" as never,
           { _order_id: order.id } as never,
         );
+        if (releaseError) {
+          throw new Error("Could not release expired checkout inventory.");
+        }
       }
+
       return {
         clientSecret: null,
         pending: true,
