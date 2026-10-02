@@ -222,26 +222,43 @@ try {
       email: localEmail,
       password,
     });
-  assert.equal(passwordLoginError, null, passwordLoginError?.message);
-  assert.ok(passwordLogin.session?.access_token, "Password session missing");
 
-  const passwordMethods = authMethods(
-    decodePayload(passwordLogin.session.access_token),
-  );
-  assert.ok(
-    passwordMethods.has("password"),
-    `Expected password AMR, got: ${JSON.stringify([...passwordMethods])}`,
-  );
-  assert.equal(
-    await profileVisible(passwordLogin.session.access_token, takatakUserId),
-    false,
-    "Direct local password session must be denied by restrictive RLS",
-  );
-  assert.equal(
-    await hasRole(passwordLogin.session.access_token, takatakUserId, "customer"),
-    false,
-    "Direct password session must also be denied by SECURITY DEFINER helpers",
-  );
+  if (passwordLoginError) {
+    assert.equal(
+      passwordLoginError.code,
+      "email_provider_disabled",
+      `Unexpected direct password-login failure: ${passwordLoginError.message}`,
+    );
+    assert.equal(
+      passwordLogin.session,
+      null,
+      "Disabled password provider must not issue a local session",
+    );
+  } else {
+    assert.ok(passwordLogin.session?.access_token, "Password session missing");
+
+    const passwordMethods = authMethods(
+      decodePayload(passwordLogin.session.access_token),
+    );
+    assert.ok(
+      passwordMethods.has("password"),
+      `Expected password AMR, got: ${JSON.stringify([...passwordMethods])}`,
+    );
+    assert.equal(
+      await profileVisible(passwordLogin.session.access_token, takatakUserId),
+      false,
+      "Direct local password session must be denied by restrictive RLS",
+    );
+    assert.equal(
+      await hasRole(
+        passwordLogin.session.access_token,
+        takatakUserId,
+        "customer",
+      ),
+      false,
+      "Direct password session must also be denied by SECURITY DEFINER helpers",
+    );
+  }
 
   const directClient = publicClient();
   const { data: directSignup, error: directSignupError } =
