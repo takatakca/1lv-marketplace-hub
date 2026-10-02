@@ -207,7 +207,7 @@ jobs:
   database-migrations:
     name: Rebuild Supabase migrations
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       SUPABASE_TELEMETRY_DISABLED: "1"
 
@@ -229,8 +229,8 @@ jobs:
         with:
           version: "2.118.0"
 
-      - name: Start local Supabase database
-        run: supabase db start
+      - name: Start full local Supabase stack
+        run: supabase start
 
       - name: Export local Supabase Auth environment
         shell: bash
