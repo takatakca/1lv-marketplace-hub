@@ -242,12 +242,74 @@ async function handleEvent(evt: StripeEvent) {
     }
     case "charge.refunded": {
       const orderId = meta.order_id;
-      const amountRefunded = Number((obj as { amount_refunded?: number }).amount_refunded ?? 0);
+      const paymentIntentId =
+        typeof (obj as { payment_intent?: string }).payment_intent === "string"
+          ? (obj as { payment_intent: string }).payment_intent
+          : null;
+      const amountRefunded = Number(
+        (obj as { amount_refunded?: number }).amount_refunded ?? 0,
+      );
       const amount = Number((obj as { amount?: number }).amount ?? 0);
-      if (orderId) {
+      const refundCurrency =
+        typeof (obj as { currency?: string }).currency === "string"
+          ? (obj as { currency: string }).currency.toLowerCase()
+          : "";
+
+      if (orderId && paymentIntentId) {
+        const { data: order, error: orderError } = await supabaseAdmin
+          .from("orders")
+          .select(
+            "id, order_number, total, currency, payment_status, stripe_payment_intent_id",
+          )
+          .eq("id", orderId)
+          .maybeSingle();
+
+        if (orderError) throw orderError;
+
+        const expectedAmount = order
+          ? Math.round(Number(order.total) * 100)
+          : NaN;
+        const expectedCurrency = String(order?.currency ?? "CAD").toLowerCase();
+
+        if (
+          !order ||
+          order.stripe_payment_intent_id !== paymentIntentId ||
+          !Number.isSafeInteger(amount) ||
+          amount !== expectedAmount ||
+          refundCurrency !== expectedCurrency
+        ) {
+          await notifyAdmins(
+            supabaseAdmin,
+            "stripe_refund_order_mismatch",
+            "Stripe refund/order mismatch",
+            `A refund event referenced order ${orderId} but did not match its stored PaymentIntent, amount, or currency. Automatic refund state changes were blocked.`,
+          );
+          break;
+        }
+
+        if (
+          !Number.isSafeInteger(amountRefunded) ||
+          amountRefunded < 0 ||
+          amountRefunded > amount
+        ) {
+          await notifyAdmins(
+            supabaseAdmin,
+            "stripe_refund_amount_mismatch",
+            `Refund mismatch on order ${order.order_number}`,
+            "Stripe reported an invalid refunded amount. Automatic refund state changes were blocked.",
+          );
+          break;
+        }
+
         const fullyRefunded = amount > 0 && amountRefunded >= amount;
         const status = fullyRefunded ? "refunded" : "partially_refunded";
-        await supabaseAdmin.from("orders").update({ payment_status: status }).eq("id", orderId);
+        const { error: refundUpdateError } = await supabaseAdmin
+          .from("orders")
+          .update({ payment_status: status })
+          .eq("id", orderId)
+          .eq("stripe_payment_intent_id", paymentIntentId);
+
+        if (refundUpdateError) throw refundUpdateError;
 
         if (fullyRefunded) {
           const { error: promotionRefundError } = await supabaseAdmin.rpc(
