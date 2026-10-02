@@ -57,18 +57,66 @@ export type SchedulerSettings = {
   maxTransferAttempts: number;
 };
 
+function boundedIntegerSetting(
+  value: unknown,
+  fallback: number,
+  label: string,
+  min: number,
+  max: number,
+): number {
+  const parsed = value == null ? fallback : Number(value);
+  if (
+    !Number.isSafeInteger(parsed) ||
+    parsed < min ||
+    parsed > max
+  ) {
+    throw new Error(
+      `Invalid payout setting ${label}; expected an integer between ${min} and ${max}.`,
+    );
+  }
+  return parsed;
+}
+
 export async function readSettings(db: Db): Promise<SchedulerSettings> {
-  const { data } = await db.from("payout_settings").select("*").eq("id", true).maybeSingle();
+  const { data, error } = await db
+    .from("payout_settings")
+    .select("*")
+    .eq("id", true)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Could not read payout settings: ${error.message}`);
+  }
+
   const r = (data ?? {}) as Record<string, unknown>;
+  const frequency = String(r.payout_frequency ?? "weekly").trim().toLowerCase();
+  if (frequency !== "weekly") {
+    throw new Error(
+      "Invalid payout setting payout_frequency; only weekly scheduling is currently supported.",
+    );
+  }
+
   return {
-    holdDays: Number(r.hold_days ?? 7),
-    frequency: String(r.payout_frequency ?? "weekly"),
-    payoutDay: Number(r.payout_day ?? 1),
-    payoutHourUtc: Number(r.payout_hour_utc ?? 7),
+    holdDays: boundedIntegerSetting(r.hold_days, 7, "hold_days", 0, 365),
+    frequency,
+    payoutDay: boundedIntegerSetting(r.payout_day, 1, "payout_day", 0, 6),
+    payoutHourUtc: boundedIntegerSetting(
+      r.payout_hour_utc,
+      7,
+      "payout_hour_utc",
+      0,
+      23,
+    ),
     autoGenerate: r.auto_generate_payouts !== false,
     autoProcessTransfers: r.auto_process_transfers === true,
     retryFailedTransfers: r.retry_failed_transfers === true,
-    maxTransferAttempts: Number(r.max_transfer_attempts ?? 3),
+    maxTransferAttempts: boundedIntegerSetting(
+      r.max_transfer_attempts,
+      3,
+      "max_transfer_attempts",
+      1,
+      10,
+    ),
   };
 }
 
