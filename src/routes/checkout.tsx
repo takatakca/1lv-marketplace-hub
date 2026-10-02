@@ -104,6 +104,10 @@ function Checkout() {
   const checkoutKeyRef = useRef<string | null>(null);
   const guestBlocked =
     !user && marketplaceSettings?.allow_guest_checkout === false;
+  const contactEmail =
+    user?.email && !user.email.toLowerCase().endsWith("@auth.1lv.ca")
+      ? user.email
+      : "";
 
   const preview = useMemo(
     () => marketplaceSettings
@@ -292,7 +296,7 @@ function Checkout() {
                     type="email"
                     required
                     autoComplete="email"
-                    defaultValue={user?.email ?? ""}
+                    defaultValue={contactEmail}
                     placeholder="you@example.com"
                   />
                   <Field
