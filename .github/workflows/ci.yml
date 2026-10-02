@@ -85,6 +85,7 @@ jobs:
         env:
           PORT: "4178"
           SUPABASE_URL: "https://example.supabase.co"
+          SUPABASE_PUBLISHABLE_KEY: "ci-publishable-key"
           SUPABASE_SERVICE_ROLE_KEY: "ci-service-role-key"
           STRIPE_SECRET_KEY: "sk_test_ci"
           STRIPE_WEBHOOK_SECRET: "whsec_ci"
