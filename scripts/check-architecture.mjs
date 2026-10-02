@@ -1226,6 +1226,19 @@ if (
 }
 
 if (
+  !payoutSchedulerServer.includes("confirmedClawbackPayouts") ||
+  !payoutSchedulerServer.includes('"refund_clawback"') ||
+  !payoutSchedulerServer.includes(
+    '.not("stripe_transfer_id", "is", null)',
+  ) ||
+  !payoutSchedulerServer.includes("eligibleAdjustmentRows")
+) {
+  violations.push(
+    "refund clawbacks created during an in-flight payout must stay provisional until the original Stripe transfer is confirmed",
+  );
+}
+
+if (
   payoutSchedulerServer.includes("json.amount ?? expectedAmount") ||
   payoutSchedulerServer.includes("json.currency ?? expectedCurrency") ||
   !payoutSchedulerServer.includes("!Number.isSafeInteger(actualAmount)") ||
