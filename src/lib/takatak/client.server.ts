@@ -30,6 +30,7 @@ async function call(
   path: string,
   body: Record<string, unknown>,
   idempotencyKey?: string,
+  remoteIdKeys: string[] = ["id", "remote_id"],
 ): Promise<SendResult> {
   const cfg = takatakConfig();
   if (!cfg) return { ok: false, setupRequired: true, error: "TAKATAK integration not configured" };
@@ -54,11 +55,25 @@ async function call(
       const msg = (json["error"] as string) ?? `TAKATAK responded ${res.status}`;
       return { ok: false, error: msg.slice(0, 500) };
     }
-    const remoteId =
-      (json["id"] as string) ??
-      (json["remote_id"] as string) ??
-      ((json["data"] as Record<string, unknown> | undefined)?.["id"] as string) ??
-      null;
+    const nested =
+      json["data"] && typeof json["data"] === "object" && !Array.isArray(json["data"])
+        ? (json["data"] as Record<string, unknown>)
+        : null;
+
+    let remoteId: string | null = null;
+    for (const key of remoteIdKeys) {
+      const direct = json[key];
+      const nestedValue = nested?.[key];
+      if (typeof direct === "string" && direct.trim()) {
+        remoteId = direct.trim();
+        break;
+      }
+      if (typeof nestedValue === "string" && nestedValue.trim()) {
+        remoteId = nestedValue.trim();
+        break;
+      }
+    }
+
     return { ok: true, remoteId };
   } catch (e) {
     return { ok: false, error: (e as Error).message.slice(0, 500) };
@@ -73,6 +88,15 @@ export async function sendTakatakEvent(input: {
   aggregateId: string;
   payload: Record<string, unknown>;
 }): Promise<SendResult> {
+  const remoteIdKeys =
+    input.aggregateType === "customer"
+      ? ["identity_id"]
+      : input.aggregateType === "merchant"
+        ? ["merchant_id"]
+        : input.aggregateType === "order"
+          ? ["id"]
+          : [];
+
   return call(
     "/v1/events",
     {
@@ -84,6 +108,7 @@ export async function sendTakatakEvent(input: {
       payload: input.payload,
     },
     input.eventId,
+    remoteIdKeys,
   );
 }
 
