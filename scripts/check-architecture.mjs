@@ -94,7 +94,12 @@ for (const [content, marker, label] of [
   [
     masterOutbox,
     '.eq("status", "pending")',
-    "automatic outbox retries stop after MAX_ATTEMPTS",
+    "automatic outbox retries process pending events only",
+  ],
+  [
+    masterOutbox,
+    '.lt("attempt_count", MAX_ATTEMPTS)',
+    "automatic outbox retries enforce MAX_ATTEMPTS at query time",
   ],
   [
     masterOutbox,
