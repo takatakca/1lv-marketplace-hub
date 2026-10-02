@@ -1226,15 +1226,15 @@ if (
 }
 
 if (
-  !payoutSchedulerServer.includes("confirmedClawbackPayouts") ||
+  !payoutSchedulerServer.includes("clawbackSources") ||
   !payoutSchedulerServer.includes('"refund_clawback"') ||
-  !payoutSchedulerServer.includes(
-    '.not("stripe_transfer_id", "is", null)',
-  ) ||
+  !payoutSchedulerServer.includes('source.status === "paid"') ||
+  !payoutSchedulerServer.includes('source.status === "cancelled"') ||
+  !payoutSchedulerServer.includes("unresolvedClawback") ||
   !payoutSchedulerServer.includes("eligibleAdjustmentRows")
 ) {
   violations.push(
-    "refund clawbacks created during an in-flight payout must stay provisional until the original Stripe transfer is confirmed",
+    "refund clawbacks must remain provisional until the source payout is reconciled paid or definitively cancelled without a transfer",
   );
 }
 
