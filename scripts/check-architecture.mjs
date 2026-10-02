@@ -157,6 +157,10 @@ const refundVendorScopeMigration = readFileSync(
   join(root, "supabase/migrations/20261002093000_refund_vendor_scope.sql"),
   "utf8",
 );
+const checkoutCastSafetyMigration = readFileSync(
+  join(root, "supabase/migrations/20261002094500_checkout_input_cast_safety.sql"),
+  "utf8",
+);
 const ordersService = readFileSync(
   join(root, "src/services/orders.ts"),
   "utf8",
@@ -1422,6 +1426,28 @@ if (
 /* ------------------------------------------------------------------ */
 
 if (
+  !checkoutCastSafetyMigration.includes(
+    "CREATE OR REPLACE FUNCTION public.assert_checkout_items_safe",
+  ) ||
+  !checkoutCastSafetyMigration.includes("'^[1-9][0-9]?$'") ||
+  !checkoutCastSafetyMigration.includes(
+    "public.create_marketplace_order_unchecked",
+  ) ||
+  !checkoutCastSafetyMigration.includes(
+    "public.create_marketplace_order_locked_unchecked",
+  ) ||
+  !checkoutCastSafetyMigration.includes(
+    "PERFORM public.assert_checkout_items_safe(_items);",
+  ) ||
+  checkoutFunctions.includes("create_marketplace_order_unchecked") ||
+  checkoutFunctions.includes("create_marketplace_order_locked_unchecked")
+) {
+  violations.push(
+    "checkout quantities and product UUIDs must be validated before PostgreSQL casts, and application code must use canonical wrappers only",
+  );
+}
+
+if (
   masterOutbox.includes('from "./order-mapper"') ||
   masterOutbox.includes("mapOrder(")
 ) {
@@ -1578,15 +1604,15 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002093000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002094500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002093000"')
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002094500"')
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002093000",
+    "production health/migration gates must track schema 20261002094500",
   );
 }
 
