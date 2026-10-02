@@ -97,6 +97,37 @@ FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.is_takatak_authorized_session()
 TO authenticated, service_role;
 
+CREATE OR REPLACE FUNCTION public.revoke_current_takatak_session()
+RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $revoke_session$
+DECLARE
+  revoked_count integer := 0;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RETURN false;
+  END IF;
+
+  UPDATE public.takatak_authorized_sessions
+  SET revoked_at = now()
+  WHERE session_id::text = COALESCE(auth.jwt() ->> 'session_id', '')
+    AND user_id = auth.uid()
+    AND revoked_at IS NULL;
+
+  GET DIAGNOSTICS revoked_count = ROW_COUNT;
+  RETURN revoked_count > 0;
+END;
+$revoke_session$;
+
+REVOKE ALL ON FUNCTION public.revoke_current_takatak_session()
+FROM PUBLIC, anon;
+
+GRANT EXECUTE ON FUNCTION public.revoke_current_takatak_session()
+TO authenticated, service_role;
+
 CREATE OR REPLACE FUNCTION public.get_1lv_schema_version()
 RETURNS text
 LANGUAGE sql
