@@ -825,6 +825,19 @@ if (
 }
 
 if (
+  payoutSchedulerServer.includes("json.amount ?? expectedAmount") ||
+  payoutSchedulerServer.includes("json.currency ?? expectedCurrency") ||
+  !payoutSchedulerServer.includes("!Number.isSafeInteger(actualAmount)") ||
+  !payoutSchedulerServer.includes("actualDestination !== destination") ||
+  !payoutSchedulerServer.includes("!Number.isSafeInteger(actualCents)") ||
+  !payoutSchedulerServer.includes("!destination || transferDest !== destination")
+) {
+  violations.push(
+    "Stripe payout transfer and reconciliation responses must fail closed on missing or mismatched amount, currency, or destination",
+  );
+}
+
+if (
   authBridge.includes(".auth.signOut();") ||
   authProvider.includes(".auth.signOut();")
 ) {
