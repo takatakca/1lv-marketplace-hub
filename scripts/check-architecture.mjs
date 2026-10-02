@@ -129,6 +129,11 @@ const optionalAuth = readFileSync(
   join(root, "src/integrations/supabase/optional-auth.server.ts"),
   "utf8",
 );
+const requestOrigin = readFileSync(
+  join(root, "src/lib/request-origin.server.ts"),
+  "utf8",
+);
+const productionServer = readFileSync(join(root, "server.cjs"), "utf8");
 
 for (const [content, marker, label] of [
   [masterClient, 'source_application: "1lv"', "1LV source binding"],
@@ -329,8 +334,23 @@ for (const [content, marker, label] of [
   ],
   [
     stripeFunctions,
-    "const origin = requestUrl.origin",
-    "Stripe subscription URLs use the server-derived 1LV origin",
+    "resolveTrustedAppOrigin(request.url)",
+    "Stripe subscription URLs use the canonical trusted 1LV origin",
+  ],
+  [
+    requestOrigin,
+    'DEFAULT_PUBLIC_ORIGIN = "https://1lv.ca"',
+    "trusted origin helper has the canonical 1LV production origin",
+  ],
+  [
+    requestOrigin,
+    "process.env.PUBLIC_APP_ORIGIN",
+    "trusted origin helper supports an explicit server-only canonical origin",
+  ],
+  [
+    productionServer,
+    "const PUBLIC_ORIGIN = configuredPublicOrigin();",
+    "production server canonicalizes request URLs before TanStack handles them",
   ],
   [
     stripeWebhook,
@@ -359,8 +379,8 @@ for (const [content, marker, label] of [
   ],
   [
     stripeConnectFunctions,
-    "const origin = requestUrl.origin",
-    "Stripe Connect account links use the server-derived 1LV origin",
+    "resolveTrustedAppOrigin(request.url)",
+    "Stripe Connect account links use the canonical trusted 1LV origin",
   ],
   [
     masterClient,
@@ -434,6 +454,24 @@ for (const [content, marker, label] of [
 if (masterOutbox.includes('.in("status", ["pending", "failed"])')) {
   violations.push(
     "failed TAKATAK events must require explicit retry; automatic drain may process only pending events.",
+  );
+}
+
+if (
+  productionServer.includes("x-forwarded-host") ||
+  productionServer.includes("x-forwarded-proto")
+) {
+  violations.push(
+    "production server must not trust client-controlled X-Forwarded host/proto when constructing the application request URL.",
+  );
+}
+
+if (
+  stripeFunctions.includes("requestUrl.origin") ||
+  stripeConnectFunctions.includes("requestUrl.origin")
+) {
+  violations.push(
+    "Stripe redirects must use resolveTrustedAppOrigin instead of a request-controlled origin.",
   );
 }
 
