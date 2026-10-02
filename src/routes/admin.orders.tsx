@@ -5,7 +5,7 @@ import { DataTable } from "@/components/DataTable";
 import { products, formatCAD } from "@/lib/data";
 import { useAuth } from "@/hooks/use-auth";
 import { isDemoMode } from "@/lib/demo-mode";
-import { backfillVendorOrders, listAllOrdersWithSplits } from "@/services/orders";
+import { auditMissingVendorOrders, listAllOrdersWithSplits } from "@/services/orders";
 
 const PAY = ["all", "pending", "paid", "refunded", "failed"] as const;
 const FUL = ["all", "pending", "accepted", "processing", "shipped", "delivered", "cancelled"] as const;
@@ -46,13 +46,19 @@ function Page() {
     void load();
   }, [load]);
 
-  const onBackfill = async () => {
-    if (!confirm("Backfill vendor_orders for any orders missing them?")) return;
+  const onAuditMissingSplits = async () => {
     setBusy(true);
     try {
-      const r = await backfillVendorOrders();
-      toast.success(`Backfill — ${r.created} created, ${r.skipped} skipped`);
-      await load();
+      const r = await auditMissingVendorOrders();
+      if (r.missingSplits > 0) {
+        toast.warning(
+          `Legacy split audit — ${r.missingSplits} missing split(s) across ${r.missingOrders} order(s). Manual reconciliation required; no financial rows were created.`,
+        );
+      } else {
+        toast.success(
+          `Legacy split audit — no missing vendor splits across ${r.inspectedOrders} order(s).`,
+        );
+      }
     } catch (e) { toast.error((e as Error).message); }
     finally { setBusy(false); }
   };
@@ -125,9 +131,9 @@ function Page() {
           <h1 className="text-2xl font-bold text-navy md:text-3xl">All orders</h1>
           <p className="text-sm text-muted-foreground">Search, filter, and inspect vendor splits.</p>
         </div>
-        <button onClick={onBackfill} disabled={demo || busy}
+        <button onClick={onAuditMissingSplits} disabled={demo || busy}
           className="rounded-md border border-border px-3 py-2 text-xs font-semibold text-navy disabled:opacity-50">
-          {busy ? "Working…" : "Backfill vendor orders"}
+          {busy ? "Auditing…" : "Audit legacy vendor splits"}
         </button>
       </div>
 
