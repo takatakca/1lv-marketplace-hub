@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { takatakConfigured } from "@/lib/takatak/client.server";
+
 const EXPECTED_SCHEMA_VERSION = "20261001214500";
 
 const REQUIRED_RUNTIME_ENV = [
@@ -67,6 +69,7 @@ export const Route = createFileRoute("/api/public/health")({
         const missing = REQUIRED_RUNTIME_ENV.filter(
           (name) => !process.env[name]?.trim(),
         );
+        const masterIntegrationReady = takatakConfigured();
 
         if (missing.length > 0) {
           console.error(
@@ -75,14 +78,22 @@ export const Route = createFileRoute("/api/public/health")({
           );
         }
 
-        const database =
-          missing.length === 0
-            ? await checkDatabaseSchema()
-            : { status: "unavailable" as const };
+        if (missing.length === 0 && !masterIntegrationReady) {
+          console.error(
+            "[1lv.ca] TAKATAK integration configuration is invalid.",
+          );
+        }
+
+        const configurationReady =
+          missing.length === 0 && masterIntegrationReady;
+
+        const database = configurationReady
+          ? await checkDatabaseSchema()
+          : { status: "unavailable" as const };
 
         const databaseAcceptable =
           database.status === "ready" || database.status === "skipped";
-        const ok = missing.length === 0 && databaseAcceptable;
+        const ok = configurationReady && databaseAcceptable;
 
         return new Response(
           JSON.stringify({
