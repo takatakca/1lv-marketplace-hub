@@ -121,6 +121,10 @@ const vendorPaidVisibilityMigration = readFileSync(
   join(root, "supabase/migrations/20261002073000_vendor_paid_order_visibility.sql"),
   "utf8",
 );
+const vendorInventoryCommitMigration = readFileSync(
+  join(root, "supabase/migrations/20261002074500_vendor_inventory_commit_gate.sql"),
+  "utf8",
+);
 const ordersService = readFileSync(
   join(root, "src/services/orders.ts"),
   "utf8",
@@ -378,6 +382,26 @@ for (const [content, marker, label] of [
     vendorPaidVisibilityMigration,
     "SELECT '20261002073000'",
     "final production schema marker includes paid-order vendor privacy",
+  ],
+  [
+    vendorInventoryCommitMigration,
+    "SELECT '20261002074500'",
+    "final production schema marker includes committed-inventory vendor gate",
+  ],
+  [
+    vendorInventoryCommitMigration,
+    "Vendor fulfillment requires committed inventory",
+    "vendor fulfillment cannot begin before inventory was committed",
+  ],
+  [
+    vendorInventoryCommitMigration,
+    "inventory_committed_at IS NOT NULL",
+    "vendor visibility requires committed inventory",
+  ],
+  [
+    vendorInventoryCommitMigration,
+    "public.vendor_can_view_paid_order_scope",
+    "inventory gate preserves non-recursive vendor visibility helpers",
   ],
   [
     vendorPaidVisibilityMigration,
@@ -982,17 +1006,22 @@ if (
   );
 }
 
-if (
-  vendorPaidVisibilityMigration.includes(
-    "JOIN public.order_items AS oi ON oi.order_id = orders.id",
-  ) ||
-  vendorPaidVisibilityMigration.includes(
-    "JOIN public.orders AS o ON o.id = order_items.order_id",
-  )
-) {
-  violations.push(
-    "vendor paid-order visibility must not reintroduce mutually recursive RLS policy subqueries",
-  );
+for (const migration of [
+  vendorPaidVisibilityMigration,
+  vendorInventoryCommitMigration,
+]) {
+  if (
+    migration.includes(
+      "JOIN public.order_items AS oi ON oi.order_id = orders.id",
+    ) ||
+    migration.includes(
+      "JOIN public.orders AS o ON o.id = order_items.order_id",
+    )
+  ) {
+    violations.push(
+      "vendor paid-order visibility must not reintroduce mutually recursive RLS policy subqueries",
+    );
+  }
 }
 
 if (
@@ -1282,6 +1311,19 @@ if (
 ) {
   violations.push(
     "synthetic TAKATAK RLS email must never become the 1LV checkout receipt/contact email",
+  );
+}
+
+if (
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002074500"') ||
+  !deployWorkflow.includes("supabase test db --local") ||
+  !readFileSync(
+    join(root, ".github/workflows/migrate-production-db.yml"),
+    "utf8",
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002074500"')
+) {
+  violations.push(
+    "production health/migration gates must track schema 20261002074500",
   );
 }
 
