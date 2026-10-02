@@ -281,13 +281,17 @@ function DisputeDrawer({
                         {r.status}
                       </span>
                       {r.failure_reason && <span className="text-xs text-destructive">{r.failure_reason}</span>}
-                      {r.status === "approved" && (
+                      {["approved", "processing", "failed"].includes(r.status) && (
                         <button
                           disabled={busy}
                           onClick={() => runRefund(r.id)}
                           className="ml-auto rounded-md bg-navy px-3 py-1.5 text-xs font-semibold text-navy-foreground disabled:opacity-60"
                         >
-                          Process refund
+                          {r.status === "approved"
+                            ? "Process refund"
+                            : r.status === "processing"
+                              ? "Recheck refund"
+                              : "Retry refund"}
                         </button>
                       )}
                     </li>
