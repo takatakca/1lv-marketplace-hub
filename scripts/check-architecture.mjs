@@ -896,6 +896,16 @@ if (
   );
 }
 
+if (
+  stripeWebhook.includes("queueOrderEvent") ||
+  disputesFunctions.includes("queueOrderEvent") ||
+  stripeWebhook.includes("takatakOrder(")
+) {
+  violations.push(
+    "Stripe/refund code must never queue financial order lifecycle events to GROUPE TAKATAK.",
+  );
+}
+
 if (violations.length > 0) {
   console.error("GROUPE TAKATAK architecture check failed:");
   for (const violation of violations) console.error(" - " + violation);
