@@ -214,9 +214,9 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
     let createdUserId: string | null = null;
 
     if (!expectedUserId) {
-      // Supabase documents admin.createUser() as the explicit server-side
-      // user-creation primitive. Do not rely on generateLink("magiclink")
-      // implicitly creating a brand-new local 1LV Auth user.
+      // Create the local 1LV Auth user explicitly. Supabase's magic-link
+      // generator can create users implicitly, so we must never use it as the
+      // fallback for an arbitrary createUser failure.
       const { data: createdUser, error: createUserError } =
         await supabaseAdmin.auth.admin.createUser({
           email: loginEmail,
@@ -224,20 +224,78 @@ export const verifyTakatakPhoneLoginCode = createServerFn({
           user_metadata: localMetadata,
         });
 
-      if (!createUserError && createdUser.user?.id) {
+      if (createUserError) {
+        const duplicateCodes = new Set(["email_exists", "user_already_exists"]);
+        if (!duplicateCodes.has(createUserError.code ?? "")) {
+          return {
+            ok: false,
+            error: "Could not safely initialize your 1LV account.",
+          };
+        }
+
+        // A duplicate can be a legitimate retry/race, but the deterministic
+        // synthetic email must already belong to THIS exact TAKATAK identity.
+        // Do not let a pre-existing unrelated local account be adopted.
+        const targetEmail = loginEmail.toLowerCase();
+        let existingUser:
+          | {
+              id: string;
+              email?: string;
+              email_confirmed_at?: string | null;
+              user_metadata?: Record<string, unknown>;
+            }
+          | null = null;
+
+        for (let page = 1; page <= 100; page += 1) {
+          const { data: listed, error: listError } =
+            await supabaseAdmin.auth.admin.listUsers({
+              page,
+              perPage: 1000,
+            });
+
+          if (listError) {
+            return {
+              ok: false,
+              error: "Could not safely resolve your existing 1LV account.",
+            };
+          }
+
+          existingUser =
+            listed.users.find(
+              (user) => user.email?.trim().toLowerCase() === targetEmail,
+            ) ?? null;
+
+          if (existingUser || listed.users.length < 1000) break;
+        }
+
+        const metadata = existingUser?.user_metadata ?? {};
+        if (
+          !existingUser ||
+          !existingUser.email_confirmed_at ||
+          metadata["auth_source"] !== "takatak" ||
+          metadata["takatak_person_id"] !== identity.id
+        ) {
+          return {
+            ok: false,
+            error: "Could not safely resolve your existing 1LV account.",
+          };
+        }
+
+        createdUserId = existingUser.id;
+      } else if (createdUser.user?.id) {
         createdUserId = createdUser.user.id;
+      } else {
+        return {
+          ok: false,
+          error: "Could not safely initialize your 1LV account.",
+        };
       }
-      // If creation raced with a previous verified signup attempt, continue
-      // to generateLink below. The deterministic synthetic email can belong
-      // only to this TAKATAK master identity; generateLink will either recover
-      // that existing user or fail closed.
     }
 
     const { data: linkData, error: linkError } =
       await supabaseAdmin.auth.admin.generateLink({
         type: "magiclink",
         email: loginEmail,
-        options: { data: localMetadata },
       });
 
     const tokenHash = linkData.properties?.hashed_token?.trim() ?? "";
