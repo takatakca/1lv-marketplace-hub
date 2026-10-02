@@ -690,17 +690,19 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
       throw new Error("Stripe did not return a valid transfer id.");
     }
 
-    const actualAmount = Number(json.amount ?? expectedAmount);
-    const actualCurrency = String(json.currency ?? expectedCurrency).toLowerCase();
+    const actualAmount = Number(json.amount ?? NaN);
+    const actualCurrency =
+      typeof json.currency === "string" ? json.currency.toLowerCase() : "";
     const actualDestination =
       typeof json.destination === "string"
         ? json.destination
         : ((json.destination as { id?: string } | undefined)?.id ?? null);
 
     if (
+      !Number.isSafeInteger(actualAmount) ||
       actualAmount !== expectedAmount ||
       actualCurrency !== expectedCurrency ||
-      (actualDestination && actualDestination !== destination)
+      actualDestination !== destination
     ) {
       await db
         .from("payouts")
@@ -910,8 +912,8 @@ export async function reconcileOne(db: Db, payoutId: string): Promise<ReconResul
   }
 
   const expectedCents = Math.round(Number(payout.net_amount) * 100);
-  const actualCents = Number(transfer.amount ?? 0);
-  if (actualCents !== expectedCents) {
+  const actualCents = Number(transfer.amount ?? NaN);
+  if (!Number.isSafeInteger(actualCents) || actualCents !== expectedCents) {
     return finish(
       "amount_mismatch",
       `Expected ${(expectedCents / 100).toFixed(2)}, Stripe reports ${(actualCents / 100).toFixed(2)}.`,
@@ -932,9 +934,12 @@ export async function reconcileOne(db: Db, payoutId: string): Promise<ReconResul
     typeof transfer.destination === "string"
       ? transfer.destination
       : ((transfer.destination as { id?: string } | undefined)?.id ?? null);
-  if (destination && transferDest && destination !== transferDest) {
+  if (!destination || transferDest !== destination) {
     // Never surface either account id.
-    return finish("destination_mismatch", "Transfer destination does not match the vendor payout account.");
+    return finish(
+      "destination_mismatch",
+      "Transfer destination does not match the vendor payout account.",
+    );
   }
   if (transfer.reversed === true) {
     return finish("failed", "Stripe reports this transfer as reversed.");
