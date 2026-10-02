@@ -21,6 +21,8 @@ const publicClient = () =>
 const masterId = "11111111-1111-4111-8111-111111111111";
 const localEmail = `takatak.${masterId}@auth.1lv.ca`;
 const directEmail = "direct-local-auth-bypass@example.invalid";
+const fakeMasterId = "33333333-3333-4333-8333-333333333333";
+const fakeSyntheticEmail = `takatak.${fakeMasterId}@auth.1lv.ca`;
 const password = "CiOnly-1LV-Password-Guard!2026";
 
 function decodePayload(token) {
@@ -81,8 +83,10 @@ async function deleteByEmail(email) {
 
 await deleteByEmail(localEmail);
 await deleteByEmail(directEmail);
+await deleteByEmail(fakeSyntheticEmail);
 
 let takatakUserId = null;
+let fakeSyntheticUserId = null;
 try {
   const { data: created, error: createError } =
     await admin.auth.admin.createUser({
@@ -183,7 +187,45 @@ try {
     });
   assert.ok(
     directSignupError || !directSignup.user,
-    "Direct local Supabase signup must be rejected by the auth.users trigger",
+    "Direct local Supabase signup must remain disabled",
+  );
+
+  // A service-side/local user that merely LOOKS like a TAKATAK synthetic
+  // account is still unauthorized unless immutable app_metadata binds it to
+  // the verified GROUPE TAKATAK master identity.
+  const { data: fakeCreated, error: fakeCreateError } =
+    await admin.auth.admin.createUser({
+      email: fakeSyntheticEmail,
+      email_confirm: true,
+    });
+  assert.equal(fakeCreateError, null, fakeCreateError?.message);
+  assert.ok(fakeCreated.user?.id, "Fake synthetic local user was not created");
+  fakeSyntheticUserId = fakeCreated.user.id;
+
+  const { data: fakeLink, error: fakeLinkError } =
+    await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email: fakeSyntheticEmail,
+    });
+  assert.equal(fakeLinkError, null, fakeLinkError?.message);
+  const fakeTokenHash = fakeLink.properties?.hashed_token?.trim() ?? "";
+  assert.ok(fakeTokenHash, "Fake synthetic magic-link token hash missing");
+
+  const fakeClient = publicClient();
+  const { data: fakeVerified, error: fakeVerifyError } =
+    await fakeClient.auth.verifyOtp({
+      type: "magiclink",
+      token_hash: fakeTokenHash,
+    });
+  assert.equal(fakeVerifyError, null, fakeVerifyError?.message);
+  assert.ok(fakeVerified.session?.access_token, "Fake synthetic session missing");
+  assert.equal(
+    await profileVisible(
+      fakeVerified.session.access_token,
+      fakeSyntheticUserId,
+    ),
+    false,
+    "Synthetic email without immutable TAKATAK app_metadata must be denied",
   );
 
   console.log("TAKATAK local Auth / real JWT / RLS integration: PASS");
@@ -191,5 +233,9 @@ try {
   if (takatakUserId) {
     await admin.auth.admin.deleteUser(takatakUserId);
   }
+  if (fakeSyntheticUserId) {
+    await admin.auth.admin.deleteUser(fakeSyntheticUserId);
+  }
   await deleteByEmail(directEmail);
+  await deleteByEmail(fakeSyntheticEmail);
 }
