@@ -16,8 +16,8 @@ export type RelationshipInput = {
  * Build a single "person is a customer of this vendor, through 1LV" edge.
  *
  * TAKATAK stitches these edges into the global relationship graph. The graph
- * is NEVER sent back down to a vendor: Vendor B must not learn that the same
- * person also buys from Vendor C, PPP, Ramasse, QMAPS, etc.
+ * is NEVER sent back down to a vendor: one 1LV merchant must never learn
+ * that the same person also uses another merchant, company, or application.
  */
 export function mapRelationship(input: RelationshipInput): TakatakRelationshipPayload {
   return {
