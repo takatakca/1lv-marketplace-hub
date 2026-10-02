@@ -775,6 +775,16 @@ if (
 }
 
 if (
+  !payoutSchedulerServer.includes(
+    "Recovered a stale processing transfer lease for safe idempotent retry.",
+  )
+) {
+  violations.push(
+    "stale payout processing leases must be recoverable with the stable Stripe idempotency key",
+  );
+}
+
+if (
   authBridge.includes(".auth.signOut();") ||
   authProvider.includes(".auth.signOut();")
 ) {
