@@ -101,7 +101,7 @@ BEGIN
       WHERE id=r.vendor_order_id;
 
       SELECT p.id INTO paid_payout_id FROM public.payout_items pi JOIN public.payouts p ON p.id=pi.payout_id
-        WHERE pi.vendor_order_id=r.vendor_order_id AND p.status IN ('paid','processing')
+        WHERE pi.vendor_order_id=r.vendor_order_id AND p.status='paid' AND p.stripe_transfer_id IS NOT NULL
         ORDER BY p.created_at DESC LIMIT 1;
       IF paid_payout_id IS NOT NULL THEN
         vendor_clawback:=CASE WHEN COALESCE(vo.subtotal,0)<=0 THEN 0 ELSE round(LEAST(r.amount,vo.subtotal)*GREATEST(COALESCE(vo.vendor_payout_amount,0),0)/vo.subtotal,2) END;
