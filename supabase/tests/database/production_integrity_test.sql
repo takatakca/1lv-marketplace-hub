@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(137);
+select plan(139);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002110000',
+  '20261002111500',
   'production schema marker is current'
 );
 
@@ -84,6 +84,46 @@ select ok(
       and policyname = 'Authenticated can view active products'
   ),
   'authenticated customers cannot read private active-product rows directly'
+);
+
+select ok(
+  to_regprocedure('public.enforce_marketplace_creation_timestamps()') is not null
+  and exists (
+    select 1
+    from pg_trigger
+    where tgname = 'vendors_creation_timestamp_authority'
+      and tgrelid = 'public.vendors'::regclass
+      and not tgisinternal
+  )
+  and exists (
+    select 1
+    from pg_trigger
+    where tgname = 'products_creation_timestamp_authority'
+      and tgrelid = 'public.products'::regclass
+      and not tgisinternal
+  ),
+  'vendor and product creation timestamps are protected by database triggers'
+);
+
+select ok(
+  not (
+    select p.prosecdef
+    from pg_proc as p
+    where p.oid = 'public.enforce_marketplace_creation_timestamps()'::regprocedure
+  )
+  and position(
+    'NEW.created_at := now()'
+    in pg_get_functiondef(
+      'public.enforce_marketplace_creation_timestamps()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'Marketplace creation timestamp is server-authoritative'
+    in pg_get_functiondef(
+      'public.enforce_marketplace_creation_timestamps()'::regprocedure
+    )
+  ) > 0,
+  'browser marketplace creation timestamps are server-authoritative and immutable'
 );
 
 select ok(
