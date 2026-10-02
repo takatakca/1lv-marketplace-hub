@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { getRequest } from "@tanstack/react-start/server";
 import type { Database } from "./types";
-import { requireTakatakSessionClaims } from "./auth-middleware";
+import { requireTakatakAuthorizedSession } from "./auth-middleware";
 
 export type OptionalSupabaseUser = {
   id: string;
@@ -41,7 +41,7 @@ export async function getOptionalSupabaseUser(): Promise<OptionalSupabaseUser | 
   }
 
   const claims = data.claims as Record<string, unknown>;
-  const id = requireTakatakSessionClaims(claims);
+  const id = await requireTakatakAuthorizedSession(client, claims);
   const email =
     typeof claims["email"] === "string" ? claims["email"] : null;
 
