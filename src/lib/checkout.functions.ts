@@ -145,11 +145,12 @@ export const createMarketplaceOrder = createServerFn({ method: "POST" })
       : await createGuestPaymentToken(order.order_id);
 
     try {
-      const { queueCustomerEvent, queueOrderEvent } = await import(
+      const { queueOrderEvent } = await import(
         "@/lib/takatak/outbox.server"
       );
+      // order.created is the single synchronization entrypoint: it queues the
+      // signed-in or guest customer projection plus relationship references.
       await queueOrderEvent(order.order_id, "order.created");
-      if (userId) await queueCustomerEvent(userId, "customer.updated");
     } catch (syncError) {
       console.warn("TAKATAK checkout sync was queued incompletely:", syncError);
     }
