@@ -47,6 +47,7 @@ DECLARE
   paid_payout_id uuid;
   total_refunded numeric:=0;
   vendor_refunded numeric:=0;
+  vendor_refund_share numeric:=0;
   vendor_clawback numeric:=0;
   next_payment_status public.payment_status;
 BEGIN
@@ -82,8 +83,22 @@ BEGIN
     IF FOUND THEN
       SELECT COALESCE(sum(amount),0) INTO vendor_refunded FROM public.refund_records
         WHERE vendor_order_id=r.vendor_order_id AND status='refunded';
-      UPDATE public.vendor_orders SET refund_amount=LEAST(vendor_refunded,subtotal),dispute_hold_amount=0,updated_at=now()
-        WHERE id=r.vendor_order_id;
+
+      vendor_refund_share:=CASE
+        WHEN COALESCE(vo.subtotal,0)<=0 THEN 0
+        ELSE round(
+          LEAST(vendor_refunded,vo.subtotal)
+          * GREATEST(COALESCE(vo.vendor_payout_amount,0),0)
+          / vo.subtotal,
+          2
+        )
+      END;
+
+      UPDATE public.vendor_orders
+      SET refund_amount=LEAST(vendor_refund_share,GREATEST(COALESCE(vendor_payout_amount,0),0)),
+          dispute_hold_amount=0,
+          updated_at=now()
+      WHERE id=r.vendor_order_id;
 
       SELECT p.id INTO paid_payout_id FROM public.payout_items pi JOIN public.payouts p ON p.id=pi.payout_id
         WHERE pi.vendor_order_id=r.vendor_order_id AND p.status IN ('paid','processing')
