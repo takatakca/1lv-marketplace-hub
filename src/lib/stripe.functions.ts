@@ -62,6 +62,45 @@ async function stripeGet(path: string): Promise<Record<string, unknown>> {
   return json;
 }
 
+async function findOpenVendorSubscriptionCheckout(
+  customerId: string,
+  vendorId: string,
+): Promise<{ url: string; plan: string | null } | null> {
+  const params = new URLSearchParams({
+    customer: customerId,
+    status: "open",
+    limit: "10",
+  });
+  const response = await stripeGet(`/checkout/sessions?${params.toString()}`);
+  const sessions = Array.isArray(response.data)
+    ? (response.data as Array<Record<string, unknown>>)
+    : [];
+
+  for (const session of sessions) {
+    if (session.mode !== "subscription" || session.status !== "open") continue;
+    const metadata =
+      session.metadata &&
+      typeof session.metadata === "object" &&
+      !Array.isArray(session.metadata)
+        ? (session.metadata as Record<string, unknown>)
+        : {};
+    if (metadata["vendor_id"] !== vendorId) continue;
+
+    const url = typeof session.url === "string" ? session.url : "";
+    if (!url.startsWith("https://checkout.stripe.com/")) continue;
+
+    return {
+      url,
+      plan:
+        typeof metadata["plan"] === "string"
+          ? String(metadata["plan"])
+          : null,
+    };
+  }
+
+  return null;
+}
+
 export type PaymentIntentResult = {
   clientSecret: string | null;
   pending: boolean;
@@ -394,25 +433,47 @@ export const createVendorSubscriptionCheckout = createServerFn({
       customerId = createdCustomerId;
     }
 
+    const openCheckout = await findOpenVendorSubscriptionCheckout(
+      customerId,
+      vendor.id,
+    );
+    if (openCheckout) {
+      if (openCheckout.plan === data.plan) {
+        return { url: openCheckout.url, pending: false };
+      }
+      return {
+        url: null,
+        pending: true,
+        reason:
+          "Another subscription checkout is already open for this vendor. Complete or let that Stripe Checkout expire before choosing a different plan.",
+      };
+    }
+
     const request = getRequest();
     if (!request?.url) {
       throw new Error("Could not resolve the trusted 1LV return origin.");
     }
 
     const origin = resolveTrustedAppOrigin(request.url);
-    const session = await stripePost("/checkout/sessions", {
-      mode: "subscription",
-      customer: customerId,
-      "line_items[0][price]": priceId,
-      "line_items[0][quantity]": "1",
-      success_url: `${origin}/vendor/subscription?success=1`,
-      cancel_url: `${origin}/vendor/subscription?cancelled=1`,
-      "metadata[vendor_id]": vendor.id,
-      "metadata[owner_id]": context.userId,
-      "metadata[plan]": data.plan,
-      "subscription_data[metadata][vendor_id]": vendor.id,
-      "subscription_data[metadata][plan]": data.plan,
-    });
+    const checkoutDay = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+    const session = await stripePost(
+      "/checkout/sessions",
+      {
+        mode: "subscription",
+        customer: customerId,
+        client_reference_id: vendor.id,
+        "line_items[0][price]": priceId,
+        "line_items[0][quantity]": "1",
+        success_url: `${origin}/vendor/subscription?success=1`,
+        cancel_url: `${origin}/vendor/subscription?cancelled=1`,
+        "metadata[vendor_id]": vendor.id,
+        "metadata[owner_id]": context.userId,
+        "metadata[plan]": data.plan,
+        "subscription_data[metadata][vendor_id]": vendor.id,
+        "subscription_data[metadata][plan]": data.plan,
+      },
+      `1lv_vendor_${vendor.id}_subscription_checkout_${checkoutDay}_v1`,
+    );
 
     return {
       url: typeof session.url === "string" ? session.url : null,
