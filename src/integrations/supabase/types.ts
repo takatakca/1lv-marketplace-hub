@@ -1829,6 +1829,15 @@ export type Database = {
         }
         Returns: Json
       }
+      create_vendor_payout_atomic: {
+        Args: {
+          _eligible_through: string
+          _period_end: string
+          _period_start: string
+          _vendor_id: string
+        }
+        Returns: Json
+      }
       get_vendor_order_for_current_user: {
         Args: { _vendor_order_id: string }
         Returns: Json
