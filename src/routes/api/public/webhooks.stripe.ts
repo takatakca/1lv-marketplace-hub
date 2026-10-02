@@ -253,6 +253,23 @@ async function loadVendorSubscriptionState(
   return data as VendorSubscriptionState | null;
 }
 
+async function quarantineLinkedSubscription(
+  db: AdminDb,
+  vendorId: string,
+  subscriptionId: string,
+  current: VendorSubscriptionState,
+) {
+  if (current.stripe_subscription_id !== subscriptionId) return;
+
+  const { error } = await db
+    .from("vendors")
+    .update({ subscription_status: "needs_review" } as never)
+    .eq("id", vendorId)
+    .eq("stripe_subscription_id", subscriptionId);
+
+  if (error) throw error;
+}
+
 async function notifyAdmins(
   db: AdminDb,
   kind: string,
@@ -708,6 +725,12 @@ async function handleEvent(evt: StripeEvent) {
           customerConflict ||
           subscriptionConflict
         ) {
+          await quarantineLinkedSubscription(
+            supabaseAdmin,
+            vendorId,
+            subscriptionId,
+            current,
+          );
           await notifyAdmins(
             supabaseAdmin,
             "stripe_subscription_binding_conflict",
@@ -773,6 +796,12 @@ async function handleEvent(evt: StripeEvent) {
           (current.stripe_customer_id !== null &&
             remote.customerId !== current.stripe_customer_id)
         ) {
+          await quarantineLinkedSubscription(
+            supabaseAdmin,
+            vendorId,
+            subId,
+            current,
+          );
           await notifyAdmins(
             supabaseAdmin,
             "stripe_subscription_metadata_mismatch",
