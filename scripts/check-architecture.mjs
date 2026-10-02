@@ -272,6 +272,25 @@ if (
   );
 }
 
+if (
+  !payoutSchedulerServer.includes('.is("applied_payout_id", null)') ||
+  !payoutSchedulerServer.includes('.select("id")') ||
+  !payoutSchedulerServer.includes("(claimed ?? []).length !== ids.length")
+) {
+  violations.push(
+    "payout adjustment claims must verify every expected row before finalizing a payout",
+  );
+}
+
+if (
+  !payoutSchedulerServer.includes("Could not roll back incomplete payout") ||
+  !payoutSchedulerServer.includes("Could not roll back payout adjustment claim")
+) {
+  violations.push(
+    "payout generation must fail loudly if cleanup of a partial payout fails",
+  );
+}
+
 if (violations.length > 0) {
   console.error("GROUPE TAKATAK architecture check failed:");
   for (const violation of violations) console.error(" - " + violation);
