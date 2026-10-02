@@ -87,7 +87,7 @@ jobs:
       - name: Smoke test production server runtime
         env:
           PORT: "4178"
-          SUPABASE_URL: "https://example.supabase.co"
+          SUPABASE_URL: "https://odoybkshqszucvoxzjyz.supabase.co"
           SUPABASE_PUBLISHABLE_KEY: "ci-publishable-key"
           SUPABASE_SERVICE_ROLE_KEY: "ci-service-role-key"
           STRIPE_SECRET_KEY: "sk_test_ci"
@@ -167,7 +167,7 @@ jobs:
       - name: Smoke test shipped dependency tree
         env:
           PORT: "4179"
-          SUPABASE_URL: "https://example.supabase.co"
+          SUPABASE_URL: "https://odoybkshqszucvoxzjyz.supabase.co"
           SUPABASE_PUBLISHABLE_KEY: "ci-publishable-key"
           SUPABASE_SERVICE_ROLE_KEY: "ci-service-role-key"
           STRIPE_SECRET_KEY: "sk_test_ci"
