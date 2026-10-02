@@ -71,7 +71,40 @@ type StripeSubscriptionSnapshot = {
   status: string;
   customerId: string | null;
   metadata: Record<string, unknown>;
+  priceIds: string[];
 };
+
+type VendorPlan = "starter" | "growth" | "scale";
+
+function configuredVendorPlanForPrice(priceId: string): VendorPlan | null {
+  const configured: Array<[VendorPlan, string | undefined]> = [
+    ["starter", process.env.STRIPE_PRICE_VENDOR_STARTER_MONTHLY],
+    ["growth", process.env.STRIPE_PRICE_VENDOR_GROWTH_MONTHLY],
+    ["scale", process.env.STRIPE_PRICE_VENDOR_SCALE_MONTHLY],
+  ];
+
+  for (const [plan, configuredPriceId] of configured) {
+    if (configuredPriceId?.trim() && configuredPriceId.trim() === priceId) {
+      return plan;
+    }
+  }
+
+  return null;
+}
+
+function verifiedVendorPlan(
+  subscription: StripeSubscriptionSnapshot,
+): VendorPlan | null {
+  if (subscription.priceIds.length !== 1) return null;
+
+  const plan = configuredVendorPlanForPrice(subscription.priceIds[0]!);
+  const metadataPlan =
+    typeof subscription.metadata["plan"] === "string"
+      ? subscription.metadata["plan"].trim().toLowerCase()
+      : "";
+
+  return plan && metadataPlan === plan ? plan : null;
+}
 
 async function retrieveStripeSubscription(
   subscriptionId: string,
@@ -122,11 +155,36 @@ async function retrieveStripeSubscription(
       ? (json.metadata as Record<string, unknown>)
       : {};
 
-  if (id !== subscriptionId || !status) {
+  const itemRows =
+    json.items &&
+    typeof json.items === "object" &&
+    !Array.isArray(json.items) &&
+    Array.isArray((json.items as Record<string, unknown>)["data"])
+      ? ((json.items as Record<string, unknown>)["data"] as Array<
+          Record<string, unknown>
+        >)
+      : [];
+  const priceIds = itemRows
+    .map((item) => {
+      const price = item["price"];
+      if (typeof price === "string") return price;
+      if (
+        price &&
+        typeof price === "object" &&
+        !Array.isArray(price) &&
+        typeof (price as Record<string, unknown>)["id"] === "string"
+      ) {
+        return String((price as Record<string, unknown>)["id"]);
+      }
+      return "";
+    })
+    .filter((priceId) => /^price_[A-Za-z0-9_]+$/.test(priceId));
+
+  if (id !== subscriptionId || !status || priceIds.length === 0) {
     throw new Error("Stripe subscription response is invalid.");
   }
 
-  return { id, status, customerId, metadata };
+  return { id, status, customerId, metadata, priceIds };
 }
 
 async function readLimitedBody(request: Request): Promise<string | null> {
@@ -611,7 +669,7 @@ async function handleEvent(evt: StripeEvent) {
     }
     case "checkout.session.completed": {
       const vendorId = meta.vendor_id;
-      const customerId =
+      const eventCustomerId =
         typeof (obj as { customer?: string }).customer === "string"
           ? (obj as { customer: string }).customer
           : null;
@@ -627,21 +685,34 @@ async function handleEvent(evt: StripeEvent) {
         );
         if (!current) break;
 
+        const remote = await retrieveStripeSubscription(subscriptionId);
+        const remoteVendorId =
+          typeof remote.metadata["vendor_id"] === "string"
+            ? String(remote.metadata["vendor_id"])
+            : "";
+        const verifiedPlan = verifiedVendorPlan(remote);
+
         const customerConflict =
-          current.stripe_customer_id &&
-          customerId &&
-          current.stripe_customer_id !== customerId;
+          !remote.customerId ||
+          (eventCustomerId !== null && remote.customerId !== eventCustomerId) ||
+          (current.stripe_customer_id !== null &&
+            remote.customerId !== current.stripe_customer_id);
         const subscriptionConflict =
           current.stripe_subscription_id &&
           current.stripe_subscription_id !== subscriptionId &&
           !terminalSubscriptionStatus(current.subscription_status);
 
-        if (customerConflict || subscriptionConflict) {
+        if (
+          remoteVendorId !== vendorId ||
+          !verifiedPlan ||
+          customerConflict ||
+          subscriptionConflict
+        ) {
           await notifyAdmins(
             supabaseAdmin,
             "stripe_subscription_binding_conflict",
             "Stripe subscription binding conflict",
-            `A completed Checkout Session attempted to replace the active Stripe billing identity for vendor ${vendorId.slice(0, 8)}. Automatic rebinding was blocked.`,
+            `A completed Checkout Session did not match the configured vendor, customer, subscription, or price for vendor ${vendorId.slice(0, 8)}. Automatic rebinding was blocked.`,
           );
           break;
         }
@@ -649,9 +720,10 @@ async function handleEvent(evt: StripeEvent) {
         const { error: updateError } = await supabaseAdmin
           .from("vendors")
           .update({
-            ...(customerId ? { stripe_customer_id: customerId } : {}),
+            stripe_customer_id: remote.customerId,
             stripe_subscription_id: subscriptionId,
-            subscription_plan: meta.plan ?? null,
+            subscription_status: remote.status,
+            subscription_plan: verifiedPlan,
           } as never)
           .eq("id", vendorId);
 
@@ -659,7 +731,6 @@ async function handleEvent(evt: StripeEvent) {
       }
       break;
     }
-    case "customer.subscription.created":
     case "customer.subscription.updated": {
       const vendorId = meta.vendor_id;
       const subId =
@@ -693,27 +764,31 @@ async function handleEvent(evt: StripeEvent) {
           typeof remote.metadata["vendor_id"] === "string"
             ? String(remote.metadata["vendor_id"])
             : "";
-        if (remoteVendorId !== vendorId) {
+        const verifiedPlan = verifiedVendorPlan(remote);
+
+        if (
+          remoteVendorId !== vendorId ||
+          !verifiedPlan ||
+          !remote.customerId ||
+          (current.stripe_customer_id !== null &&
+            remote.customerId !== current.stripe_customer_id)
+        ) {
           await notifyAdmins(
             supabaseAdmin,
             "stripe_subscription_metadata_mismatch",
-            "Stripe subscription metadata mismatch",
-            `Stripe subscription ${subId.slice(0, 12)} is not bound to the expected 1LV vendor. Automatic status mutation was blocked.`,
+            "Stripe subscription binding mismatch",
+            `Stripe subscription ${subId.slice(0, 12)} does not match the configured 1LV vendor, customer, or price. Automatic status mutation was blocked.`,
           );
           break;
         }
 
-        const remotePlan =
-          typeof remote.metadata["plan"] === "string"
-            ? String(remote.metadata["plan"])
-            : meta.plan ?? null;
-
         const { error: updateError } = await supabaseAdmin
           .from("vendors")
           .update({
+            stripe_customer_id: remote.customerId,
             stripe_subscription_id: subId,
             subscription_status: remote.status,
-            subscription_plan: remotePlan,
+            subscription_plan: verifiedPlan,
           } as never)
           .eq("id", vendorId);
 
