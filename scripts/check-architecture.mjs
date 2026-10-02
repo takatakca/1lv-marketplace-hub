@@ -169,6 +169,10 @@ const vendorProfileAuthorityMigration = readFileSync(
   join(root, "supabase/migrations/20261002101500_vendor_profile_authority.sql"),
   "utf8",
 );
+const marketplaceSettingsMigration = readFileSync(
+  join(root, "supabase/migrations/20260930150630_persistent_marketplace_settings.sql"),
+  "utf8",
+);
 const ordersService = readFileSync(
   join(root, "src/services/orders.ts"),
   "utf8",
@@ -462,6 +466,26 @@ for (const [content, marker, label] of [
     vendorProfileAuthorityMigration,
     "WITH CHECK (auth.uid() = user_id)",
     "vendor profile update policy preserves ownership",
+  ],
+  [
+    vendorProfileAuthorityMigration,
+    'DROP POLICY IF EXISTS "Authenticated can view active vendors"',
+    "authenticated customers cannot query private vendor rows through the base table",
+  ],
+  [
+    vendorProfileAuthorityMigration,
+    'CREATE POLICY "Vendors can view their own private record"',
+    "vendor owner retains access to its own private row",
+  ],
+  [
+    marketplaceSettingsMigration,
+    "public.get_public_vendor_by_slug",
+    "public storefront vendor lookup uses a fixed-column RPC",
+  ],
+  [
+    marketplaceSettingsMigration,
+    "public.list_public_vendors",
+    "public storefront vendor listing uses a fixed-column RPC",
   ],
   [
     vendorProductAuthorityMigration,
