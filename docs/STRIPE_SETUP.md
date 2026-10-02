@@ -14,6 +14,7 @@ Live payments, vendor subscriptions, and Connect payout preparation.
 - `STRIPE_PRICE_VENDOR_GROWTH_MONTHLY` — Stripe Price ID
 - `STRIPE_PRICE_VENDOR_SCALE_MONTHLY` — Stripe Price ID
 - `CHECKOUT_GUEST_TOKEN_SECRET` — dedicated random secret (32+ chars) used only to sign short-lived guest payment capabilities
+- `PUBLIC_APP_ORIGIN` — optional canonical HTTPS origin for server-generated Stripe return URLs. Defaults to `https://1lv.ca`; never derive this value from browser-supplied Host or X-Forwarded-* headers.
 
 Add server-side keys through the secrets tool (Lovable Cloud → Secrets). They are injected into server functions and the webhook route at runtime; they are never bundled into the frontend.
 
@@ -114,6 +115,7 @@ Any future expiry, any CVC.
 ## 10. Security notes
 
 - Secret keys live only in server env; the frontend imports `VITE_STRIPE_PUBLISHABLE_KEY` only.
+- Stripe Checkout and Connect return URLs are pinned to the canonical server-side 1LV origin; request Host/X-Forwarded headers cannot select the redirect domain.
 - PaymentIntent amount is derived from `orders.total` server-side, not from any client payload.
 - Browser roles cannot insert financial order, order-item or vendor-order rows after the server-authoritative checkout migration is applied.
 - Guest payment authorization uses a dedicated short-lived HMAC capability; never reuse the Stripe or Supabase service-role secret for `CHECKOUT_GUEST_TOKEN_SECRET`.
