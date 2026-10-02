@@ -6,6 +6,10 @@ import { toast } from "sonner";
 
 export function StickyBuyBar({ product }: { product: Product }) {
   const { add } = useCart();
+  const soldOut =
+    product.trackInventory &&
+    typeof product.inventoryQuantity === "number" &&
+    product.inventoryQuantity <= 0;
   return (
     <div className="fixed inset-x-0 bottom-12 z-30 border-t border-border bg-white/95 p-2 shadow-elevated backdrop-blur md:hidden">
       <div className="flex items-center gap-2">
@@ -16,18 +20,33 @@ export function StickyBuyBar({ product }: { product: Product }) {
           )}
         </div>
         <button
-          onClick={() => { add(product, 1); toast.success("Added to cart"); }}
-          className="rounded-md border border-electric px-3 py-2.5 text-xs font-bold text-electric"
+          disabled={soldOut}
+          onClick={() => {
+            if (soldOut) return;
+            add(product, 1);
+            toast.success("Added to cart");
+          }}
+          className="rounded-md border border-electric px-3 py-2.5 text-xs font-bold text-electric disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground"
         >
-          Add to cart
+          {soldOut ? "Sold out" : "Add to cart"}
         </button>
-        <Link
-          to="/checkout"
-          onClick={() => add(product, 1)}
-          className="rounded-md bg-gradient-deal px-4 py-2.5 text-xs font-bold text-white"
-        >
-          Buy now
-        </Link>
+        {soldOut ? (
+          <button
+            type="button"
+            disabled
+            className="rounded-md bg-muted px-4 py-2.5 text-xs font-bold text-muted-foreground"
+          >
+            Sold out
+          </button>
+        ) : (
+          <Link
+            to="/checkout"
+            onClick={() => add(product, 1)}
+            className="rounded-md bg-gradient-deal px-4 py-2.5 text-xs font-bold text-white"
+          >
+            Buy now
+          </Link>
+        )}
       </div>
     </div>
   );
