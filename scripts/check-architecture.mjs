@@ -1127,6 +1127,7 @@ if (
   !inventoryMaintenanceRoute.includes(
     'createFileRoute("/api/internal/inventory/cleanup")',
   ) ||
+  !inventoryMaintenanceRoute.includes("/payment_intents/") ||
   !inventoryMaintenanceRoute.includes("/cancel") ||
   !inventoryMaintenanceRoute.includes(
     '"release_order_inventory" as never',
