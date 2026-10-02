@@ -61,7 +61,16 @@ select ok(
     )
   ) > 0
   and position(
-    '@auth\\.1lv\\.ca
+    '@auth\.1lv\.ca$'
+    in pg_get_functiondef(
+      'public.create_marketplace_order_locked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'::regprocedure
+    )
+  ) > 0,
+  'locked checkout normalizes addresses and rejects synthetic TAKATAK receipt emails'
+);
+
+select ok(
+  to_regprocedure('public.enforce_first_order_promotion_identity()') is not null
   and exists (
     select 1
     from pg_trigger
