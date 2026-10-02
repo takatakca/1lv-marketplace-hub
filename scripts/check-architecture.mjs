@@ -119,6 +119,11 @@ for (const [content, marker, label] of [
     "login must never create an unconsented 1LV account",
   ],
   [
+    masterClient,
+    "requestTakatakPhoneOtp",
+    "phone-only TAKATAK OTP payload",
+  ],
+  [
     authBridge,
     'expectedUserId ? "customer.updated" : "customer.created"',
     "correct master lifecycle event",
@@ -127,6 +132,16 @@ for (const [content, marker, label] of [
   if (!content.includes(marker)) {
     violations.push("Missing architecture guard: " + label);
   }
+}
+
+if (
+  masterClient.includes("metadata.email") ||
+  authBridge.includes("data.email") ||
+  authBridge.includes("normalizeOptionalEmail")
+) {
+  violations.push(
+    "TAKATAK OTP bridge must stay phone-only; unverified email must not enter master auth.",
+  );
 }
 
 if (masterClient.includes("TAKATAK_MASTER_API_KEY")) {
