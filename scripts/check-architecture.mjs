@@ -493,7 +493,7 @@ for (const [content, marker, label] of [
   ],
   [
     firstOrderPromotionUniquenessMigration,
-    "SELECT '20261002114500'",
+    "SELECT '20261002113000'",
     "first-order promotion uniqueness migration retains its historical schema marker",
   ],
   [
