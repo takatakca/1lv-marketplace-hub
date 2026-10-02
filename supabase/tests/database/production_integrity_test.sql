@@ -6,7 +6,7 @@ select plan(38);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261001214500',
+  '20261002034500',
   'production schema marker is current'
 );
 
