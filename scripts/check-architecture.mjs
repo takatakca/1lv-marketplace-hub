@@ -109,6 +109,22 @@ const webhookLeaseMigration = readFileSync(
   join(root, "supabase/migrations/20261002064000_stripe_event_claim_lease.sql"),
   "utf8",
 );
+const inventorySelloutMigration = readFileSync(
+  join(root, "supabase/migrations/20261002070000_inventory_sellout_integrity.sql"),
+  "utf8",
+);
+const productRoute = readFileSync(
+  join(root, "src/routes/product.$slug.tsx"),
+  "utf8",
+);
+const productCard = readFileSync(
+  join(root, "src/components/ProductCard.tsx"),
+  "utf8",
+);
+const stickyBuyBar = readFileSync(
+  join(root, "src/components/StickyBuyBar.tsx"),
+  "utf8",
+);
 const loginRoute = readFileSync(
   join(root, "src/routes/login.tsx"),
   "utf8",
@@ -331,9 +347,29 @@ for (const [content, marker, label] of [
     "session grant lookup can enforce a private registry without exposing it",
   ],
   [
-    webhookLeaseMigration,
-    "SELECT '20261002064000'",
-    "final production schema marker includes stale Stripe event recovery",
+    inventorySelloutMigration,
+    "SELECT '20261002070000'",
+    "final production schema marker includes final-unit inventory sellout integrity",
+  ],
+  [
+    inventorySelloutMigration,
+    "OLD.status IS DISTINCT FROM NEW.status",
+    "publication stock validation applies to publication transitions, not checkout decrements",
+  ],
+  [
+    productRoute,
+    "const soldOut =",
+    "product detail page recognizes tracked zero inventory as sold out",
+  ],
+  [
+    productCard,
+    "disabled={soldOut}",
+    "catalog cards cannot add tracked zero-inventory products to cart",
+  ],
+  [
+    stickyBuyBar,
+    "disabled={soldOut}",
+    "mobile buy bar cannot add tracked zero-inventory products to cart",
   ],
   [
     webhookLeaseMigration,
@@ -850,6 +886,15 @@ if (
 ) {
   violations.push(
     "payout scheduler lock release must be scoped to the current lease owner",
+  );
+}
+
+if (
+  productRoute.includes("Math.max(1, product.inventoryQuantity)") ||
+  productCard.includes('> Add to cart</button>') && !productCard.includes("disabled={soldOut}")
+) {
+  violations.push(
+    "sold-out tracked inventory must never be coerced back to a purchasable quantity in the storefront",
   );
 }
 
