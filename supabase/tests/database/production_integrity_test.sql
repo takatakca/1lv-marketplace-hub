@@ -2,12 +2,52 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(106);
+select plan(109);
 
 select is(
   public.get_1lv_schema_version(),
   '20261002093000',
   'production schema marker is current'
+);
+
+select ok(
+  to_regprocedure('public.release_order_inventory(uuid)') is not null,
+  'inventory release RPC exists'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.release_order_inventory(uuid)',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.release_order_inventory(uuid)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.release_order_inventory(uuid)',
+    'EXECUTE'
+  ),
+  'only service role may release checkout inventory'
+);
+
+select ok(
+  position(
+    'payment_status = ''failed''::public.payment_status'
+    in pg_get_functiondef(
+      'public.release_order_inventory(uuid)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'status = ''cancelled''::public.order_status'
+    in pg_get_functiondef(
+      'public.release_order_inventory(uuid)'::regprocedure
+    )
+  ) > 0,
+  'released unpaid checkout becomes terminal cancelled/failed'
 );
 
 select ok(
