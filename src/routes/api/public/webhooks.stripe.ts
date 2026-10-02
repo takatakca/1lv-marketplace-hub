@@ -363,7 +363,7 @@ async function handleEvent(evt: StripeEvent) {
           .update({ payment_status: "failed" })
           .eq("id", orderId)
           .eq("stripe_payment_intent_id", paymentIntentId)
-          .in("payment_status", ["pending", "failed"]);
+          .in("payment_status", ["unpaid", "failed"]);
       }
       break;
     }
