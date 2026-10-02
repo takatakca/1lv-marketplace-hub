@@ -124,7 +124,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.rpc("revoke_current_takatak_session" as never);
+    } finally {
+      await supabase.auth.signOut();
+    }
   };
 
   return (
