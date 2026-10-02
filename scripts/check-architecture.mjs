@@ -174,6 +174,14 @@ const ciWorkflow = readFileSync(
   join(root, ".github/workflows/ci.yml"),
   "utf8",
 );
+const takatakDrainRoute = readFileSync(
+  join(root, "src/routes/api/internal/takatak.drain.ts"),
+  "utf8",
+);
+const takatakDrainWorkflow = readFileSync(
+  join(root, ".github/workflows/takatak-outbox-drain.yml"),
+  "utf8",
+);
 
 for (const [content, marker, label] of [
   [masterClient, 'source_application: "1lv"', "1LV source binding"],
@@ -521,6 +529,31 @@ for (const [content, marker, label] of [
     ciWorkflow,
     "payload.revision !== process.env.GITHUB_SHA",
     "PR runtime smoke tests verify the exact candidate SHA",
+  ],
+  [
+    takatakDrainRoute,
+    'process.env.TAKATAK_DRAIN_CRON_SECRET?.trim()',
+    "TAKATAK drain uses a dedicated server-only cron secret",
+  ],
+  [
+    takatakDrainRoute,
+    "expected.length < 32",
+    "TAKATAK drain rejects weak or missing cron secrets",
+  ],
+  [
+    takatakDrainRoute,
+    "safeEqual(received, expected)",
+    "TAKATAK drain compares the bearer secret without ordinary string equality",
+  ],
+  [
+    takatakDrainWorkflow,
+    'url.protocol !== "https:"',
+    "scheduled TAKATAK drain refuses non-HTTPS production URLs",
+  ],
+  [
+    takatakDrainWorkflow,
+    "payload.failed !== 0",
+    "scheduled TAKATAK drain fails visibly when event delivery fails",
   ],
   [
     stripeWebhook,
