@@ -157,7 +157,7 @@ function ProductPage() {
       if (first) nextVariant[item.name] = first;
     });
     setVariant(nextVariant);
-  }, [product.id]);
+  }, [product.id, product.variants]);
 
   useEffect(() => {
     push(product.id);
