@@ -426,7 +426,7 @@ export const processApprovedRefund = createServerFn({ method: "POST" })
     if (refund.status === "refunded") {
       return { ok: true, status: "refunded" };
     }
-    if (!["approved", "processing"].includes(refund.status)) {
+    if (!["approved", "processing", "failed"].includes(refund.status)) {
       return {
         ok: false,
         status: refund.status,
