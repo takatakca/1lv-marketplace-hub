@@ -72,7 +72,7 @@ function PhoneLogin() {
     if (loading || !formatted) return;
     setLoading(true);
     const result = await requestTakatakPhoneLoginCode({
-      data: { phone: formatted },
+      data: { phone: formatted, intent: "login" },
     });
     setLoading(false);
 
