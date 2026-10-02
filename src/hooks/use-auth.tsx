@@ -68,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!isTakatakLocalUser(candidate.user)) {
         setSession(null);
         setRoles([]);
-        await supabase.auth.signOut();
+        await supabase.auth.signOut({ scope: "local" });
         return;
       }
 
@@ -81,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (grantError || (granted as unknown) !== true) {
         setSession(null);
         setRoles([]);
-        await supabase.auth.signOut();
+        await supabase.auth.signOut({ scope: "local" });
         return;
       }
 
@@ -144,7 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await supabase.rpc("revoke_current_takatak_session" as never);
     } finally {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: "local" });
     }
   };
 
