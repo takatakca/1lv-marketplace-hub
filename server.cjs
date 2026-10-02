@@ -159,6 +159,35 @@ function toWebRequest(req) {
   });
 }
 
+const PRIVATE_ROUTE_PREFIXES = [
+  "/account",
+  "/admin",
+  "/checkout",
+  "/login",
+  "/order-confirmation",
+  "/orders",
+  "/signup",
+  "/vendor",
+  "/wishlist",
+];
+
+function requestRequiresNoStore(req) {
+  const method = String(req.method || "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD") return true;
+  if (req.headers.authorization || req.headers.cookie) return true;
+
+  let pathname = "/";
+  try {
+    pathname = new URL(req.url || "/", "http://localhost").pathname;
+  } catch {
+    return true;
+  }
+
+  return PRIVATE_ROUTE_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(prefix + "/"),
+  );
+}
+
 function writeWebResponse(req, response, res) {
   res.statusCode = response.status;
   res.statusMessage = response.statusText || res.statusMessage;
@@ -177,6 +206,10 @@ function writeWebResponse(req, response, res) {
 
   if (setCookies.length > 0) {
     res.setHeader("Set-Cookie", setCookies);
+  }
+
+  if (requestRequiresNoStore(req) || setCookies.length > 0) {
+    res.setHeader("Cache-Control", "no-store");
   }
 
   if (req.method === "HEAD" || !response.body) {
@@ -201,6 +234,9 @@ function applySecurityHeaders(res) {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  res.setHeader("Origin-Agent-Cluster", "?1");
+  res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
   res.setHeader(
     "Permissions-Policy",
     "camera=(), microphone=(), geolocation=()",
