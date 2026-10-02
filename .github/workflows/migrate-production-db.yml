@@ -73,6 +73,33 @@ jobs:
           echo "Expected 1LV schema version: $EXPECTED_SCHEMA_VERSION"
           echo "Apply requested: $APPLY_REQUESTED"
 
+      - name: Verify hosted 1LV Auth is fail-closed
+        if: env.AUDIT_AVAILABLE == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          AUTH_CONFIG="$(
+            curl --fail --silent --show-error \
+              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              "https://api.supabase.com/v1/projects/$EXPECTED_PROJECT_REF/config/auth"
+          )"
+
+          DISABLE_SIGNUP="$(printf '%s' "$AUTH_CONFIG" | jq -r '.disable_signup // false')"
+          ANONYMOUS_ENABLED="$(printf '%s' "$AUTH_CONFIG" | jq -r '.external_anonymous_users_enabled // false')"
+
+          if [ "$DISABLE_SIGNUP" != "true" ]; then
+            echo "ERROR: hosted 1LV Supabase Auth still allows public signup."
+            exit 1
+          fi
+
+          if [ "$ANONYMOUS_ENABLED" = "true" ]; then
+            echo "ERROR: hosted 1LV Supabase Auth still allows anonymous users."
+            exit 1
+          fi
+
+          echo "Hosted 1LV Auth is fail-closed: public signup disabled, anonymous users disabled."
+
       - name: Checkout repository
         if: env.AUDIT_AVAILABLE == 'true'
         uses: actions/checkout@v5
