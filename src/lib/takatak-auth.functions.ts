@@ -19,7 +19,6 @@ type AuthIntent = "login" | "signup";
 
 type RequestPhoneCodeInput = {
   phone: string;
-  email?: string;
   fullName?: string;
   preferredLanguage?: string;
 };
@@ -37,14 +36,6 @@ function validCanadianPhone(raw: string): string | null {
   return phone && /^\+1\d{10}$/.test(phone) ? phone : null;
 }
 
-function normalizeOptionalEmail(raw: string | undefined): string | null {
-  const email = (raw ?? "").trim().toLowerCase();
-  if (!email) return null;
-  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return null;
-  }
-  return email;
-}
 
 function syntheticIdentityEmail(identityId: string): string {
   return `takatak.${identityId.toLowerCase()}@auth.1lv.ca`;
@@ -67,12 +58,6 @@ export const requestTakatakPhoneLoginCode = createServerFn({
       return { ok: false, error: "Enter a valid Canadian phone number." };
     }
 
-    const rawEmail = (data.email ?? "").trim();
-    const email = normalizeOptionalEmail(data.email);
-    if (rawEmail && !email) {
-      return { ok: false, error: "Enter a valid email address." };
-    }
-
     const fullName = (data.fullName ?? "").trim().slice(0, 200) || null;
     const requestedLanguage = (data.preferredLanguage ?? "").trim().toLowerCase();
     const preferredLanguage = ["en", "fr", "es"].includes(requestedLanguage)
@@ -80,7 +65,6 @@ export const requestTakatakPhoneLoginCode = createServerFn({
       : null;
 
     const result = await requestTakatakPhoneOtp(phone, {
-      email,
       fullName,
       preferredLanguage,
     });
