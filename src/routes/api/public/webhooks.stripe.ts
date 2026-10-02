@@ -57,7 +57,7 @@ async function verifyStripeSignature(payload: string, header: string | null, sec
 type StripeEvent = {
   id: string;
   type: string;
-  data: { object: Record<string, unknown> };
+  data: { object: { [key: string]: Json | undefined } };
 };
 
 type AdminDb = SupabaseClient<Database>;
@@ -138,7 +138,7 @@ async function takatakOrder(orderId: string, eventType: "order.paid" | "order.re
 
 async function handleEvent(evt: StripeEvent) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const obj = evt.data.object;
+  const obj: Record<string, unknown> = evt.data.object;
   const meta = ((obj as { metadata?: Record<string, string> }).metadata) ?? {};
 
   switch (evt.type) {
