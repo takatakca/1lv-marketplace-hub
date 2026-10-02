@@ -63,6 +63,10 @@ const authBridge = readFileSync(
   join(root, "src/lib/takatak-auth.functions.ts"),
   "utf8",
 );
+const masterOutbox = readFileSync(
+  join(root, "src/lib/takatak/outbox.server.ts"),
+  "utf8",
+);
 
 for (const [content, marker, label] of [
   [masterClient, 'source_application: "1lv"', "1LV source binding"],
@@ -98,6 +102,11 @@ for (const [content, marker, label] of [
   ],
   [masterClient, '["identity_id"]', "TAKATAK master identity response key"],
   [masterClient, '["merchant_id"]', "TAKATAK master merchant response key"],
+  [
+    masterOutbox,
+    'customerRef = order.customer_id ?? `order:${order.order_number}`',
+    "canonical guest relationship reference",
+  ],
   [authBridge, 'auth_source: "takatak"', "TAKATAK local session marker"],
   [
     authBridge,
