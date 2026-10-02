@@ -149,6 +149,10 @@ const atomicPayoutMigration = readFileSync(
   join(root, "supabase/migrations/20261002090000_atomic_payout_generation.sql"),
   "utf8",
 );
+const refundVendorScopeMigration = readFileSync(
+  join(root, "supabase/migrations/20261002091500_refund_vendor_scope.sql"),
+  "utf8",
+);
 const ordersService = readFileSync(
   join(root, "src/services/orders.ts"),
   "utf8",
@@ -1374,6 +1378,21 @@ for (const helperName of [
 }
 
 
+if (
+  !refundVendorScopeMigration.includes(
+    "Automatic marketplace refunds require a vendor order",
+  ) ||
+  !refundVendorScopeMigration.includes("vo.order_id = NEW.order_id") ||
+  !disputesFunctions.includes("vendor_order_id") ||
+  !disputesFunctions.includes(
+    "Automatic refunds must be linked to a vendor order.",
+  )
+) {
+  violations.push(
+    "automatic Stripe refunds must remain vendor-order scoped before payout accounting",
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* TAKATAK master-data boundary: 1LV retains financial responsibility. */
 /* ------------------------------------------------------------------ */
@@ -1535,15 +1554,15 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002090000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002091500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002090000"')
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002091500"')
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002090000",
+    "production health/migration gates must track schema 20261002091500",
   );
 }
 
