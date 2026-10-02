@@ -64,6 +64,107 @@ FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.is_takatak_authorized_session()
 TO authenticated, service_role;
 
+-- SECURITY DEFINER helpers used by private authenticated flows must enforce
+-- the same authority boundary themselves because SECURITY DEFINER bypasses
+-- table RLS. They also refuse user-id probing for anyone other than the
+-- current verified TAKATAK caller. service_role remains available to trusted
+-- server maintenance.
+CREATE OR REPLACE FUNCTION public.has_role(
+  _user_id uuid,
+  _role public.app_role
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $
+  SELECT
+    (
+      COALESCE(auth.jwt() ->> 'role', '') = 'service_role'
+      OR (
+        _user_id = auth.uid()
+        AND public.is_takatak_authorized_session()
+      )
+    )
+    AND EXISTS (
+      SELECT 1
+      FROM public.user_roles
+      WHERE user_id = _user_id
+        AND role = _role
+    );
+$;
+
+CREATE OR REPLACE FUNCTION public.owns_vendor(
+  _vendor_id uuid,
+  _user_id uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $
+  SELECT
+    (
+      COALESCE(auth.jwt() ->> 'role', '') = 'service_role'
+      OR (
+        _user_id = auth.uid()
+        AND public.is_takatak_authorized_session()
+      )
+    )
+    AND EXISTS (
+      SELECT 1
+      FROM public.vendors AS v
+      WHERE v.id = _vendor_id
+        AND v.user_id = _user_id
+    );
+$;
+
+CREATE OR REPLACE FUNCTION public.can_access_dispute(
+  _dispute_id uuid,
+  _user_id uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $
+  SELECT
+    (
+      COALESCE(auth.jwt() ->> 'role', '') = 'service_role'
+      OR (
+        _user_id = auth.uid()
+        AND public.is_takatak_authorized_session()
+      )
+    )
+    AND EXISTS (
+      SELECT 1
+      FROM public.disputes AS d
+      WHERE d.id = _dispute_id
+        AND (
+          d.customer_id = _user_id
+          OR public.owns_vendor(d.vendor_id, _user_id)
+          OR public.has_role(_user_id, 'admin'::public.app_role)
+        )
+    );
+$;
+
+REVOKE ALL ON FUNCTION public.has_role(uuid, public.app_role)
+FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.owns_vendor(uuid, uuid)
+FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.can_access_dispute(uuid, uuid)
+FROM PUBLIC, anon;
+
+GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role)
+TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.owns_vendor(uuid, uuid)
+TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.can_access_dispute(uuid, uuid)
+TO authenticated, service_role;
+
 -- Bootstrap the local 1LV profile only for the deterministic synthetic
 -- email that the trusted server creates after GROUPE TAKATAK phone
 -- verification. Do not reject auth.users INSERTs here: GoTrue does not
