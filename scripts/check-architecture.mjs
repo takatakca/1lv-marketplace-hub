@@ -149,6 +149,10 @@ const atomicPayoutMigration = readFileSync(
   join(root, "supabase/migrations/20261002090000_atomic_payout_generation.sql"),
   "utf8",
 );
+const expiredOrderTerminalMigration = readFileSync(
+  join(root, "supabase/migrations/20261002091500_expired_order_terminal_state.sql"),
+  "utf8",
+);
 const refundVendorScopeMigration = readFileSync(
   join(root, "supabase/migrations/20261002093000_refund_vendor_scope.sql"),
   "utf8",
@@ -411,6 +415,21 @@ for (const [content, marker, label] of [
     refundVendorScopeMigration,
     "SELECT '20261002093000'",
     "final production schema marker includes vendor-scoped refund enforcement",
+  ],
+  [
+    expiredOrderTerminalMigration,
+    "payment_status = 'failed'::public.payment_status",
+    "released unpaid checkout becomes payment-failed",
+  ],
+  [
+    expiredOrderTerminalMigration,
+    "status = 'cancelled'::public.order_status",
+    "released unpaid checkout becomes terminal cancelled",
+  ],
+  [
+    expiredOrderTerminalMigration,
+    "TO service_role",
+    "inventory release remains service-role only",
   ],
   [
     refundPayoutRaceMigration,
