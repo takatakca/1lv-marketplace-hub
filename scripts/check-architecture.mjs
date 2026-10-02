@@ -391,9 +391,9 @@ for (const [content, marker, label] of [
     "session grant lookup can enforce a private registry without exposing it",
   ],
   [
-    checkoutIdempotencyMigration,
-    "SELECT '20261002081500'",
-    "final production schema marker includes checkout payload idempotency",
+    vendorOrderProjectionMigration,
+    "SELECT '20261002083000'",
+    "final production schema marker includes curated vendor order projection",
   ],
   [
     checkoutProductLockMigration,
