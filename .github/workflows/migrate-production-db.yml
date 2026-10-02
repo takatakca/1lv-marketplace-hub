@@ -53,11 +53,6 @@ jobs:
             exit 1
           fi
 
-          test -f "supabase/migrations/${EXPECTED_SCHEMA_VERSION}_protect_takatak_profile_identity.sql" || {
-            echo "ERROR: expected production schema migration is missing from this checkout."
-            exit 1
-          }
-
           echo "Confirmed exact 1LV production project: $EXPECTED_PROJECT_REF"
           echo "Expected 1LV schema version: $EXPECTED_SCHEMA_VERSION"
           echo "Apply requested: ${{ inputs.apply }}"
@@ -74,6 +69,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          test -f "supabase/migrations/${EXPECTED_SCHEMA_VERSION}_protect_takatak_profile_identity.sql" || {
+            echo "ERROR: expected production schema migration is missing from this checkout."
+            exit 1
+          }
 
           cleanup() {
             supabase stop --no-backup >/dev/null 2>&1 || true
