@@ -226,6 +226,7 @@ export async function runDisputeAction(input: {
     | "release_hold"
     | "approve_refund"
     | "reject"
+    | "cancel"
     | "resolve_customer"
     | "resolve_vendor";
   status?: DisputeStatus;
