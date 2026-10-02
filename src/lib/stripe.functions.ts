@@ -2,7 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { getOptionalSupabaseUserId } from "@/integrations/supabase/optional-auth.server";
-import { verifyGuestPaymentToken } from "@/lib/guest-payment-token.server";\nimport { resolveTrustedAppOrigin } from "@/lib/request-origin.server";
+import { verifyGuestPaymentToken } from "@/lib/guest-payment-token.server";
+import { resolveTrustedAppOrigin } from "@/lib/request-origin.server";
 
 const STRIPE_API = "https://api.stripe.com/v1";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
