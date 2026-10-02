@@ -1,0 +1,65 @@
+name: Release Expired Checkout Inventory
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: inventory-maintenance
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate configuration
+        shell: bash
+        env:
+          SITE_URL: ${{ vars.PRODUCTION_URL }}
+          MAINTENANCE_SECRET: ${{ secrets.INVENTORY_MAINTENANCE_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "$SITE_URL" || (echo "Missing PRODUCTION_URL repository variable" && exit 1)
+          test -n "$MAINTENANCE_SECRET" || (echo "Missing INVENTORY_MAINTENANCE_CRON_SECRET repository secret" && exit 1)
+
+          node -e '
+            const url = new URL(process.argv[1]);
+            if (
+              url.protocol !== "https:" ||
+              url.username ||
+              url.password ||
+              url.pathname !== "/" ||
+              url.search ||
+              url.hash
+            ) process.exit(1);
+          ' "$SITE_URL" || {
+            echo "PRODUCTION_URL must be a clean HTTPS origin."
+            exit 1
+          }
+
+      - name: Release expired reservations
+        shell: bash
+        env:
+          SITE_URL: ${{ vars.PRODUCTION_URL }}
+          MAINTENANCE_SECRET: ${{ secrets.INVENTORY_MAINTENANCE_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          SITE_URL="${SITE_URL%/}"
+
+          RESPONSE="$(curl             --fail             --silent             --show-error             --retry 3             --retry-delay 10             --max-time 60             --request POST             --header "Authorization: Bearer $MAINTENANCE_SECRET"             --header "Content-Type: application/json"             "$SITE_URL/api/internal/inventory/cleanup")"
+
+          node -e '
+            const payload = JSON.parse(process.argv[1]);
+            if (
+              payload.ok !== true ||
+              !Number.isInteger(payload.released) ||
+              payload.released < 0
+            ) process.exit(1);
+          ' "$RESPONSE"
+
+          echo "Expired checkout inventory cleanup completed."
