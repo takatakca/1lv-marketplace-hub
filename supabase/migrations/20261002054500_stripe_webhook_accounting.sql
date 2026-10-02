@@ -10,6 +10,10 @@ UPDATE public.stripe_event_log SET status='processed', processed_at=COALESCE(pro
 ALTER TABLE public.stripe_event_log DROP CONSTRAINT IF EXISTS stripe_event_log_status_check;
 ALTER TABLE public.stripe_event_log ADD CONSTRAINT stripe_event_log_status_check CHECK (status IN ('processing','processed','failed'));
 
+REVOKE ALL ON TABLE public.stripe_event_log FROM PUBLIC,anon,authenticated,service_role;
+GRANT SELECT ON TABLE public.stripe_event_log TO authenticated;
+GRANT ALL ON TABLE public.stripe_event_log TO service_role;
+
 ALTER TABLE public.payout_adjustments
   ADD COLUMN IF NOT EXISTS refund_id uuid REFERENCES public.refund_records(id) ON DELETE SET NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS payout_adjustments_refund_unique
