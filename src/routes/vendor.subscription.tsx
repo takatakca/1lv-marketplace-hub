@@ -39,7 +39,7 @@ function Page() {
         return;
       }
       const res = await createVendorSubscriptionCheckout({
-        data: { vendorId: vendor.id, plan, returnOrigin: window.location.origin },
+        data: { vendorId: vendor.id, plan },
       });
       if (res.pending || !res.url) {
         toast.message("Stripe setup required", {
