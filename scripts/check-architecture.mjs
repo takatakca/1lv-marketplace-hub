@@ -105,6 +105,10 @@ const refundReservationMigration = readFileSync(
   join(root, "supabase/migrations/20261002062000_atomic_refund_reservation.sql"),
   "utf8",
 );
+const webhookLeaseMigration = readFileSync(
+  join(root, "supabase/migrations/20261002064000_stripe_event_claim_lease.sql"),
+  "utf8",
+);
 const loginRoute = readFileSync(
   join(root, "src/routes/login.tsx"),
   "utf8",
@@ -299,9 +303,14 @@ for (const [content, marker, label] of [
     "session grant lookup can enforce a private registry without exposing it",
   ],
   [
-    refundReservationMigration,
-    "SELECT '20261002062000'",
-    "final production schema marker includes atomic refund reservation",
+    webhookLeaseMigration,
+    "SELECT '20261002064000'",
+    "final production schema marker includes stale Stripe event recovery",
+  ],
+  [
+    webhookLeaseMigration,
+    "updated_at < now() - interval '10 minutes'",
+    "stale processing Stripe webhook claims can be recovered after the lease expires",
   ],
   [
     refundReservationMigration,
