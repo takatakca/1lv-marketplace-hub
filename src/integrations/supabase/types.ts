@@ -1075,6 +1075,7 @@ export type Database = {
           consent_revision: string
           created_at: string
           id: string
+          marketing_consent_revision: string | null
           marketing_opt_in: boolean
           privacy_accepted: boolean
           profile_id: string
@@ -1087,6 +1088,7 @@ export type Database = {
           consent_revision: string
           created_at?: string
           id?: string
+          marketing_consent_revision?: string | null
           marketing_opt_in?: boolean
           privacy_accepted: boolean
           profile_id: string
@@ -1099,6 +1101,7 @@ export type Database = {
           consent_revision?: string
           created_at?: string
           id?: string
+          marketing_consent_revision?: string | null
           marketing_opt_in?: boolean
           privacy_accepted?: boolean
           profile_id?: string
