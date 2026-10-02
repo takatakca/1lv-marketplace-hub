@@ -720,13 +720,6 @@ export const processApprovedRefund = createServerFn({ method: "POST" })
       };
     }
 
-    try {
-      const { queueOrderEvent } = await import("./takatak/outbox.server");
-      await queueOrderEvent(refund.order_id, "order.refunded");
-    } catch {
-      /* master sync never blocks a refund */
-    }
-
     if (refund.dispute_id) {
       const { data: d } = await db
         .from("disputes")
