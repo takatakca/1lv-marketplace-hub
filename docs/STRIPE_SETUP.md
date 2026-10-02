@@ -57,7 +57,7 @@ The endpoint verifies the `Stripe-Signature` header (HMAC-SHA256) and is idempot
 3. PostgreSQL validates active products/vendors, locks product rows, checks and reserves inventory, loads DB prices, calculates Canada/province totals, creates the parent order/items/vendor splits atomically, and applies the checkout idempotency key.
 4. Guest checkout receives a 24-hour signed payment capability; authenticated orders rely on the current Supabase user identity.
 5. Frontend calls `createPaymentIntent` with the order ID plus the guest capability only when needed. The server authorizes ownership/capability and always reads `orders.total`.
-6. Stripe PaymentIntent creation is order-idempotent. The PaymentIntent ID is persisted before confirmation.
+6. Stripe PaymentIntent creation is order-idempotent. Before an existing PaymentIntent is reused, 1LV revalidates its amount, currency and `metadata.order_id`; a newly-created PaymentIntent is not returned until its ID is confirmed persisted on the order.
 7. Frontend confirms with Stripe.js Elements using only `VITE_STRIPE_PUBLISHABLE_KEY`.
 8. On `payment_intent.succeeded`, the webhook commits the inventory reservation before moving the order to processing. Stale signatures older than five minutes are rejected.
 
@@ -68,6 +68,7 @@ The endpoint verifies the `Stripe-Signature` header (HMAC-SHA256) and is idempot
 3. Server verifies vendor ownership, creates or reuses a Stripe Customer, and creates a Checkout Session (`mode=subscription`) with metadata `{ vendor_id, owner_id, plan }`.
 4. User is redirected to Stripe Checkout.
 5. On success, Stripe fires `checkout.session.completed` + `customer.subscription.created`; the webhook updates `vendors.subscription_status`, `stripe_customer_id`, `stripe_subscription_id`, `subscription_plan`.
+6. 1LV refuses to create a second Checkout Session while a non-terminal Stripe subscription already exists for the vendor. This prevents duplicate recurring billing; plan-change automation must update the existing subscription rather than silently creating another one.
 
 ## 6. Product publishing rule
 
@@ -117,6 +118,8 @@ Any future expiry, any CVC.
 - Secret keys live only in server env; the frontend imports `VITE_STRIPE_PUBLISHABLE_KEY` only.
 - Stripe Checkout and Connect return URLs are pinned to the canonical server-side 1LV origin; request Host/X-Forwarded headers cannot select the redirect domain.
 - PaymentIntent amount is derived from `orders.total` server-side, not from any client payload.
+- Stripe API calls use bounded server-side timeouts so payment/payout state cannot remain indefinitely blocked on a hung network request.
+- Vendor Stripe Customer creation is idempotent, and a non-terminal existing subscription blocks creation of a duplicate recurring subscription.
 - Browser roles cannot insert financial order, order-item or vendor-order rows after the server-authoritative checkout migration is applied.
 - Guest payment authorization uses a dedicated short-lived HMAC capability; never reuse the Stripe or Supabase service-role secret for `CHECKOUT_GUEST_TOKEN_SECRET`.
 - Inventory is reserved during checkout and committed only after Stripe payment success; expired unpaid reservations are recoverable through the service-role-only cleanup RPC.
