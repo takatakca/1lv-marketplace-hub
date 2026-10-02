@@ -200,7 +200,7 @@ export async function queueRelationshipEvents(orderId: string) {
     .eq("id", orderId)
     .maybeSingle();
   if (!order) return;
-  const customerRef = order.customer_id ?? `guest:${order.order_number}`;
+  const customerRef = order.customer_id ?? `order:${order.order_number}`;
   const isGuest = !order.customer_id;
 
   for (const split of (order.vendor_orders ?? []) as Array<{ vendor_id: string; subtotal: number }>) {
@@ -257,7 +257,7 @@ export async function queueDisputeRelationshipEvent(disputeId: string) {
     .maybeSingle();
   if (!dispute) return;
   const orderNumber = (dispute.orders as { order_number?: string } | null)?.order_number ?? dispute.order_id;
-  const customerRef = dispute.customer_id ?? `guest:${orderNumber}`;
+  const customerRef = dispute.customer_id ?? `order:${orderNumber}`;
   await enqueue(
     "customer.vendor.dispute_opened",
     "relationship",
@@ -291,7 +291,7 @@ export async function queueVendorOrderDelivered(vendorOrderId: string) {
     .eq("id", vo.order_id)
     .maybeSingle();
   if (!order) return;
-  const customerRef = order.customer_id ?? `guest:${order.order_number}`;
+  const customerRef = order.customer_id ?? `order:${order.order_number}`;
   await enqueue(
     "customer.vendor.order_completed",
     "relationship",
