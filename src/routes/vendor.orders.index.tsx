@@ -98,7 +98,8 @@ function Page() {
   const nextStep = (s: VendorOrderStatus): VendorOrderStatus | null => {
     if (s === "pending") return "accepted";
     if (s === "accepted") return "processing";
-    if (s === "processing") return "shipped";
+    // Shipping requires tracking + carrier; use the order detail page for it.
+    if (s === "processing") return null;
     if (s === "shipped") return "delivered";
     return null;
   };
