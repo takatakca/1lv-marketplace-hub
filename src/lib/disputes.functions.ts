@@ -422,13 +422,14 @@ export const processApprovedRefund = createServerFn({ method: "POST" })
 
     const { data: row } = await db
       .from("refund_records")
-      .select("id, order_id, dispute_id, amount, currency, status, stripe_refund_id")
+      .select("id, order_id, vendor_order_id, dispute_id, amount, currency, status, stripe_refund_id")
       .eq("id", data.refundId)
       .maybeSingle();
     const refund = row as
       | {
           id: string;
           order_id: string;
+          vendor_order_id: string | null;
           dispute_id: string | null;
           amount: number;
           currency: string;
@@ -455,6 +456,15 @@ export const processApprovedRefund = createServerFn({ method: "POST" })
         ok: false,
         status: refund.status,
         reason: "Refund amount must be greater than zero.",
+      };
+    }
+
+    if (!refund.vendor_order_id) {
+      return {
+        ok: false,
+        status: refund.status,
+        reason:
+          "Automatic refunds must be linked to a vendor order. Reconcile this legacy refund manually.",
       };
     }
 
