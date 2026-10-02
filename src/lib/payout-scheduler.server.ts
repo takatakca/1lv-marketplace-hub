@@ -318,12 +318,19 @@ export async function generatePayoutsCore(
       ),
     );
 
-    const adjustmentRows: Array<{ id: string; amount: number }> = [];
+    type PendingAdjustment = {
+      id: string;
+      amount: number;
+      kind: string;
+      payout_id: string | null;
+    };
+
+    const adjustmentRows: PendingAdjustment[] = [];
     let adjustmentOffset = 0;
     while (true) {
       const { data, error } = await db
         .from("payout_adjustments")
-        .select("id, amount")
+        .select("id, amount, kind, payout_id")
         .eq("vendor_id", vendorId)
         .is("applied_payout_id", null)
         .order("created_at", { ascending: true })
@@ -331,14 +338,56 @@ export async function generatePayoutsCore(
         .range(adjustmentOffset, adjustmentOffset + pageSize - 1);
       if (error) throw new Error(error.message);
 
-      const page = (data ?? []) as Array<{ id: string; amount: number }>;
+      const page = (data ?? []) as PendingAdjustment[];
       adjustmentRows.push(...page);
       if (page.length < pageSize) break;
       adjustmentOffset += pageSize;
     }
 
+    // A refund finalized while an earlier payout is merely "processing" creates
+    // a provisional clawback so we do not lose the race if Stripe accepts the
+    // in-flight transfer. Do not consume that clawback into a later payout until
+    // the original payout has a confirmed Stripe transfer reference. If the
+    // transfer ultimately fails before Stripe creates it, the vendor must not be
+    // charged for money they never received.
+    const confirmedClawbackPayouts = new Set<string>();
+    const clawbackPayoutIds = Array.from(
+      new Set(
+        adjustmentRows
+          .filter(
+            (adjustment) =>
+              adjustment.kind === "refund_clawback" &&
+              typeof adjustment.payout_id === "string",
+          )
+          .map((adjustment) => adjustment.payout_id as string),
+      ),
+    );
+
+    for (const ids of batches(clawbackPayoutIds)) {
+      const { data, error } = await db
+        .from("payouts")
+        .select("id, stripe_transfer_id")
+        .in("id", ids)
+        .not("stripe_transfer_id", "is", null);
+      if (error) throw new Error(error.message);
+
+      for (const payout of data ?? []) {
+        if (payout.stripe_transfer_id) {
+          confirmedClawbackPayouts.add(payout.id);
+        }
+      }
+    }
+
+    const eligibleAdjustmentRows = adjustmentRows.filter((adjustment) => {
+      if (adjustment.kind !== "refund_clawback") return true;
+      return (
+        typeof adjustment.payout_id === "string" &&
+        confirmedClawbackPayouts.has(adjustment.payout_id)
+      );
+    });
+
     const adjustments = round2(
-      adjustmentRows.reduce(
+      eligibleAdjustmentRows.reduce(
         (sum, adjustment) => sum + Number(adjustment.amount ?? 0),
         0,
       ),
@@ -418,8 +467,10 @@ export async function generatePayoutsCore(
       continue;
     }
 
-    if (adjustmentRows.length > 0) {
-      const adjustmentIds = adjustmentRows.map((adjustment) => adjustment.id);
+    if (eligibleAdjustmentRows.length > 0) {
+      const adjustmentIds = eligibleAdjustmentRows.map(
+        (adjustment) => adjustment.id,
+      );
       let adjustmentFailed = false;
 
       for (const ids of batches(adjustmentIds)) {
