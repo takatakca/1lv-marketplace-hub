@@ -1228,7 +1228,9 @@ if (
 if (
   !payoutSchedulerServer.includes("clawbackSources") ||
   !payoutSchedulerServer.includes('"refund_clawback"') ||
-  !payoutSchedulerServer.includes('source.status === "paid"') ||
+  !payoutSchedulerServer.includes(
+    'source.status === "paid" && source.stripe_transfer_id',
+  ) ||
   !payoutSchedulerServer.includes('source.status === "cancelled"') ||
   !payoutSchedulerServer.includes("unresolvedClawback") ||
   !payoutSchedulerServer.includes("eligibleAdjustmentRows")
