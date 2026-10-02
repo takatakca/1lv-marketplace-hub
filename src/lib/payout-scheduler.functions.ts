@@ -163,7 +163,7 @@ export const runWeeklyPayoutScheduler = createServerFn({ method: "POST" })
     };
   });
 
-/** Retry a failed transfer. Admin only, capped by payout_settings.max_transfer_attempts. */
+/** Retry a failed or stale-processing transfer. Admin only, capped by payout_settings.max_transfer_attempts. */
 export const retryFailedPayout = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { payoutId: string }) => data)
@@ -186,7 +186,13 @@ export const retryFailedPayout = createServerFn({ method: "POST" })
     } | null;
 
     if (!payout) return { ok: false, status: "draft", reason: "Payout not found" };
-    if (payout.status !== "failed") return { ok: false, status: payout.status, reason: "Only failed payouts can be retried." };
+    if (!["failed", "processing"].includes(payout.status)) {
+      return {
+        ok: false,
+        status: payout.status,
+        reason: "Only failed or stale-processing payouts can be retried.",
+      };
+    }
     if (payout.stripe_transfer_id) {
       return { ok: false, status: payout.status, reason: "A transfer already exists for this payout." };
     }
