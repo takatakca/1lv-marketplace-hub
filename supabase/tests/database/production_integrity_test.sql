@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(68);
+select plan(73);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002070000',
+  '20261002071500',
   'production schema marker is current'
 );
 
@@ -61,6 +61,70 @@ select ok(
 select ok(
   to_regprocedure('public.reserve_dispute_refund(uuid,numeric,text,uuid)') is not null,
   'atomic dispute refund reservation RPC exists'
+);
+
+select ok(
+  to_regprocedure(
+    'public.update_vendor_order_fulfillment(uuid,public.vendor_order_status,text,text)'
+  ) is not null,
+  'server-authoritative vendor fulfillment RPC exists'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.update_vendor_order_fulfillment(uuid,public.vendor_order_status,text,text)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.update_vendor_order_fulfillment(uuid,public.vendor_order_status,text,text)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.update_vendor_order_fulfillment(uuid,public.vendor_order_status,text,text)',
+    'EXECUTE'
+  ),
+  'only authenticated TAKATAK sessions or service role may call vendor fulfillment RPC'
+);
+
+select ok(
+  not has_table_privilege('authenticated','public.vendor_orders','UPDATE')
+  and not has_table_privilege('authenticated','public.order_items','UPDATE'),
+  'browser sessions cannot directly mutate vendor fulfillment tables'
+);
+
+select ok(
+  position(
+    'is_takatak_authorized_session'
+    in pg_get_functiondef(
+      'public.update_vendor_order_fulfillment(uuid,public.vendor_order_status,text,text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'Vendor fulfillment requires a paid order'
+    in pg_get_functiondef(
+      'public.update_vendor_order_fulfillment(uuid,public.vendor_order_status,text,text)'::regprocedure
+    )
+  ) > 0,
+  'vendor fulfillment RPC requires an authorized TAKATAK session and paid parent order'
+);
+
+select ok(
+  position(
+    'UPDATE public.order_items'
+    in pg_get_functiondef(
+      'public.update_vendor_order_fulfillment(uuid,public.vendor_order_status,text,text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'UPDATE public.orders'
+    in pg_get_functiondef(
+      'public.update_vendor_order_fulfillment(uuid,public.vendor_order_status,text,text)'::regprocedure
+    )
+  ) > 0,
+  'vendor fulfillment RPC synchronizes line items and parent order state'
 );
 
 select ok(
