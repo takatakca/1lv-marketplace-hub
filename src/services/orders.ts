@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { signalVendorOrderDelivered } from "./takatak-sync";
-import { backfillVendorOrdersServer } from "@/lib/admin-marketplace.functions";
+import { auditMissingVendorOrdersServer } from "@/lib/admin-marketplace.functions";
 
 export type OrderRecord = {
   id: string;
@@ -163,9 +163,11 @@ export async function listAllOrdersWithSplits() {
 }
 
 /**
- * Admin-only: create vendor_orders for any orders that have order_items but
- * no vendor_orders rows yet. Uses vendor.commission_rate (default 10%).
+ * Admin-only audit for legacy orders missing vendor splits.
+ *
+ * No financial rows are created because historical order items do not carry an
+ * immutable commission-rate snapshot.
  */
-export async function backfillVendorOrders(): Promise<{ created: number; skipped: number }> {
-  return await backfillVendorOrdersServer();
+export async function auditMissingVendorOrders() {
+  return await auditMissingVendorOrdersServer();
 }
