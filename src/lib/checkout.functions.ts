@@ -114,7 +114,7 @@ export const createMarketplaceOrder = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const { data: result, error } = await supabaseAdmin.rpc(
-      "create_marketplace_order" as never,
+      "create_marketplace_order_locked" as never,
       {
         _customer_id: userId,
         _customer_email: customerEmail,
