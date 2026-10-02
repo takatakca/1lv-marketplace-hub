@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(136);
+select plan(137);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002104500',
+  '20261002110000',
   'production schema marker is current'
 );
 
@@ -183,6 +183,20 @@ select ok(
 );
 
 select ok(
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'vendors'
+      and policyname = 'Users can create their own vendor record'
+      and coalesce(with_check, '') like '%user_id%'
+      and coalesce(with_check, '') like '%pending%'
+      and coalesce(with_check, '') like '%active%'
+  ),
+  'vendor insert policy accepts only ownership plus trigger-generated pending/active states'
+);
+
+select ok(
   not exists (
     select 1
     from pg_policies
@@ -307,10 +321,12 @@ select ok(
     where schemaname = 'public'
       and tablename = 'products'
       and policyname = 'Vendors insert own products'
-      and coalesce(with_check, '') like '%pending_review%'
+      and coalesce(with_check, '') like '%user_id%'
       and coalesce(with_check, '') like '%draft%'
+      and coalesce(with_check, '') like '%pending_review%'
+      and coalesce(with_check, '') like '%active%'
   ),
-  'vendor product insert policy permits only draft or pending-review status'
+  'vendor product insert policy accepts only ownership plus trigger-generated draft/review/active states'
 );
 
 select ok(
