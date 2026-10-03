@@ -2,12 +2,63 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(224);
+select plan(226);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002184500',
+  '20261002190000',
   'production schema marker is current'
+);
+
+select ok(
+  has_column_privilege(
+    'authenticated',
+    'public.payouts',
+    'net_amount',
+    'SELECT'
+  )
+  and has_column_privilege(
+    'authenticated',
+    'public.payouts',
+    'status',
+    'SELECT'
+  )
+  and not has_column_privilege(
+    'authenticated',
+    'public.payouts',
+    'stripe_transfer_id',
+    'SELECT'
+  )
+  and not has_column_privilege(
+    'authenticated',
+    'public.payouts',
+    'failure_reason',
+    'SELECT'
+  )
+  and not has_column_privilege(
+    'authenticated',
+    'public.payouts',
+    'approved_by',
+    'SELECT'
+  ),
+  'authenticated payout reads expose vendor-safe columns but hide transfer and approval internals'
+);
+
+select ok(
+  has_table_privilege('service_role','public.payouts','SELECT')
+  and has_column_privilege(
+    'service_role',
+    'public.payouts',
+    'stripe_transfer_id',
+    'SELECT'
+  )
+  and has_column_privilege(
+    'service_role',
+    'public.payouts',
+    'failure_reason',
+    'SELECT'
+  ),
+  'service role retains full payout ledger visibility for guarded admin server functions'
 );
 
 select ok(
