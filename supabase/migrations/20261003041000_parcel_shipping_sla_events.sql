@@ -716,7 +716,6 @@ SET search_path = ''
 AS $$
 DECLARE
   v_shipment public.shipments%ROWTYPE;
-  v_vendor_order public.vendor_orders%ROWTYPE;
   v_carrier text := NULLIF(btrim(COALESCE(_carrier, '')), '');
   v_tracking text := NULLIF(btrim(COALESCE(_tracking_number, '')), '');
   v_service text := NULLIF(btrim(COALESCE(_service_name, '')), '');
@@ -733,7 +732,7 @@ BEGIN
       USING ERRCODE = 'P0002';
   END IF;
 
-  v_vendor_order := public.require_vendor_order_shipping_authority(
+  PERFORM public.require_vendor_order_shipping_authority(
     v_shipment.vendor_order_id
   );
 
