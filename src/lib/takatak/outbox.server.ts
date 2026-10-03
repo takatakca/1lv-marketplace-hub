@@ -185,24 +185,6 @@ export async function queueOrderEvent(
 }
 
 /**
- * Queue order.fulfilled only once EVERY vendor split has been delivered.
- * Safe to call after any vendor order status change.
- */
-export async function queueOrderFulfilledIfComplete(orderId: string) {
-  const client = await db();
-  const { data: splits } = await client
-    .from("vendor_orders")
-    .select("status")
-    .eq("order_id", orderId);
-  const rows = (splits ?? []) as Array<{ status: string }>;
-  if (rows.length === 0) return;
-  const done = rows.every((r) => r.status === "delivered" || r.status === "cancelled");
-  if (!done) return;
-  await queueOrderEvent(orderId, "order.fulfilled");
-}
-
-
-/**
  * One relationship edge per vendor split. Metrics are scoped to THAT vendor
  * only — never aggregated across merchants.
  */
@@ -287,7 +269,7 @@ export async function queueDisputeRelationshipEvent(disputeId: string) {
   );
 }
 
-/** Relationship + order events for one delivered vendor split. */
+/** Queue the non-financial customer↔vendor relationship event for one delivered split. */
 export async function queueVendorOrderDelivered(vendorOrderId: string) {
   const client = await db();
   const { data: vo } = await client
@@ -319,7 +301,6 @@ export async function queueVendorOrderDelivered(vendorOrderId: string) {
     },
     `customer.vendor.order_completed:delivered:${vo.id}`,
   );
-  await queueOrderFulfilledIfComplete(vo.order_id);
 }
 
 
