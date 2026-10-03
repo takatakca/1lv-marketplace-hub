@@ -198,8 +198,8 @@ select ok(
 
 select is(
   public.get_1lv_schema_version(),
-  '20261003024500',
-  'variant checkout advances the production schema marker'
+  '20261003033000',
+  'variant checkout remains certified under the current production schema marker'
 );
 
 select * from finish();
