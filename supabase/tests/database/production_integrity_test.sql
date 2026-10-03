@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(192);
+select plan(194);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002170000',
+  '20261002171500',
   'production schema marker is current'
 );
 
@@ -236,6 +236,16 @@ select ok(
     )
   ) > 0,
   'public catalog projections use retained sales instead of raw paid-order quantities'
+);
+
+select ok(
+  to_regclass('public.order_items_product_order_vendor_idx') is not null,
+  'retained sold-count product/order/vendor lookup is indexed'
+);
+
+select ok(
+  to_regclass('public.refund_records_vendor_status_idx') is not null,
+  'retained sold-count vendor refund status lookup is indexed'
 );
 
 select ok(
