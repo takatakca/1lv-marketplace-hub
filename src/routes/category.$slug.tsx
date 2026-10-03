@@ -3,16 +3,48 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
-import { getCategory } from "@/lib/data";
+import { getCategory as getDemoCategory } from "@/lib/data";
 import { usePublicCatalog } from "@/hooks/use-public-catalog";
 import { searchPublicCatalogProducts } from "@/services/public-catalog";
+import { getPublicMarketplaceSettings } from "@/lib/public-marketplace-settings.functions";
+import { getPublicCategoryBySlug, listPublicCategories } from "@/services/public-categories";
 
 export const Route = createFileRoute("/category/$slug")({
   component: CategoryPage,
-  loader: ({ params }) => {
-    const cat = getCategory(params.slug);
-    if (!cat) throw notFound();
-    return { cat };
+  loader: async ({ params }) => {
+    const settings = await getPublicMarketplaceSettings().catch(() => null);
+    let liveCategories: Awaited<ReturnType<typeof listPublicCategories>> = [];
+
+    try {
+      const [category, categories] = await Promise.all([
+        getPublicCategoryBySlug(params.slug),
+        listPublicCategories(),
+      ]);
+      liveCategories = categories;
+
+      if (category) {
+        const knownMeta = getDemoCategory(category.slug);
+        return {
+          cat: {
+            slug: category.slug,
+            name: category.name_en,
+            emoji: knownMeta?.emoji ?? "📦",
+            subcategories: categories
+              .filter((item) => item.parent_slug === category.slug)
+              .map((item) => item.name_en),
+          },
+        };
+      }
+    } catch (error) {
+      if (!settings?.demo_mode) throw error;
+    }
+
+    if (settings?.demo_mode && liveCategories.length === 0) {
+      const demoCategory = getDemoCategory(params.slug);
+      if (demoCategory) return { cat: demoCategory };
+    }
+
+    throw notFound();
   },
   head: ({ loaderData }) => ({
     meta: [
