@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { Zap, TrendingUp, ShieldCheck, Truck, RefreshCw, Store, Star, ArrowRight, BadgePercent, Sparkles, MapPin, PackageCheck } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
@@ -12,7 +12,7 @@ import { categories, formatCAD } from "@/lib/data";
 import { usePublicCatalog } from "@/hooks/use-public-catalog";
 import { FREE_SHIPPING_THRESHOLD_CAD } from "@/lib/canada-commerce";
 import { usePublicMarketplaceSettings } from "@/hooks/use-marketplace-settings";
-import { searchPublicCatalogProducts } from "@/services/public-catalog";
+import { listPublicCatalogProductsForVendor, searchPublicCatalogProducts } from "@/services/public-catalog";
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -141,9 +141,24 @@ function Home() {
     : (homeBudgetQuery.data ?? []).slice(0, 4);
   const heroDeal = flash[0] ?? trending[0] ?? products[0];
   const tiles = products.slice(0, 3);
-  const featuredVendors = vendors.slice(0, 4).map((vendor) => ({
+  const featuredVendorBase = vendors.slice(0, 4);
+  const featuredVendorProductQueries = useQueries({
+    queries: featuredVendorBase.map((vendor) => ({
+      queryKey: ["public-marketplace-home", "vendor-products", vendor.slug],
+      queryFn: () => listPublicCatalogProductsForVendor(vendor.slug, 3),
+      enabled: !demo && !loading,
+      staleTime: 60_000,
+      gcTime: 10 * 60_000,
+      retry: 1,
+    })),
+  });
+  const featuredVendors = featuredVendorBase.map((vendor, index) => ({
     vendor,
-    items: products.filter((p) => p.vendorSlug === vendor.slug),
+    items: demo
+      ? products
+          .filter((p) => p.vendorSlug === vendor.slug)
+          .slice(0, 3)
+      : featuredVendorProductQueries[index]?.data ?? [],
   }));
   const homeScopedLoading =
     !demo &&
@@ -151,7 +166,8 @@ function Home() {
       homeTrendingQuery.isPending ||
       homeNewestQuery.isPending ||
       homeCanadianQuery.isPending ||
-      homeBudgetQuery.isPending);
+      homeBudgetQuery.isPending ||
+      featuredVendorProductQueries.some((query) => query.isPending));
   const homeScopedError =
     !demo &&
     [
@@ -160,6 +176,7 @@ function Home() {
       homeNewestQuery.error,
       homeCanadianQuery.error,
       homeBudgetQuery.error,
+      ...featuredVendorProductQueries.map((query) => query.error),
     ].some(Boolean);
 
   return (
@@ -427,7 +444,7 @@ function Home() {
               </div>
               <div className="flex items-center justify-between border-t border-border px-3 py-2">
                 <span className="text-[11px] text-muted-foreground">
-                  {items.length} products
+                  {items.length > 0 ? "Live products available" : "Visit storefront"}
                 </span>
                 <Link
                   to="/store/$slug"
