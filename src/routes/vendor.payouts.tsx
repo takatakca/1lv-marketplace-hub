@@ -20,7 +20,7 @@ import {
   listVendorPayouts,
   payoutStatusClass,
   payoutStatusLabel,
-  type PayoutRecord,
+  type VendorPayoutRecord,
 } from "@/services/payouts";
 
 function buildDemoPeriods(): PayoutPeriod[] {
@@ -50,7 +50,7 @@ function Page() {
   const [vendor, setVendor] = useState<VendorRecord | null>(null);
   const [stats, setStats] = useState<VendorStats | null>(null);
   const [periods, setPeriods] = useState<PayoutPeriod[] | null>(null);
-  const [payouts, setPayouts] = useState<PayoutRecord[]>([]);
+  const [payouts, setPayouts] = useState<VendorPayoutRecord[]>([]);
   const [loading, setLoading] = useState(!demo);
   const [connectStatus, setConnectStatus] = useState<ConnectStatus>("not_connected");
   const [connectBusy, setConnectBusy] = useState(false);
