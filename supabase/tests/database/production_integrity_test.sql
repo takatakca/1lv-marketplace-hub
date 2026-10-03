@@ -2,12 +2,40 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(170);
+select plan(171);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002144500',
+  '20261002150000',
   'production schema marker is current'
+);
+
+select ok(
+  position(
+    '''refunded''::public.payment_status'
+    in pg_get_functiondef(
+      'public.list_public_catalog_products(integer)'::regprocedure
+    )
+  ) = 0
+  and position(
+    '''refunded''::public.payment_status'
+    in pg_get_functiondef(
+      'public.get_public_catalog_product_by_slug(text)'::regprocedure
+    )
+  ) = 0
+  and position(
+    '''refunded''::public.payment_status'
+    in pg_get_functiondef(
+      'public.list_public_catalog_products_for_vendor(text,integer)'::regprocedure
+    )
+  ) = 0
+  and position(
+    '''refunded''::public.payment_status'
+    in pg_get_functiondef(
+      'public.list_public_catalog_products_for_category(text,integer)'::regprocedure
+    )
+  ) = 0,
+  'public sold-count projections exclude fully refunded orders'
 );
 
 select ok(
