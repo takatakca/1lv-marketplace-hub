@@ -68,7 +68,7 @@ The database RPC is executable only by `service_role`; it uses `SECURITY INVOKER
 
 Before this branch is merged/deployed:
 
-- apply the complete ordered migration set through `20261002150000_inventory_release_payment_binding.sql` to the exact 1LV.CA Supabase project `odoybkshqszucvoxzjyz`;
+- apply the complete ordered migration set through `20261002150000_public_sold_count_refund_truth.sql` to the exact 1LV.CA Supabase project `odoybkshqszucvoxzjyz`;
 - configure `CHECKOUT_GUEST_TOKEN_SECRET`, `TAKATAK_DRAIN_CRON_SECRET` and `INVENTORY_MAINTENANCE_CRON_SECRET` as separate random server-only secrets of at least 32 characters;
 - keep `SUPABASE_SERVICE_ROLE_KEY`, Stripe secret keys and all scheduler/guest capability secrets server-only;
 - configure the repository `PRODUCTION_URL` variable exactly as `https://1lv.ca`; the secured schedulers refuse any other origin before sending their bearer secrets;
