@@ -31,12 +31,17 @@ import { useCart } from "@/hooks/use-cart";
 import { useWishlist } from "@/hooks/use-wishlist";
 import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 import { toast } from "sonner";
+import {
+  getPublicProductVariantMatrix,
+  type PublicProductVariantMatrix,
+} from "@/services/product-variants";
 
 type LoaderData = {
   product: Product;
   vendor: Vendor | null;
   related: Product[];
   fromStore: Product[];
+  variantMatrix: PublicProductVariantMatrix;
   demo: boolean;
 };
 
@@ -49,11 +54,13 @@ export const Route = createFileRoute("/product/$slug")({
       const liveProduct = await getPublicCatalogProductBySlug(params.slug);
 
       if (liveProduct) {
-        const [vendor, categoryProducts, vendorProducts] = await Promise.all([
-          getPublicCatalogVendorBySlug(liveProduct.vendorSlug),
-          listPublicCatalogProductsForCategory(liveProduct.category, 7),
-          listPublicCatalogProductsForVendor(liveProduct.vendorSlug, 9),
-        ]);
+        const [vendor, categoryProducts, vendorProducts, variantMatrix] =
+          await Promise.all([
+            getPublicCatalogVendorBySlug(liveProduct.vendorSlug),
+            listPublicCatalogProductsForCategory(liveProduct.category, 7),
+            listPublicCatalogProductsForVendor(liveProduct.vendorSlug, 9),
+            getPublicProductVariantMatrix(liveProduct.id),
+          ]);
 
         return {
           product: liveProduct,
@@ -64,6 +71,7 @@ export const Route = createFileRoute("/product/$slug")({
           fromStore: vendorProducts
             .filter((item) => item.id !== liveProduct.id)
             .slice(0, 8),
+          variantMatrix,
           demo: false,
         };
       }
@@ -87,6 +95,7 @@ export const Route = createFileRoute("/product/$slug")({
                 item.id !== demoProduct.id,
             )
             .slice(0, 8),
+          variantMatrix: { options: [], variants: [] },
           demo: true,
         };
       }
@@ -128,14 +137,27 @@ function Accordion({ title, children, defaultOpen = false }: { title: string; ch
 }
 
 function ProductPage() {
-  const { product, vendor, related, fromStore, demo } =
+  const { product, vendor, related, fromStore, variantMatrix, demo } =
     Route.useLoaderData() as LoaderData;
   const category = getCategory(product.category);
   const [activeImg, setActiveImg] = useState(0);
   const [qty, setQty] = useState(1);
   const initialVariant: Record<string, string> = {};
-  product.variants?.forEach((v) => { initialVariant[v.name] = v.options[0]; });
-  const [variant, setVariant] = useState<Record<string, string>>(initialVariant);
+  if (demo) {
+    product.variants?.forEach((item) => {
+      const first = item.options[0];
+      if (first) initialVariant[item.name] = first;
+    });
+  } else {
+    const firstLiveVariant =
+      variantMatrix.variants.find((item) => item.available) ??
+      variantMatrix.variants[0];
+    if (firstLiveVariant) {
+      Object.assign(initialVariant, firstLiveVariant.attributes);
+    }
+  }
+  const [variant, setVariant] =
+    useState<Record<string, string>>(initialVariant);
   const { add } = useCart();
   const { has, toggle } = useWishlist();
   const { push } = useRecentlyViewed();
@@ -145,32 +167,74 @@ function ProductPage() {
     setQty(1);
 
     const nextVariant: Record<string, string> = {};
-    product.variants?.forEach((item) => {
-      const first = item.options[0];
-      if (first) nextVariant[item.name] = first;
-    });
+    if (demo) {
+      product.variants?.forEach((item) => {
+        const first = item.options[0];
+        if (first) nextVariant[item.name] = first;
+      });
+    } else {
+      const firstLiveVariant =
+        variantMatrix.variants.find((item) => item.available) ??
+        variantMatrix.variants[0];
+      if (firstLiveVariant) {
+        Object.assign(nextVariant, firstLiveVariant.attributes);
+      }
+    }
     setVariant(nextVariant);
-  }, [product.id, product.variants]);
+  }, [demo, product.id, product.variants, variantMatrix]);
 
   useEffect(() => {
     push(product.id);
   }, [product.id, push]);
 
-  const off = product.compareAt && product.compareAt > product.price
-    ? Math.round(((product.compareAt - product.price) / product.compareAt) * 100)
-    : 0;
+  const hasLiveVariants = !demo && variantMatrix.variants.length > 0;
+  const selectedLiveVariant = hasLiveVariants
+    ? variantMatrix.variants.find((item) =>
+        Object.entries(item.attributes).every(
+          ([name, value]) => variant[name] === value,
+        ),
+      ) ?? null
+    : null;
+  const currentPrice = selectedLiveVariant?.price ?? product.price;
+  const currentCompareAt =
+    selectedLiveVariant?.compare_at_price ?? product.compareAt;
+  const off =
+    currentCompareAt && currentCompareAt > currentPrice
+      ? Math.round(((currentCompareAt - currentPrice) / currentCompareAt) * 100)
+      : 0;
+  const cartVariantIdentity = selectedLiveVariant
+    ? {
+        id: selectedLiveVariant.id,
+        sku: selectedLiveVariant.sku,
+        price: selectedLiveVariant.price,
+        image: selectedLiveVariant.image_url ?? undefined,
+      }
+    : undefined;
+  const canSelectLiveOption = (name: string, value: string) =>
+    variantMatrix.variants.some(
+      (candidate) =>
+        candidate.available &&
+        candidate.attributes[name] === value &&
+        Object.entries(variant).every(
+          ([selectedName, selectedValue]) =>
+            selectedName === name ||
+            candidate.attributes[selectedName] === selectedValue,
+        ),
+    );
   const eta = demo
     ? new Date(
         Date.now() +
           1000 * 60 * 60 * 24 * (product.shipping === "fast" ? 2 : 6),
       )
     : null;
-  const soldOut =
-    product.trackInventory &&
-    typeof product.inventoryQuantity === "number" &&
-    product.inventoryQuantity <= 0;
-  const maxQty =
-    product.trackInventory && typeof product.inventoryQuantity === "number"
+  const soldOut = hasLiveVariants
+    ? !selectedLiveVariant?.available
+    : product.trackInventory &&
+      typeof product.inventoryQuantity === "number" &&
+      product.inventoryQuantity <= 0;
+  const maxQty = hasLiveVariants
+    ? 99
+    : product.trackInventory && typeof product.inventoryQuantity === "number"
       ? Math.max(0, product.inventoryQuantity)
       : 99;
 
@@ -207,7 +271,14 @@ function ProductPage() {
           {/* Gallery */}
           <div className="group order-1 lg:order-2">
             <div className="relative aspect-square overflow-hidden rounded-xl border border-border bg-muted shadow-merch">
-              <ProductImage src={product.images[activeImg]} alt={product.title} eager />
+              <ProductImage
+                src={
+                  selectedLiveVariant?.image_url ??
+                  product.images[activeImg]
+                }
+                alt={product.title}
+                eager
+              />
               {off > 0 && (
                 <span className="absolute left-3 top-3 rounded-md bg-gradient-deal px-2 py-1 text-xs font-extrabold text-white shadow">
                   -{off}% off
@@ -227,9 +298,20 @@ function ProductPage() {
                       <li>Category: {category?.name ?? product.category}</li>
                       {vendor?.name && <li>Seller: {vendor.name}</li>}
                       <li>Product ID: {product.id}</li>
-                      {product.variants?.map((v) => (
-                        <li key={v.name}>{v.name}: {v.options.join(", ")}</li>
-                      ))}
+                      {hasLiveVariants
+                        ? variantMatrix.options.map((option) => (
+                            <li key={option.id}>
+                              {option.name}:{" "}
+                              {option.values
+                                .map((value) => value.value)
+                                .join(", ")}
+                            </li>
+                          ))
+                        : product.variants?.map((item) => (
+                            <li key={item.name}>
+                              {item.name}: {item.options.join(", ")}
+                            </li>
+                          ))}
                     </ul>
                   </Accordion>
                   <Accordion title="Shipping & delivery">
@@ -303,14 +385,18 @@ function ProductPage() {
 
               <div>
                 <div className="flex flex-wrap items-baseline gap-2">
-                  <span className="font-display text-3xl font-extrabold tracking-tight text-deal">{formatCAD(product.price)}</span>
-                  {product.compareAt && product.compareAt > product.price && (
-                    <span className="text-sm text-muted-foreground line-through">{formatCAD(product.compareAt)}</span>
+                  <span className="font-display text-3xl font-extrabold tracking-tight text-deal">
+                    {formatCAD(currentPrice)}
+                  </span>
+                  {currentCompareAt && currentCompareAt > currentPrice && (
+                    <span className="text-sm text-muted-foreground line-through">
+                      {formatCAD(currentCompareAt)}
+                    </span>
                   )}
                 </div>
                 {off > 0 && (
                   <p className="mt-1 text-xs font-semibold text-deal">
-                    You save {formatCAD((product.compareAt ?? 0) - product.price)}
+                    You save {formatCAD((currentCompareAt ?? 0) - currentPrice)}
                   </p>
                 )}
               </div>
@@ -355,26 +441,76 @@ function ProductPage() {
                 </p>
               </div>
 
-              {product.variants?.map((v) => (
-                <div key={v.name}>
-                  <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-navy">
-                    {v.name}: <span className="font-normal normal-case text-muted-foreground">{variant[v.name]}</span>
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {v.options.map((opt) => (
-                      <button
-                        key={opt}
-                        onClick={() => setVariant((s) => ({ ...s, [v.name]: opt }))}
-                        className={`rounded-md border px-3 py-1.5 text-xs font-medium transition ${
-                          variant[v.name] === opt ? "border-electric bg-electric/5 text-electric" : "border-border text-navy hover:border-navy"
-                        }`}
-                      >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
+              {hasLiveVariants
+                ? variantMatrix.options.map((option) => (
+                    <div key={option.id}>
+                      <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-navy">
+                        {option.name}:{" "}
+                        <span className="font-normal normal-case text-muted-foreground">
+                          {variant[option.name] ?? "Select"}
+                        </span>
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {option.values.map((optionValue) => {
+                          const available = canSelectLiveOption(
+                            option.name,
+                            optionValue.value,
+                          );
+                          return (
+                            <button
+                              key={optionValue.id}
+                              type="button"
+                              disabled={!available}
+                              onClick={() =>
+                                setVariant((state) => ({
+                                  ...state,
+                                  [option.name]: optionValue.value,
+                                }))
+                              }
+                              className={`rounded-md border px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-35 ${
+                                variant[option.name] === optionValue.value
+                                  ? "border-electric bg-electric/5 text-electric"
+                                  : "border-border text-navy hover:border-navy"
+                              }`}
+                            >
+                              {optionValue.value}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))
+                : product.variants?.map((item) => (
+                    <div key={item.name}>
+                      <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-navy">
+                        {item.name}:{" "}
+                        <span className="font-normal normal-case text-muted-foreground">
+                          {variant[item.name]}
+                        </span>
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {item.options.map((option) => (
+                          <button
+                            key={option}
+                            type="button"
+                            onClick={() =>
+                              setVariant((state) => ({
+                                ...state,
+                                [item.name]: option,
+                              }))
+                            }
+                            className={`rounded-md border px-3 py-1.5 text-xs font-medium transition ${
+                              variant[item.name] === option
+                                ? "border-electric bg-electric/5 text-electric"
+                                : "border-border text-navy hover:border-navy"
+                            }`}
+                          >
+                            {option}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
 
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wide text-navy">Quantity</span>
@@ -412,7 +548,7 @@ function ProductPage() {
                 ) : (
                   <Link
                     to="/checkout"
-                    onClick={() => add(product, qty, variant)}
+                    onClick={() => add(product, qty, variant, cartVariantIdentity)}
                     className="block w-full rounded-md bg-gradient-deal px-4 py-3 text-center text-sm font-bold text-white transition hover:opacity-90"
                   >
                     Buy now
@@ -422,7 +558,7 @@ function ProductPage() {
                   disabled={soldOut}
                   onClick={() => {
                     if (soldOut) return;
-                    add(product, qty, variant);
+                    add(product, qty, variant, cartVariantIdentity);
                     toast.success("Added to cart");
                   }}
                   className="w-full rounded-md border-2 border-electric bg-electric/5 px-4 py-2.5 text-sm font-bold text-electric transition hover:bg-electric hover:text-electric-foreground disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground"
@@ -518,7 +654,23 @@ function ProductPage() {
 
         <RecentlyViewed excludeId={product.id} />
       </div>
-      <StickyBuyBar product={product} quantity={qty} variant={variant} />
+      <StickyBuyBar
+        product={product}
+        quantity={qty}
+        variant={variant}
+        variantIdentity={
+          selectedLiveVariant
+            ? {
+                id: selectedLiveVariant.id,
+                sku: selectedLiveVariant.sku,
+                price: selectedLiveVariant.price,
+                compareAt: selectedLiveVariant.compare_at_price,
+                image: selectedLiveVariant.image_url ?? undefined,
+              }
+            : undefined
+        }
+        unavailable={hasLiveVariants && !selectedLiveVariant?.available}
+      />
     </AppLayout>
   );
 }
