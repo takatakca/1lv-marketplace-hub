@@ -340,6 +340,13 @@ const returnRmaEngineMigration = readFileSync(
   ),
   "utf8",
 );
+const parcelShippingSlaEventsMigration = readFileSync(
+  join(
+    root,
+    "supabase/migrations/20261003041000_parcel_shipping_sla_events.sql",
+  ),
+  "utf8",
+);
 const payoutService = readFileSync(
   join(root, "src/services/payouts.ts"),
   "utf8",
@@ -899,7 +906,37 @@ for (const [content, marker, label] of [
   [
     returnRmaEngineMigration,
     "SELECT '20261003033000'",
-    "final production schema marker includes the item-level RMA engine",
+    "item-level RMA retains its historical schema marker",
+  ],
+  [
+    parcelShippingSlaEventsMigration,
+    "SELECT '20261003041000'",
+    "final production schema marker includes parcel shipping and SLA",
+  ],
+  [
+    parcelShippingSlaEventsMigration,
+    "CREATE TABLE public.shipments",
+    "parcel-level shipment storage exists",
+  ],
+  [
+    parcelShippingSlaEventsMigration,
+    "CREATE TABLE public.shipment_events",
+    "append-only carrier event history exists",
+  ],
+  [
+    parcelShippingSlaEventsMigration,
+    "CREATE OR REPLACE FUNCTION public.create_vendor_shipment",
+    "vendor parcel allocation is server-authoritative",
+  ],
+  [
+    parcelShippingSlaEventsMigration,
+    "CREATE OR REPLACE FUNCTION public.ingest_shipment_event",
+    "carrier event ingestion is idempotent and service-role controlled",
+  ],
+  [
+    parcelShippingSlaEventsMigration,
+    "CREATE OR REPLACE FUNCTION public.refresh_fulfillment_from_shipments",
+    "parcel quantities roll up into marketplace fulfillment state",
   ],
   [
     returnRmaEngineMigration,
@@ -2732,19 +2769,19 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261003033000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261003041000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261003033000"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261003041000"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261003033000"') ||
-  !returnRmaEngineMigration.includes(
-    "SELECT '20261003033000'",
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261003041000"') ||
+  !parcelShippingSlaEventsMigration.includes(
+    "SELECT '20261003041000'",
   )
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261003033000",
+    "production health/migration gates must track schema 20261003041000",
   );
 }
 
