@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(158);
+select plan(160);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002131500',
+  '20261002133000',
   'production schema marker is current'
 );
 
@@ -133,6 +133,38 @@ select ok(
     )
   ) > 0,
   'vendor profile authority binds banner references to the vendor owner prefix'
+);
+
+select ok(
+  position(
+    'subscription_status IN (''active'', ''trialing'')'
+    in pg_get_functiondef(
+      'public.list_public_catalog_products(integer)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'subscription_status IN (''active'', ''trialing'')'
+    in pg_get_functiondef(
+      'public.get_public_catalog_product_by_slug(text)'::regprocedure
+    )
+  ) > 0,
+  'public product catalog requires an eligible vendor subscription'
+);
+
+select ok(
+  position(
+    'subscription_status IN (''active'', ''trialing'')'
+    in pg_get_functiondef(
+      'public.list_public_vendors(integer)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'subscription_status IN (''active'', ''trialing'')'
+    in pg_get_functiondef(
+      'public.get_public_vendor_by_slug(text)'::regprocedure
+    )
+  ) > 0,
+  'public vendor catalog requires an eligible vendor subscription'
 );
 
 select ok(
