@@ -7,7 +7,12 @@ import { useAuth } from "@/hooks/use-auth";
 import { usePublicMarketplaceSettings } from "@/hooks/use-marketplace-settings";
 import { isDemoMode } from "@/lib/demo-mode";
 import { getMyVendor, type VendorRecord } from "@/services/vendors";
-import { listVendorProducts, setProductStatus, type ProductRecord, type ProductStatus } from "@/services/products";
+import {
+  bulkSetVendorProductStatus,
+  listVendorProducts,
+  type ProductRecord,
+  type ProductStatus,
+} from "@/services/products";
 import { DemoBanner, PreviewModeNotice } from "@/components/DemoBanner";
 
 const STATUS_OPTIONS: (ProductStatus | "all")[] = ["all", "draft", "pending_review", "active", "rejected", "archived"];
@@ -94,11 +99,15 @@ function Page() {
     }
     setWorking(true);
     try {
-      await Promise.all(Array.from(selected).map((id) => setProductStatus(id, "pending_review")));
+      const result = await bulkSetVendorProductStatus(
+        vendor!.id,
+        Array.from(selected),
+        "pending_review",
+      );
       toast.success(
-        requiresProductApproval
-          ? `Submitted ${selected.size} product(s) for review`
-          : `Published ${selected.size} product(s)`,
+        result.effective_status === "active"
+          ? `Published ${result.affected_count} product(s)`
+          : `Submitted ${result.affected_count} product(s) for review`,
       );
       setSelected(new Set());
       if (vendor) await reload(vendor.id);
@@ -110,8 +119,12 @@ function Page() {
     if (useDemo) { toast.message("Demo mode — bulk archive simulated"); return; }
     setWorking(true);
     try {
-      await Promise.all(Array.from(selected).map((id) => setProductStatus(id, "archived")));
-      toast.success(`Archived ${selected.size} product(s)`);
+      const result = await bulkSetVendorProductStatus(
+        vendor!.id,
+        Array.from(selected),
+        "archived",
+      );
+      toast.success(`Archived ${result.affected_count} product(s)`);
       setSelected(new Set());
       if (vendor) await reload(vendor.id);
     } catch (err) { toast.error((err as Error).message); }
