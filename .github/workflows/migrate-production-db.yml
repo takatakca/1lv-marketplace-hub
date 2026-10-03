@@ -145,7 +145,7 @@ jobs:
 
           supabase db start
           supabase db reset --local --no-seed
-          supabase db lint --local --schema public --level warning --fail-on error
+          supabase db lint --local --schema public --level warning --fail-on warning
           supabase test db --local
 
           cleanup
