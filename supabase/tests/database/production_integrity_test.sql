@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(186);
+select plan(189);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002163000',
+  '20261002164500',
   'production schema marker is current'
 );
 
@@ -133,6 +133,50 @@ select ok(
     )
   ) > 0,
   'product publication validates final category eligibility after vendor lifecycle rewrites'
+);
+
+select ok(
+  to_regprocedure('public.validate_category_write_integrity()') is not null
+  and to_regprocedure('public.guard_category_delete()') is not null,
+  'category write-integrity and delete-guard trigger functions exist'
+);
+
+select ok(
+  position(
+    'Category slug cannot be renamed in place'
+    in pg_get_functiondef(
+      'public.validate_category_write_integrity()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'Category parent does not exist'
+    in pg_get_functiondef(
+      'public.validate_category_write_integrity()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'Category hierarchy cannot contain a cycle'
+    in pg_get_functiondef(
+      'public.validate_category_write_integrity()'::regprocedure
+    )
+  ) > 0,
+  'category writes reject slug renames, missing parents and hierarchy cycles'
+);
+
+select ok(
+  position(
+    'child.parent_slug = OLD.slug'
+    in pg_get_functiondef(
+      'public.guard_category_delete()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'p.category_slug = OLD.slug'
+    in pg_get_functiondef(
+      'public.guard_category_delete()'::regprocedure
+    )
+  ) > 0,
+  'category deletion is blocked while children or products still reference the slug'
 );
 
 select ok(
