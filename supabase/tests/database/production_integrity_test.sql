@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(226);
+select plan(228);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002190000',
+  '20261002191500',
   'production schema marker is current'
 );
 
@@ -534,13 +534,13 @@ select ok(
     'vendor_id',
     'UPDATE'
   )
-  and has_column_privilege(
+  and not has_column_privilege(
     'authenticated',
     'public.product_import_jobs',
     'status',
     'UPDATE'
   ),
-  'browser import jobs cannot reassign identity/scope after creation'
+  'browser import jobs cannot reassign identity/scope or finalize status'
 );
 
 select ok(
