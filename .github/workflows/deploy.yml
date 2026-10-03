@@ -650,12 +650,21 @@ jobs:
           if [ -s "$APP_ROOT/CURRENT" ]; then
             OLD="$(tr -d '\r\n' < "$APP_ROOT/CURRENT")"
 
-            if [ -n "$OLD" ] && [ -d "$APP_ROOT/releases/$OLD" ]; then
-              printf '%s\n' "$OLD" > "$APP_ROOT/PREVIOUS.new"
-              mv -f "$APP_ROOT/PREVIOUS.new" "$APP_ROOT/PREVIOUS"
-
-              echo "Previous release saved: $OLD"
+            if ! printf '%s' "$OLD" | grep -Eq '^[0-9a-f]{40}$'; then
+              echo "ERROR: CURRENT does not contain a valid full Git SHA."
+              exit 1
             fi
+
+            if [ ! -d "$APP_ROOT/releases/$OLD" ]; then
+              echo "ERROR: CURRENT points to a missing release directory:"
+              echo "$APP_ROOT/releases/$OLD"
+              exit 1
+            fi
+
+            printf '%s\n' "$OLD" > "$APP_ROOT/PREVIOUS.new"
+            mv -f "$APP_ROOT/PREVIOUS.new" "$APP_ROOT/PREVIOUS"
+
+            echo "Previous release saved: $OLD"
           fi
 
           cp "$RELEASE/server.cjs" "$APP_ROOT/server.cjs.new"
