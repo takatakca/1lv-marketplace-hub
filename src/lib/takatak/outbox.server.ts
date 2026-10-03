@@ -318,25 +318,6 @@ export type DrainResult = {
 };
 
 /** Process pending/retryable events with exponential backoff. */
-async function claimStillCurrent(
-  client: Db,
-  id: string,
-  claimToken: string,
-): Promise<boolean> {
-  const { data, error } = await client
-    .from("takatak_outbox")
-    .select("id")
-    .eq("id", id)
-    .eq("status", "processing")
-    .eq("claim_token", claimToken)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Could not verify TAKATAK claim lease: ${error.message}`);
-  }
-  return Boolean(data);
-}
-
 async function transitionClaim(
   client: Db,
   id: string,
@@ -429,34 +410,22 @@ export async function drainTakatakOutbox(limit = 25): Promise<DrainResult> {
 
     if (result.ok) {
       try {
-        // A slow/stale worker must stop before touching local aggregate links.
-        // The remote delivery is idempotent on row.id, so abandoning this
-        // local completion is safe when another worker owns the newer lease.
-        if (!(await claimStillCurrent(client, row.id, row.claim_token))) {
-          continue;
+        const { data: completed, error: completionError } = await client.rpc(
+          "complete_takatak_outbox_delivery" as never,
+          {
+            _id: row.id,
+            _claim_token: row.claim_token,
+            _remote_id: result.remoteId,
+          } as never,
+        );
+
+        if (completionError) {
+          throw new Error(
+            `Could not atomically complete TAKATAK delivery: ${completionError.message}`,
+          );
         }
 
-        await recordRemoteId(
-          client,
-          row.aggregate_type,
-          row.aggregate_id,
-          result.remoteId,
-        );
-
-        const state = await transitionClaim(
-          client,
-          row.id,
-          row.claim_token,
-          {
-            status: "delivered",
-            attempt_count: attempt,
-            last_error: null,
-            remote_id: result.remoteId,
-            delivered_at: new Date().toISOString(),
-          },
-        );
-
-        if (state === "updated") {
+        if ((completed as unknown as boolean) === true) {
           delivered++;
         }
       } catch (error) {
@@ -519,87 +488,6 @@ export async function drainTakatakOutbox(limit = 25): Promise<DrainResult> {
   }
 
   return { ok: true, processed: list.length, delivered, failed };
-}
-
-async function recordRemoteId(
-  client: Db,
-  aggregateType: string,
-  aggregateId: string,
-  remoteId: string | null,
-) {
-  if (!remoteId) return;
-
-  if (aggregateType === "customer" && !aggregateId.startsWith("guest:")) {
-    const { data: profile, error: readError } = await client
-      .from("profiles")
-      .select("takatak_person_id")
-      .eq("id", aggregateId)
-      .maybeSingle();
-
-    if (readError || !profile) {
-      throw new Error("Could not verify the local TAKATAK identity link.");
-    }
-
-    const current = (profile as { takatak_person_id?: string | null })
-      .takatak_person_id;
-
-    if (current && current !== remoteId) {
-      throw new Error(
-        "TAKATAK identity conflict: local profile is linked to another master identity.",
-      );
-    }
-
-    if (!current) {
-      const { error: updateError } = await client
-        .from("profiles")
-        .update({ takatak_person_id: remoteId })
-        .eq("id", aggregateId);
-      if (updateError) {
-        throw new Error("Could not persist the TAKATAK master identity link.");
-      }
-    }
-  } else if (aggregateType === "merchant") {
-    const { data: vendor, error: readError } = await client
-      .from("vendors")
-      .select("takatak_merchant_id")
-      .eq("id", aggregateId)
-      .maybeSingle();
-
-    if (readError || !vendor) {
-      throw new Error("Could not verify the local TAKATAK merchant link.");
-    }
-
-    const current = (vendor as { takatak_merchant_id?: string | null })
-      .takatak_merchant_id;
-
-    if (current && current !== remoteId) {
-      throw new Error(
-        "TAKATAK merchant conflict: local vendor is linked to another master merchant.",
-      );
-    }
-
-    const { error: updateError } = await client
-      .from("vendors")
-      .update({
-        takatak_merchant_id: remoteId,
-        takatak_sync_status: "synced",
-        takatak_last_synced_at: new Date().toISOString(),
-      })
-      .eq("id", aggregateId);
-
-    if (updateError) {
-      throw new Error("Could not persist the TAKATAK master merchant link.");
-    }
-  } else if (aggregateType === "order") {
-    const { error: updateError } = await client
-      .from("orders")
-      .update({ takatak_order_event_id: remoteId })
-      .eq("id", aggregateId);
-
-    if (updateError) {
-      throw new Error("Could not persist the TAKATAK order event link.");
-    }
-  }
 }
 
 /** Requeue failed events for immediate retry. */
