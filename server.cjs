@@ -1,12 +1,15 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
-const { Readable } = require("stream");
+const { Readable, Transform } = require("stream");
 const { URL, pathToFileURL } = require("url");
 
 const CLIENT_DIR = path.join(__dirname, "dist", "client");
 const SERVER_ENTRY = path.join(__dirname, "dist", "server", "server.js");
 const CURRENT_RELEASE_FILE = path.join(__dirname, "CURRENT");
+
+const MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024;
+const REQUEST_BODY_TOO_LARGE_CODE = "ERR_1LV_REQUEST_BODY_TOO_LARGE";
 
 // Production deploys atomically update CURRENT before asking Passenger to
 // restart. Export that exact release SHA into the TanStack runtime so the
@@ -133,6 +136,35 @@ function requestUrl(req) {
   return `${PUBLIC_ORIGIN}${pathAndQuery}`;
 }
 
+function requestBodyTooLargeError() {
+  const error = new Error("Request body exceeds the 1LV server limit.");
+  error.code = REQUEST_BODY_TOO_LARGE_CODE;
+  return error;
+}
+
+function boundedRequestBody(req) {
+  let received = 0;
+
+  const limiter = new Transform({
+    transform(chunk, encoding, callback) {
+      const bytes = Buffer.isBuffer(chunk)
+        ? chunk.length
+        : Buffer.byteLength(chunk, encoding);
+
+      received += bytes;
+      if (received > MAX_REQUEST_BODY_BYTES) {
+        callback(requestBodyTooLargeError());
+        return;
+      }
+
+      callback(null, chunk);
+    },
+  });
+
+  req.pipe(limiter);
+  return limiter;
+}
+
 function toWebRequest(req) {
   const headers = new Headers();
 
@@ -147,12 +179,27 @@ function toWebRequest(req) {
   const method = req.method || "GET";
   const hasBody = method !== "GET" && method !== "HEAD";
 
+  if (hasBody) {
+    const rawLength = req.headers["content-length"];
+    if (rawLength !== undefined) {
+      const declared = Number(rawLength);
+      if (!Number.isSafeInteger(declared) || declared < 0) {
+        const error = new Error("Invalid Content-Length.");
+        error.code = "ERR_1LV_INVALID_CONTENT_LENGTH";
+        throw error;
+      }
+      if (declared > MAX_REQUEST_BODY_BYTES) {
+        throw requestBodyTooLargeError();
+      }
+    }
+  }
+
   return new Request(requestUrl(req), {
     method,
     headers,
     ...(hasBody
       ? {
-          body: Readable.toWeb(req),
+          body: Readable.toWeb(boundedRequestBody(req)),
           duplex: "half",
         }
       : {}),
@@ -319,6 +366,21 @@ const server = http.createServer(async (req, res) => {
     const response = await entry.fetch(toWebRequest(req));
     writeWebResponse(req, response, res);
   } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      error.code === REQUEST_BODY_TOO_LARGE_CODE &&
+      !res.headersSent
+    ) {
+      res.writeHead(413, {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Connection": "close",
+      });
+      res.end("Payload Too Large", () => req.destroy());
+      return;
+    }
+
     console.error("[1lv.ca] Request failed:", error);
     if (!res.headersSent) {
       res.writeHead(500, {
