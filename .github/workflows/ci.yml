@@ -57,6 +57,9 @@ jobs:
       - name: Verify trusted public origin handling
         run: npm run qa:request-origin
 
+      - name: Verify CSV parser handling
+        run: npm run qa:csv-parser
+
       - name: Lint changed source files
         if: github.event_name == 'pull_request'
         env:
