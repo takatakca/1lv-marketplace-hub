@@ -154,7 +154,12 @@ function StorePage() {
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
                 {products.map((p) => (
-                  <div key={p.id} className="group overflow-hidden rounded-xl border border-border bg-card transition hover:border-electric/40 hover:shadow-elevated">
+                  <Link
+                    key={p.id}
+                    to="/product/$slug"
+                    params={{ slug: p.slug }}
+                    className="group block overflow-hidden rounded-xl border border-border bg-card transition hover:border-electric/40 hover:shadow-elevated"
+                  >
                     <div className="aspect-square overflow-hidden bg-muted">
                       {p.images?.[0] ? (
                         <img src={p.images[0]} alt={p.title} className="h-full w-full object-cover transition group-hover:scale-105" />
@@ -166,7 +171,7 @@ function StorePage() {
                       <div className="line-clamp-2 text-sm font-semibold text-navy">{p.title}</div>
                       <div className="mt-1 text-sm font-bold text-electric">{formatCAD(Number(p.price))}</div>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}
