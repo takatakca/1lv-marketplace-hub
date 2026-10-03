@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(180);
+select plan(183);
 
 select is(
   public.get_1lv_schema_version(),
@@ -2668,6 +2668,53 @@ select ok(
     )
   ) > 0,
   'canonical checkout applies taxable delivery only to newly created orders'
+);
+
+
+select ok(
+  to_regprocedure('public.list_public_categories()') is not null
+  and to_regprocedure('public.get_public_category_by_slug(text)') is not null,
+  'public category taxonomy RPCs exist'
+);
+
+select ok(
+  has_function_privilege(
+    'anon',
+    'public.list_public_categories()',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.list_public_categories()',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'anon',
+    'public.get_public_category_by_slug(text)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.get_public_category_by_slug(text)',
+    'EXECUTE'
+  ),
+  'browser roles can execute only the dedicated public category projections'
+);
+
+select ok(
+  position(
+    'WHERE c.active = true'
+    in pg_get_functiondef(
+      'public.list_public_categories()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'WHERE c.active = true'
+    in pg_get_functiondef(
+      'public.get_public_category_by_slug(text)'::regprocedure
+    )
+  ) > 0,
+  'public category projections expose active taxonomy only'
 );
 
 select * from finish();
