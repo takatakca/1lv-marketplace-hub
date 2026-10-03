@@ -345,6 +345,10 @@ const optionalAuth = readFileSync(
   join(root, "src/integrations/supabase/optional-auth.server.ts"),
   "utf8",
 );
+const supabaseTypes = readFileSync(
+  join(root, "src/integrations/supabase/types.ts"),
+  "utf8",
+);
 const disputesFunctions = readFileSync(
   join(root, "src/lib/disputes.functions.ts"),
   "utf8",
