@@ -221,6 +221,14 @@ const vendorAssetService = readFileSync(
   join(root, "src/services/vendor-assets.ts"),
   "utf8",
 );
+const vendorAssetUploadComponent = readFileSync(
+  join(root, "src/components/VendorAssetUpload.tsx"),
+  "utf8",
+);
+const vendorSettingsRoute = readFileSync(
+  join(root, "src/routes/vendor.settings.tsx"),
+  "utf8",
+);
 const marketplaceSettingsMigration = readFileSync(
   join(root, "supabase/migrations/20260930150630_persistent_marketplace_settings.sql"),
   "utf8",
@@ -2181,6 +2189,20 @@ if (
 ) {
   violations.push(
     "vendor asset mutations must require TAKATAK authorization, vendor ownership and canonical owner-scoped paths",
+  );
+}
+
+if (
+  !vendorAssetService.includes("SIGNED_URL_TTL_SECONDS = 60 * 60") ||
+  !vendorAssetService.includes(".remove([path])") ||
+  !vendorAssetUploadComponent.includes(
+    "await deleteVendorAsset(path).catch(() => undefined)",
+  ) ||
+  !vendorSettingsRoute.includes("await setVendorAssetUrl(vendor.id, field, path)") ||
+  !vendorSettingsRoute.includes("await deleteVendorAsset(previous)")
+) {
+  violations.push(
+    "vendor branding lifecycle must use short-lived signed URLs and clean up failed/replaced uploads",
   );
 }
 
