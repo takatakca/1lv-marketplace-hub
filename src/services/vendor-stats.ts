@@ -125,3 +125,148 @@ export async function getPayoutPeriods(vendorId: string): Promise<PayoutPeriod[]
   }
   return Array.from(buckets.values()).sort((a, b) => b.periodStart.localeCompare(a.periodStart));
 }
+
+
+export type VendorPerformanceDashboard = {
+  period_days: number;
+  period_start: string;
+  products: {
+    total: number;
+    draft: number;
+    pending: number;
+    active: number;
+    rejected: number;
+    archived: number;
+  };
+  orders: {
+    total: number;
+    pending: number;
+    accepted: number;
+    processing: number;
+    shipped: number;
+    delivered: number;
+    cancelled: number;
+  };
+  financials: {
+    gross_merchandise: number;
+    refunds: number;
+    commission: number;
+    payout_estimate: number;
+    payouts_paid: number;
+  };
+  fulfillment: {
+    shipments: number;
+    on_time_shipments: number;
+    on_time_ship_rate: number;
+    delivered_shipments: number;
+    on_time_deliveries: number;
+    on_time_delivery_rate: number;
+    exceptions: number;
+    average_handling_hours: number;
+  };
+  returns: {
+    total: number;
+    open: number;
+    returned_units: number;
+    delivered_units: number;
+    unit_return_rate: number;
+  };
+};
+
+export type VendorDailyPerformance = {
+  sale_date: string;
+  orders: number;
+  gross_merchandise: number;
+  refunds: number;
+  commission: number;
+  payout_estimate: number;
+};
+
+export type VendorTopProduct = {
+  product_id: string;
+  title: string;
+  units_sold: number;
+  gross_merchandise: number;
+  order_count: number;
+};
+
+export async function getVendorPerformanceDashboard(
+  vendorId: string,
+  days = 30,
+): Promise<VendorPerformanceDashboard> {
+  const { data, error } = await supabase.rpc(
+    "get_vendor_performance_dashboard" as never,
+    { _vendor_id: vendorId, _days: days } as never,
+  );
+  if (error) throw error;
+
+  const raw = data as unknown as VendorPerformanceDashboard;
+  return {
+    ...raw,
+    financials: {
+      gross_merchandise: Number(raw.financials.gross_merchandise ?? 0),
+      refunds: Number(raw.financials.refunds ?? 0),
+      commission: Number(raw.financials.commission ?? 0),
+      payout_estimate: Number(raw.financials.payout_estimate ?? 0),
+      payouts_paid: Number(raw.financials.payouts_paid ?? 0),
+    },
+    fulfillment: {
+      ...raw.fulfillment,
+      on_time_ship_rate: Number(raw.fulfillment.on_time_ship_rate ?? 0),
+      on_time_delivery_rate: Number(
+        raw.fulfillment.on_time_delivery_rate ?? 0,
+      ),
+      average_handling_hours: Number(
+        raw.fulfillment.average_handling_hours ?? 0,
+      ),
+    },
+    returns: {
+      ...raw.returns,
+      unit_return_rate: Number(raw.returns.unit_return_rate ?? 0),
+    },
+  };
+}
+
+export async function getVendorDailyPerformance(
+  vendorId: string,
+  days = 30,
+): Promise<VendorDailyPerformance[]> {
+  const { data, error } = await supabase.rpc(
+    "get_vendor_daily_sales" as never,
+    { _vendor_id: vendorId, _days: days } as never,
+  );
+  if (error) throw error;
+
+  return ((data ?? []) as unknown as Array<Record<string, unknown>>).map(
+    (row) => ({
+      sale_date: String(row.sale_date ?? ""),
+      orders: Number(row.orders ?? 0),
+      gross_merchandise: Number(row.gross_merchandise ?? 0),
+      refunds: Number(row.refunds ?? 0),
+      commission: Number(row.commission ?? 0),
+      payout_estimate: Number(row.payout_estimate ?? 0),
+    }),
+  );
+}
+
+export async function getVendorTopProducts(
+  vendorId: string,
+  days = 30,
+  limit = 10,
+): Promise<VendorTopProduct[]> {
+  const { data, error } = await supabase.rpc(
+    "get_vendor_top_products" as never,
+    { _vendor_id: vendorId, _days: days, _limit: limit } as never,
+  );
+  if (error) throw error;
+
+  return ((data ?? []) as unknown as Array<Record<string, unknown>>).map(
+    (row) => ({
+      product_id: String(row.product_id ?? ""),
+      title: String(row.title ?? ""),
+      units_sold: Number(row.units_sold ?? 0),
+      gross_merchandise: Number(row.gross_merchandise ?? 0),
+      order_count: Number(row.order_count ?? 0),
+    }),
+  );
+}
