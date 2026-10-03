@@ -237,6 +237,10 @@ const publicCategoryCatalogScopeMigration = readFileSync(
   join(root, "supabase/migrations/20261002143000_public_category_catalog_scope.sql"),
   "utf8",
 );
+const inventoryReleasePaymentBindingMigration = readFileSync(
+  join(root, "supabase/migrations/20261002144500_inventory_release_payment_binding.sql"),
+  "utf8",
+);
 const publicCatalogService = readFileSync(
   join(root, "src/services/public-catalog.ts"),
   "utf8",
@@ -622,7 +626,12 @@ for (const [content, marker, label] of [
   [
     publicCategoryCatalogScopeMigration,
     "SELECT '20261002143000'",
-    "final production schema marker includes category-scoped public catalog",
+    "category-scoped public catalog retains its historical schema marker",
+  ],
+  [
+    inventoryReleasePaymentBindingMigration,
+    "SELECT '20261002144500'",
+    "final production schema marker includes PaymentIntent-bound inventory release",
   ],
   [
     publicCategoryCatalogScopeMigration,
@@ -1714,11 +1723,48 @@ if (
     '"release_order_inventory" as never',
   ) ||
   !inventoryMaintenanceRoute.includes(
+    "_expected_payment_intent_id: paymentIntentId ?? null",
+  ) ||
+  !inventoryMaintenanceRoute.includes(
     'status === "succeeded"',
+  ) ||
+  !inventoryMaintenanceRoute.includes(
+    "Inventory release compare-and-release rejected stale state",
   )
 ) {
   violations.push(
-    "expired checkout inventory cleanup must cancel/verify Stripe PaymentIntent before releasing inventory",
+    "expired checkout inventory cleanup must bind release to the exact Stripe PaymentIntent state it verified",
+  );
+}
+
+if (
+  !inventoryReleasePaymentBindingMigration.includes(
+    "public.release_order_inventory(",
+  ) ||
+  !inventoryReleasePaymentBindingMigration.includes(
+    "_expected_payment_intent_id text",
+  ) ||
+  !inventoryReleasePaymentBindingMigration.includes(
+    "inventory_reserved_until > now()",
+  ) ||
+  !inventoryReleasePaymentBindingMigration.includes(
+    "stripe_payment_intent_id\n        IS DISTINCT FROM _expected_payment_intent_id",
+  ) ||
+  !inventoryReleasePaymentBindingMigration.includes(
+    "REVOKE ALL ON FUNCTION public.release_order_inventory(uuid)",
+  ) ||
+  !inventoryReleasePaymentBindingMigration.includes(
+    "FROM PUBLIC, anon, authenticated, service_role",
+  ) ||
+  !stripeFunctions.includes(
+    "_expected_payment_intent_id:",
+  ) ||
+  !stripeFunctions.includes(
+    "Expired checkout state changed before inventory could be released safely.",
+  )
+) {
+  violations.push(
+    "inventory release must be transactionally bound to expiry and the exact verified PaymentIntent, with the legacy one-argument RPC retired",
   );
 }
 
@@ -2246,17 +2292,17 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002143000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002144500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002143000"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002144500"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002143000"') ||
-  !publicCategoryCatalogScopeMigration.includes("SELECT '20261002143000'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002144500"') ||
+  !inventoryReleasePaymentBindingMigration.includes("SELECT '20261002144500'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002143000",
+    "production health/migration gates must track schema 20261002144500",
   );
 }
 
