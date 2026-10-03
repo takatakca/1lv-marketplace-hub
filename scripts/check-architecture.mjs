@@ -2553,9 +2553,10 @@ if (
 if (
   !masterOutbox.includes('"claim_takatak_outbox"') ||
   !masterOutbox.includes('claim_token: string;') ||
-  !masterOutbox.includes('.eq("claim_token", row.claim_token)') ||
+  !masterOutbox.includes('.eq("claim_token", claimToken)') ||
   !masterOutbox.includes("claimStillCurrent") ||
   !masterOutbox.includes("transitionClaim") ||
+  !masterOutbox.includes("row.claim_token") ||
   !masterOutbox.includes("const attempt = row.attempt_count;") ||
   masterOutbox.includes("row.attempt_count + 1") ||
   masterOutbox.includes('const staleBefore = new Date(') ||
