@@ -610,7 +610,6 @@ DECLARE
   v_variant_id uuid;
   v_idempotency_hash text;
   v_request_hash text;
-  v_existing_order_id uuid;
   v_existing_request_hash text;
   v_result jsonb;
   v_result_order_id uuid;
@@ -675,8 +674,8 @@ BEGIN
     'hex'
   );
 
-  SELECT id, checkout_request_hash
-  INTO v_existing_order_id, v_existing_request_hash
+  SELECT checkout_request_hash
+  INTO v_existing_request_hash
   FROM public.orders
   WHERE checkout_idempotency_hash = v_idempotency_hash
   LIMIT 1
