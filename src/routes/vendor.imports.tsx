@@ -3,13 +3,13 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { getMyVendor } from "@/services/vendors";
-import { createProduct } from "@/services/products";
 import { DataTable } from "@/components/DataTable";
 import { isDemoMode } from "@/lib/demo-mode";
 import { DemoBanner, PreviewModeNotice } from "@/components/DemoBanner";
 import {
   createImportJob,
   finalizeImportJob,
+  importDraftProductRow,
   insertJobRow,
   listImportJobs,
   type ImportJob,
@@ -149,29 +149,22 @@ function Page() {
 
     for (const { row: r, rowIndex } of validRows) {
       try {
-        const p = await createProduct(v.id, {
-          title: r.title,
-          short_description: r.short_description || null,
-          description: r.description || null,
-          category_slug: r.category_slug || null,
-          price: Number(r.price) || 0,
-          compare_at_price: null,
-          cost: null,
-          sku: r.sku || null,
-          inventory_quantity: Number(r.inventory_quantity) || 0,
-          track_inventory: true,
-          supplier_source: r.supplier_source || null,
-          supplier_url: r.supplier_url || null,
-          supplier_product_id: r.supplier_product_id || null,
-          status: "draft",
-        });
-
-        await insertJobRow({
-          job_id: job.id,
-          row_index: rowIndex,
-          row_status: "imported",
+        await importDraftProductRow({
+          jobId: job.id,
+          rowIndex,
           raw: r,
-          product_id: p.id,
+          product: {
+            title: r.title,
+            short_description: r.short_description || null,
+            description: r.description || null,
+            category_slug: r.category_slug || null,
+            price: Number(r.price),
+            sku: r.sku || null,
+            inventory_quantity: Number(r.inventory_quantity),
+            supplier_source: r.supplier_source || null,
+            supplier_url: r.supplier_url || null,
+            supplier_product_id: r.supplier_product_id || null,
+          },
         });
 
         ok++;
