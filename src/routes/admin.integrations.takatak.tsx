@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { Activity } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DataTable } from "@/components/DataTable";
@@ -137,20 +138,20 @@ function Page() {
           <section className="mb-6">
             <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Queue</h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard label="Pending" value={String(data.pending)} />
-              <StatCard label="Processing" value={String(data.processing)} />
-              <StatCard label="Delivered" value={String(data.delivered)} />
-              <StatCard label="Failed" value={String(data.failed)} />
+              <StatCard icon={Activity} label="Pending" value={String(data.pending)} />
+              <StatCard icon={Activity} label="Processing" value={String(data.processing)} />
+              <StatCard icon={Activity} label="Delivered" value={String(data.delivered)} />
+              <StatCard icon={Activity} label="Failed" value={String(data.failed)} />
             </div>
           </section>
 
           <section className="mb-6">
             <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Sync totals</h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard label="Customers synced" value={String(data.synced_customers)} />
-              <StatCard label="Merchants synced" value={String(data.synced_merchants)} />
-              <StatCard label="Orders synced" value={String(data.synced_orders)} />
-              <StatCard label="Relationships synced" value={String(data.synced_relationships)} />
+              <StatCard icon={Activity} label="Customers synced" value={String(data.synced_customers)} />
+              <StatCard icon={Activity} label="Merchants synced" value={String(data.synced_merchants)} />
+              <StatCard icon={Activity} label="Orders synced" value={String(data.synced_orders)} />
+              <StatCard icon={Activity} label="Relationships synced" value={String(data.synced_relationships)} />
             </div>
           </section>
 
