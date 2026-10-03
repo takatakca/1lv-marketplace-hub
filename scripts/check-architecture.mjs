@@ -209,6 +209,10 @@ const vendorAssetStorageMigration = readFileSync(
   join(root, "supabase/migrations/20261002124500_vendor_asset_storage_limits.sql"),
   "utf8",
 );
+const vendorAssetWriteAuthorityMigration = readFileSync(
+  join(root, "supabase/migrations/20261002130000_vendor_asset_write_authority.sql"),
+  "utf8",
+);
 const vendorAssetService = readFileSync(
   join(root, "src/services/vendor-assets.ts"),
   "utf8",
@@ -543,7 +547,27 @@ for (const [content, marker, label] of [
   [
     vendorAssetStorageMigration,
     "SELECT '20261002124500'",
-    "final production schema marker includes vendor asset storage limits",
+    "vendor asset storage limits retain their historical schema marker",
+  ],
+  [
+    vendorAssetWriteAuthorityMigration,
+    "SELECT '20261002130000'",
+    "final production schema marker includes vendor asset write authority",
+  ],
+  [
+    vendorAssetWriteAuthorityMigration,
+    "public.is_takatak_authorized_session()",
+    "vendor asset writes require a TAKATAK-authorized local session",
+  ],
+  [
+    vendorAssetWriteAuthorityMigration,
+    "FROM public.vendors AS v",
+    "vendor asset writes require a real 1LV vendor owner",
+  ],
+  [
+    vendorAssetWriteAuthorityMigration,
+    'TO authenticated',
+    "vendor asset mutation policies are authenticated-only",
   ],
   [
     vendorAssetStorageMigration,
@@ -2092,17 +2116,33 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002124500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002130000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002124500"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002130000"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002124500"') ||
-  !vendorAssetStorageMigration.includes("SELECT '20261002124500'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002130000"') ||
+  !vendorAssetWriteAuthorityMigration.includes("SELECT '20261002130000'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002124500",
+    "production health/migration gates must track schema 20261002130000",
+  );
+}
+
+if (
+  !vendorAssetWriteAuthorityMigration.includes(
+    "public.is_takatak_authorized_session()",
+  ) ||
+  !vendorAssetWriteAuthorityMigration.includes("FROM public.vendors AS v") ||
+  !vendorAssetWriteAuthorityMigration.includes("TO authenticated") ||
+  !vendorAssetWriteAuthorityMigration.includes("WITH CHECK (") ||
+  !vendorAssetWriteAuthorityMigration.includes(
+    "public.can_manage_vendor_asset(name)",
+  )
+) {
+  violations.push(
+    "vendor asset mutations must require TAKATAK authorization, vendor ownership and canonical owner-scoped paths",
   );
 }
 
