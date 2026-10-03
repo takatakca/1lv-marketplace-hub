@@ -316,7 +316,7 @@ jobs:
       - name: Lint public database functions
         run: |
           set -euo pipefail
-          supabase db lint --local --schema public --level warning --fail-on error
+          supabase db lint --local --schema public --level warning --fail-on warning
 
       - name: Run database integrity tests
         run: |
