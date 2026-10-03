@@ -73,6 +73,10 @@ jobs:
         shell: bash
         run: npm run qa:request-origin
 
+      - name: Verify CSV parser handling
+        shell: bash
+        run: npm run qa:csv-parser
+
       # ------------------------------------------------------------
       # 5. Re-run repository lint before any production build
       # Protects production even if main is updated outside the normal PR path.
