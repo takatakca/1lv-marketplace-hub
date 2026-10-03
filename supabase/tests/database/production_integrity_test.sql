@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(168);
+select plan(169);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002143000',
+  '20261002144500',
   'production schema marker is current'
 );
 
@@ -929,43 +929,64 @@ select throws_ok(
 );
 
 select ok(
-  to_regprocedure('public.release_order_inventory(uuid)') is not null,
-  'inventory release RPC exists'
+  to_regprocedure('public.release_order_inventory(uuid,text)') is not null,
+  'PaymentIntent-bound inventory release RPC exists'
+);
+
+select ok(
+  not has_function_privilege(
+    'service_role',
+    'public.release_order_inventory(uuid)',
+    'EXECUTE'
+  ),
+  'historical one-argument inventory release RPC is retired from service role'
 );
 
 select ok(
   not has_function_privilege(
     'anon',
-    'public.release_order_inventory(uuid)',
+    'public.release_order_inventory(uuid,text)',
     'EXECUTE'
   )
   and not has_function_privilege(
     'authenticated',
-    'public.release_order_inventory(uuid)',
+    'public.release_order_inventory(uuid,text)',
     'EXECUTE'
   )
   and has_function_privilege(
     'service_role',
-    'public.release_order_inventory(uuid)',
+    'public.release_order_inventory(uuid,text)',
     'EXECUTE'
   ),
-  'only service role may release checkout inventory'
+  'only service role may execute PaymentIntent-bound inventory release'
 );
 
 select ok(
   position(
+    'inventory_reserved_until > now()'
+    in pg_get_functiondef(
+      'public.release_order_inventory(uuid,text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'stripe_payment_intent_id IS DISTINCT FROM _expected_payment_intent_id'
+    in pg_get_functiondef(
+      'public.release_order_inventory(uuid,text)'::regprocedure
+    )
+  ) > 0
+  and position(
     'payment_status = ''failed''::public.payment_status'
     in pg_get_functiondef(
-      'public.release_order_inventory(uuid)'::regprocedure
+      'public.release_order_inventory(uuid,text)'::regprocedure
     )
   ) > 0
   and position(
     'status = ''cancelled''::public.order_status'
     in pg_get_functiondef(
-      'public.release_order_inventory(uuid)'::regprocedure
+      'public.release_order_inventory(uuid,text)'::regprocedure
     )
   ) > 0,
-  'released unpaid checkout becomes terminal cancelled/failed'
+  'inventory release requires expiry and exact checked PaymentIntent before terminal cancellation'
 );
 
 select ok(
