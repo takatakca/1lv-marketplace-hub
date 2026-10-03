@@ -257,6 +257,10 @@ const publicCatalogNewestSortMigration = readFileSync(
   join(root, "supabase/migrations/20261002160000_public_catalog_newest_sort.sql"),
   "utf8",
 );
+const publicCategoryTaxonomyMigration = readFileSync(
+  join(root, "supabase/migrations/20261002161500_public_category_taxonomy.sql"),
+  "utf8",
+);
 const trendingRoute = readFileSync(
   join(root, "src/routes/trending.tsx"),
   "utf8",
@@ -699,7 +703,12 @@ for (const [content, marker, label] of [
   [
     publicCatalogNewestSortMigration,
     "SELECT '20261002160000'",
-    "final production schema marker includes server-side newest ranking",
+    "server-side newest ranking retains its historical schema marker",
+  ],
+  [
+    publicCategoryTaxonomyMigration,
+    "SELECT '20261002161500'",
+    "final production schema marker includes public category taxonomy",
   ],
   [
     publicCategoryCatalogScopeMigration,
@@ -2382,17 +2391,37 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002160000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002161500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002160000"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002161500"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002160000"') ||
-  !publicCatalogNewestSortMigration.includes("SELECT '20261002160000'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002161500"') ||
+  !publicCategoryTaxonomyMigration.includes("SELECT '20261002161500'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002160000",
+    "production health/migration gates must track schema 20261002161500",
+  );
+}
+
+if (
+  !publicCategoryTaxonomyMigration.includes(
+    "CREATE OR REPLACE FUNCTION public.list_public_categories",
+  ) ||
+  !publicCategoryTaxonomyMigration.includes(
+    "CREATE OR REPLACE FUNCTION public.get_public_category_by_slug",
+  ) ||
+  !publicCategoryTaxonomyMigration.includes("WHERE c.active = true") ||
+  !publicCategoryTaxonomyMigration.includes(
+    "GRANT EXECUTE ON FUNCTION public.list_public_categories()",
+  ) ||
+  !publicCategoryTaxonomyMigration.includes(
+    "GRANT EXECUTE ON FUNCTION public.get_public_category_by_slug(text)",
+  )
+) {
+  violations.push(
+    "public category taxonomy must expose only active storefront-safe category projections through dedicated RPCs",
   );
 }
 
