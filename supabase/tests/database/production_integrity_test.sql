@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(189);
+select plan(192);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002164500',
+  '20261002170000',
   'production schema marker is current'
 );
 
@@ -177,6 +177,65 @@ select ok(
     )
   ) > 0,
   'category deletion is blocked while children or products still reference the slug'
+);
+
+select ok(
+  to_regprocedure('public.retained_product_sold_count(uuid)') is not null
+  and not has_function_privilege(
+    'anon',
+    'public.retained_product_sold_count(uuid)',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.retained_product_sold_count(uuid)',
+    'EXECUTE'
+  ),
+  'retained sold-count helper exists and is not directly exposed'
+);
+
+select ok(
+  position(
+    'public.refund_records'
+    in pg_get_functiondef(
+      'public.retained_product_sold_count(uuid)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'rr.status = ''refunded''::public.refund_status'
+    in pg_get_functiondef(
+      'public.retained_product_sold_count(uuid)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'COALESCE(vr.refunded_amount, 0) + 0.005 < vo.subtotal'
+    in pg_get_functiondef(
+      'public.retained_product_sold_count(uuid)'::regprocedure
+    )
+  ) > 0,
+  'public sold count excludes vendor splits whose finalized refunds reach the split subtotal'
+);
+
+select ok(
+  position(
+    'retained_product_sold_count'
+    in pg_get_functiondef(
+      'public.list_public_catalog_products(integer)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'retained_product_sold_count'
+    in pg_get_functiondef(
+      'public.search_public_catalog_products(text,text,numeric,numeric,boolean,boolean,text,integer)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'retained_product_sold_count'
+    in pg_get_functiondef(
+      'public.get_public_catalog_product_by_slug(text)'::regprocedure
+    )
+  ) > 0,
+  'public catalog projections use retained sales instead of raw paid-order quantities'
 );
 
 select ok(
