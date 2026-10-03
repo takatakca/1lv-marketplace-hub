@@ -1867,8 +1867,8 @@ select throws_ok(
     )
   $sql$,
   '22023',
-  'Each checkout item must have a valid product and quantity',
-  'oversized numeric quantity is rejected before integer casting'
+  'Each checkout item must have a valid product, optional variant and quantity',
+  'oversized numeric quantity is rejected before integer or variant casting'
 );
 
 select ok(
