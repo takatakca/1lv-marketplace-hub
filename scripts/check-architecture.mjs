@@ -326,6 +326,13 @@ const productVariantCatalogFoundationMigration = readFileSync(
   ),
   "utf8",
 );
+const variantAuthoritativeCheckoutMigration = readFileSync(
+  join(
+    root,
+    "supabase/migrations/20261003024500_variant_authoritative_checkout.sql",
+  ),
+  "utf8",
+);
 const payoutService = readFileSync(
   join(root, "src/services/payouts.ts"),
   "utf8",
@@ -875,7 +882,27 @@ for (const [content, marker, label] of [
   [
     productVariantCatalogFoundationMigration,
     "SELECT '20261003020000'",
-    "final production schema marker includes normalized product variants",
+    "normalized product variants retain their historical schema marker",
+  ],
+  [
+    variantAuthoritativeCheckoutMigration,
+    "SELECT '20261003024500'",
+    "final production schema marker includes SKU-authoritative checkout",
+  ],
+  [
+    variantAuthoritativeCheckoutMigration,
+    "CREATE OR REPLACE FUNCTION public.create_marketplace_order_unchecked",
+    "checkout core resolves SKU price and inventory in PostgreSQL",
+  ],
+  [
+    variantAuthoritativeCheckoutMigration,
+    "hashtextextended(v_variant_id::text, 42118)",
+    "checkout deterministically locks selected variants",
+  ],
+  [
+    variantAuthoritativeCheckoutMigration,
+    "UPDATE public.product_variants",
+    "variant inventory reservation and release are database-authoritative",
   ],
   [
     productVariantCatalogFoundationMigration,
@@ -2673,19 +2700,19 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261003020000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261003024500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261003020000"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261003024500"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261003020000"') ||
-  !productVariantCatalogFoundationMigration.includes(
-    "SELECT '20261003020000'",
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261003024500"') ||
+  !variantAuthoritativeCheckoutMigration.includes(
+    "SELECT '20261003024500'",
   )
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261003020000",
+    "production health/migration gates must track schema 20261003024500",
   );
 }
 
