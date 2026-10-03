@@ -301,6 +301,18 @@ const supplierImportFinalizationMigration = readFileSync(
   join(root, "supabase/migrations/20261002184500_supplier_import_finalization.sql"),
   "utf8",
 );
+const payoutColumnPrivacyMigration = readFileSync(
+  join(root, "supabase/migrations/20261002190000_payout_column_privacy.sql"),
+  "utf8",
+);
+const payoutService = readFileSync(
+  join(root, "src/services/payouts.ts"),
+  "utf8",
+);
+const payoutFunctions = readFileSync(
+  join(root, "src/lib/payouts.functions.ts"),
+  "utf8",
+);
 const importService = readFileSync(
   join(root, "src/services/imports.ts"),
   "utf8",
@@ -822,7 +834,17 @@ for (const [content, marker, label] of [
   [
     supplierImportFinalizationMigration,
     "SELECT '20261002184500'",
-    "final production schema marker includes server-authoritative supplier import finalization",
+    "supplier import finalization retains its historical schema marker",
+  ],
+  [
+    payoutColumnPrivacyMigration,
+    "SELECT '20261002190000'",
+    "final production schema marker includes payout column privacy",
+  ],
+  [
+    payoutColumnPrivacyMigration,
+    "REVOKE SELECT ON TABLE public.payouts FROM authenticated",
+    "authenticated browsers do not retain table-wide payout SELECT access",
   ],
   [
     supplierImportFinalizationMigration,
@@ -2575,17 +2597,17 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002184500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002190000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002184500"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002190000"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002184500"') ||
-  !supplierImportFinalizationMigration.includes("SELECT '20261002184500'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002190000"') ||
+  !payoutColumnPrivacyMigration.includes("SELECT '20261002190000'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002184500",
+    "production health/migration gates must track schema 20261002190000",
   );
 }
 
@@ -2673,6 +2695,29 @@ if (
 ) {
   violations.push(
     "payout scheduler settings must remain readable only by marketplace admins",
+  );
+}
+
+if (
+  !payoutColumnPrivacyMigration.includes(
+    "REVOKE SELECT ON TABLE public.payouts FROM authenticated",
+  ) ||
+  !payoutColumnPrivacyMigration.includes("GRANT SELECT (") ||
+  !payoutColumnPrivacyMigration.includes("net_amount,") ||
+  !payoutColumnPrivacyMigration.includes("paid_at,") ||
+  payoutColumnPrivacyMigration.includes("stripe_transfer_id") ||
+  payoutColumnPrivacyMigration.includes("failure_reason") ||
+  !payoutService.includes("listAdminPayouts as listAdminPayoutsFn") ||
+  !payoutService.includes("await listAdminPayoutsFn()") ||
+  payoutService.includes('.from("payouts" as never)\n    .select("*")') ||
+  !payoutFunctions.includes("export const listAdminPayouts") ||
+  !payoutFunctions.includes("await s.assertAdmin(context)") ||
+  !payoutFunctions.includes("await s.adminDb()") ||
+  !payoutFunctions.includes('.from("payouts")') ||
+  !payoutFunctions.includes('.select("*")')
+) {
+  violations.push(
+    "full payout transfer/reconciliation internals must remain server-only while browser vendors receive only the safe payout projection",
   );
 }
 
