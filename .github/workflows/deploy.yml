@@ -469,13 +469,11 @@ jobs:
               ;;
           esac
 
-          case "$SITE_URL" in
-            https://*) ;;
-            *)
-              echo "ERROR: PRODUCTION_URL must use HTTPS."
-              exit 1
-              ;;
-          esac
+          SITE_URL="${SITE_URL%/}"
+          if [ "$SITE_URL" != "https://1lv.ca" ]; then
+            echo "ERROR: PRODUCTION_URL must be exactly https://1lv.ca."
+            exit 1
+          fi
 
           if ! printf '%s' "$SSH_PRIVATE_KEY" | grep -q "PRIVATE KEY"; then
             echo "ERROR: MOCHAHOST_SSH_PRIVATE_KEY does not look like a private key."
