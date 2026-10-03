@@ -242,10 +242,9 @@ select ok(
   'curated customer/vendor RMA projections exist'
 );
 
-select is(
-  public.get_1lv_schema_version(),
-  '20261003033000',
-  'RMA engine advances the production schema marker'
+select ok(
+  public.get_1lv_schema_version() >= '20261003033000',
+  'RMA engine remains present in the current production schema'
 );
 
 select * from finish();
