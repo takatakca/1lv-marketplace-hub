@@ -222,10 +222,9 @@ select ok(
   'public variants require active product and subscribed active vendor'
 );
 
-select is(
-  public.get_1lv_schema_version(),
-  '20261003020000',
-  'variant foundation advances the production schema marker'
+select ok(
+  public.get_1lv_schema_version() >= '20261003020000',
+  'variant foundation remains present after later schema versions'
 );
 
 select * from finish();
