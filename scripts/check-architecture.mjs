@@ -205,6 +205,14 @@ const databaseLintCleanupMigration = readFileSync(
   join(root, "supabase/migrations/20261002123000_database_lint_cleanup.sql"),
   "utf8",
 );
+const vendorAssetStorageMigration = readFileSync(
+  join(root, "supabase/migrations/20261002124500_vendor_asset_storage_limits.sql"),
+  "utf8",
+);
+const vendorAssetService = readFileSync(
+  join(root, "src/services/vendor-assets.ts"),
+  "utf8",
+);
 const marketplaceSettingsMigration = readFileSync(
   join(root, "supabase/migrations/20260930150630_persistent_marketplace_settings.sql"),
   "utf8",
@@ -530,7 +538,22 @@ for (const [content, marker, label] of [
   [
     databaseLintCleanupMigration,
     "SELECT '20261002123000'",
-    "final production schema marker includes database lint cleanup",
+    "database lint cleanup retains its historical schema marker",
+  ],
+  [
+    vendorAssetStorageMigration,
+    "SELECT '20261002124500'",
+    "final production schema marker includes vendor asset storage limits",
+  ],
+  [
+    vendorAssetStorageMigration,
+    "file_size_limit",
+    "vendor asset bucket enforces a server-side size limit",
+  ],
+  [
+    vendorAssetStorageMigration,
+    "allowed_mime_types",
+    "vendor asset bucket enforces server-side MIME types",
   ],
   [
     databaseLintCleanupMigration,
@@ -2069,17 +2092,33 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002123000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002124500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002123000"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002124500"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002123000"') ||
-  !databaseLintCleanupMigration.includes("SELECT '20261002123000'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002124500"') ||
+  !vendorAssetStorageMigration.includes("SELECT '20261002124500'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002123000",
+    "production health/migration gates must track schema 20261002124500",
+  );
+}
+
+if (
+  !vendorAssetStorageMigration.includes("4194304") ||
+  !vendorAssetStorageMigration.includes("'image/png'") ||
+  !vendorAssetStorageMigration.includes("'image/jpeg'") ||
+  !vendorAssetStorageMigration.includes("'image/webp'") ||
+  !vendorAssetStorageMigration.includes("'image/gif'") ||
+  !vendorAssetService.includes("EXTENSION_BY_MIME") ||
+  !vendorAssetService.includes("crypto.randomUUID()") ||
+  !vendorAssetService.includes("upsert: false") ||
+  vendorAssetService.includes('file.name.split(".")')
+) {
+  violations.push(
+    "vendor asset uploads must enforce server-side MIME/size limits and use canonical collision-resistant object names",
   );
 }
 
