@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(208);
+select plan(214);
 
 select is(
   public.get_1lv_schema_version(),
@@ -58,6 +58,161 @@ select ok(
     )
   ) > 0,
   'TAKATAK outbox rows are marked processing inside the atomic claim'
+);
+
+select ok(
+  exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'takatak_outbox'
+      and column_name = 'claim_token'
+      and data_type = 'uuid'
+  ),
+  'TAKATAK outbox stores a UUID claim token for processing leases'
+);
+
+select ok(
+  position(
+    'claim_token = gen_random_uuid()'
+    in pg_get_functiondef(
+      'public.claim_takatak_outbox(integer,integer)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'attempt_count = o.attempt_count + 1'
+    in pg_get_functiondef(
+      'public.claim_takatak_outbox(integer,integer)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'attempt_count >= v_max_attempts'
+    in pg_get_functiondef(
+      'public.claim_takatak_outbox(integer,integer)'::regprocedure
+    )
+  ) > 0,
+  'TAKATAK claim grants a unique lease token, consumes an attempt at claim time, and bounds stale crash recovery'
+);
+
+insert into public.takatak_outbox (
+  id,
+  event_type,
+  aggregate_type,
+  aggregate_id,
+  payload,
+  status,
+  attempt_count,
+  next_attempt_at,
+  created_at,
+  updated_at
+)
+values (
+  '99999999-9999-4999-8999-999999999991'::uuid,
+  'customer.updated',
+  'customer',
+  'pgtap-lease-fence',
+  '{}'::jsonb,
+  'pending',
+  0,
+  now() - interval '1 hour',
+  '2000-01-01 00:00:00+00'::timestamptz,
+  '2000-01-01 00:00:00+00'::timestamptz
+);
+
+create temporary table pgtap_takatak_claim_one
+on commit drop
+as
+select *
+from public.claim_takatak_outbox(1, 6);
+
+select ok(
+  (
+    select
+      id = '99999999-9999-4999-8999-999999999991'::uuid
+      and attempt_count = 1
+      and claim_token is not null
+    from pg_temp.pgtap_takatak_claim_one
+  ),
+  'first TAKATAK claim consumes attempt one and returns a non-null lease token'
+);
+
+set local session_replication_role = replica;
+update public.takatak_outbox
+set updated_at = now() - interval '16 minutes'
+where id = '99999999-9999-4999-8999-999999999991'::uuid;
+set local session_replication_role = origin;
+
+create temporary table pgtap_takatak_claim_two
+on commit drop
+as
+select *
+from public.claim_takatak_outbox(1, 6);
+
+select ok(
+  (
+    select
+      second_claim.id = '99999999-9999-4999-8999-999999999991'::uuid
+      and second_claim.attempt_count = 2
+      and second_claim.claim_token is not null
+      and second_claim.claim_token is distinct from first_claim.claim_token
+    from pg_temp.pgtap_takatak_claim_two as second_claim
+    cross join pg_temp.pgtap_takatak_claim_one as first_claim
+  ),
+  'stale TAKATAK lease is reclaimed with a new token and the next bounded attempt'
+);
+
+update public.takatak_outbox
+set
+  status = 'delivered',
+  delivered_at = now()
+where id = '99999999-9999-4999-8999-999999999991'::uuid
+  and status = 'processing'
+  and claim_token = (
+    select claim_token
+    from pg_temp.pgtap_takatak_claim_one
+  );
+
+select ok(
+  (
+    select
+      o.status = 'processing'
+      and o.claim_token = second_claim.claim_token
+    from public.takatak_outbox as o
+    cross join pg_temp.pgtap_takatak_claim_two as second_claim
+    where o.id = '99999999-9999-4999-8999-999999999991'::uuid
+  ),
+  'an expired TAKATAK worker token cannot overwrite the worker that reclaimed the event'
+);
+
+set local session_replication_role = replica;
+update public.takatak_outbox
+set
+  status = 'processing',
+  attempt_count = 6,
+  claim_token = (
+    select claim_token
+    from pg_temp.pgtap_takatak_claim_two
+  ),
+  updated_at = now() - interval '16 minutes'
+where id = '99999999-9999-4999-8999-999999999991'::uuid;
+set local session_replication_role = origin;
+
+create temporary table pgtap_takatak_claim_exhausted
+on commit drop
+as
+select *
+from public.claim_takatak_outbox(1, 6);
+
+select ok(
+  (
+    select
+      status = 'failed'
+      and attempt_count = 6
+      and claim_token is null
+    from public.takatak_outbox
+    where id = '99999999-9999-4999-8999-999999999991'::uuid
+  ),
+  'a stale TAKATAK lease at the retry ceiling becomes terminal failed instead of looping forever'
 );
 
 select ok(
