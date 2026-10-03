@@ -122,6 +122,52 @@ export async function finalizeImportJob(
   if (error) throw error;
 }
 
+export async function importDraftProductRow(input: {
+  jobId: string;
+  rowIndex: number;
+  raw: Record<string, string>;
+  product: {
+    title: string;
+    short_description?: string | null;
+    description?: string | null;
+    category_slug?: string | null;
+    price: number;
+    sku?: string | null;
+    inventory_quantity: number;
+    supplier_source?: string | null;
+    supplier_url?: string | null;
+    supplier_product_id?: string | null;
+  };
+}) {
+  const { data, error } = await supabase.rpc(
+    "import_product_draft_row" as never,
+    {
+      _job_id: input.jobId,
+      _row_index: input.rowIndex,
+      _raw: input.raw,
+      _product: input.product,
+    } as never,
+  );
+  if (error) throw error;
+
+  const result = (data ?? {}) as unknown as {
+    ok?: boolean;
+    product_id?: string;
+    row_index?: number;
+  };
+  if (
+    result.ok !== true ||
+    typeof result.product_id !== "string" ||
+    result.row_index !== input.rowIndex
+  ) {
+    throw new Error("Atomic product import returned an invalid result.");
+  }
+  return {
+    productId: result.product_id,
+    rowIndex: result.row_index,
+  };
+}
+
 export async function insertJobRow(input: {
   job_id: string;
   row_index: number;
