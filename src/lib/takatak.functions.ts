@@ -57,7 +57,8 @@ export const getTakatakEventDetail = createServerFn({ method: "POST" })
     const { assertAdmin } = await import("./disputes.server");
     await assertAdmin(context);
     const { takatakEventDetail } = await import("./takatak/outbox.server");
-    return await takatakEventDetail(data.id);
+    const d = await takatakEventDetail(data.id);
+    return d ? { ...d, payload: JSON.parse(JSON.stringify(d.payload)) as Record<string, string | number | boolean | null> } : null;
   });
 
 export const drainTakatakOutboxNow = createServerFn({ method: "POST" })
