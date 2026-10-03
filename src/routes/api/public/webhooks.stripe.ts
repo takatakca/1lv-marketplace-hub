@@ -490,11 +490,17 @@ async function handleEvent(evt: StripeEvent) {
           Boolean(order.inventory_released_at) || reservationExpired;
 
         if (checkoutClosed && !order.inventory_released_at) {
-          const { error: releaseError } = await supabaseAdmin.rpc(
-            "release_order_inventory" as never,
-            { _order_id: order.id } as never,
-          );
+          const { data: released, error: releaseError } =
+            await supabaseAdmin.rpc("release_order_inventory", {
+              _order_id: order.id,
+              _expected_payment_intent_id: paymentIntentId,
+            });
           if (releaseError) throw releaseError;
+          if (released !== true) {
+            throw new Error(
+              "Canceled PaymentIntent inventory release was rejected because order state changed concurrently.",
+            );
+          }
         }
 
         const { error: cancelError } = await supabaseAdmin
