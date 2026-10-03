@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(161);
+select plan(164);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002134500',
+  '20261002140000',
   'production schema marker is current'
 );
 
@@ -101,6 +101,74 @@ select ok(
       and policyname = 'vendor-assets owner delete'
   ),
   'vendor asset delete policy requires the centralized write authority'
+);
+
+select ok(
+  to_regprocedure('public.can_read_vendor_asset(text)') is not null
+  and has_function_privilege(
+    'anon',
+    'public.can_read_vendor_asset(text)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.can_read_vendor_asset(text)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.can_read_vendor_asset(text)',
+    'EXECUTE'
+  ),
+  'vendor asset read authority is explicitly available to storefront, owners and server'
+);
+
+select ok(
+  position(
+    'v.subscription_status IN (''active'', ''trialing'')'
+    in pg_get_functiondef(
+      'public.can_read_vendor_asset(text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'public.is_takatak_authorized_session()'
+    in pg_get_functiondef(
+      'public.can_read_vendor_asset(text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'v.logo_url = _name'
+    in pg_get_functiondef(
+      'public.can_read_vendor_asset(text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'v.banner_url = _name'
+    in pg_get_functiondef(
+      'public.can_read_vendor_asset(text)'::regprocedure
+    )
+  ) > 0,
+  'vendor asset reads require a referenced public asset or an authorized owner/admin session'
+);
+
+select ok(
+  not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'storage'
+      and tablename = 'objects'
+      and policyname = 'vendor-assets public read'
+  )
+  and exists (
+    select 1
+    from pg_policies
+    where schemaname = 'storage'
+      and tablename = 'objects'
+      and policyname = 'vendor-assets scoped read'
+      and roles = ARRAY['anon','authenticated']::name[]
+      and coalesce(qual, '') like '%can_read_vendor_asset%'
+  ),
+  'anonymous vendor asset reads are restricted to the scoped read authority'
 );
 
 select ok(
