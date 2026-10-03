@@ -265,6 +265,10 @@ const publicCategoryAuthorityMigration = readFileSync(
   join(root, "supabase/migrations/20261002163000_public_category_authority.sql"),
   "utf8",
 );
+const categoryWriteIntegrityMigration = readFileSync(
+  join(root, "supabase/migrations/20261002164500_category_write_integrity.sql"),
+  "utf8",
+);
 const publicCategoryService = readFileSync(
   join(root, "src/services/public-categories.ts"),
   "utf8",
@@ -729,7 +733,12 @@ for (const [content, marker, label] of [
   [
     publicCategoryAuthorityMigration,
     "SELECT '20261002163000'",
-    "final production schema marker includes public category authority",
+    "public category authority retains its historical schema marker",
+  ],
+  [
+    categoryWriteIntegrityMigration,
+    "SELECT '20261002164500'",
+    "final production schema marker includes category write integrity",
   ],
   [
     publicCategoryCatalogScopeMigration,
@@ -2412,17 +2421,17 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002163000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002164500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002163000"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002164500"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002163000"') ||
-  !publicCategoryAuthorityMigration.includes("SELECT '20261002163000'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002164500"') ||
+  !categoryWriteIntegrityMigration.includes("SELECT '20261002164500'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002163000",
+    "production health/migration gates must track schema 20261002164500",
   );
 }
 
@@ -2495,6 +2504,39 @@ if (
 ) {
   violations.push(
     "public category consumers must use the persistent active taxonomy projection",
+  );
+}
+
+if (
+  !categoryWriteIntegrityMigration.includes(
+    "CREATE OR REPLACE FUNCTION public.validate_category_write_integrity",
+  ) ||
+  !categoryWriteIntegrityMigration.includes(
+    "Category slug cannot be renamed in place",
+  ) ||
+  !categoryWriteIntegrityMigration.includes(
+    "Category hierarchy cannot contain a cycle",
+  ) ||
+  !categoryWriteIntegrityMigration.includes(
+    "CREATE OR REPLACE FUNCTION public.guard_category_delete",
+  ) ||
+  !categoryWriteIntegrityMigration.includes(
+    "Category cannot be deleted while products reference it",
+  )
+) {
+  violations.push(
+    "category writes must prevent slug duplication, invalid hierarchy and orphaning deletes",
+  );
+}
+
+if (
+  !adminCategoriesRoute.includes("editingSlug") ||
+  !adminCategoriesRoute.includes("disabled={editingSlug !== null}") ||
+  !adminCategoriesRoute.includes("<select") ||
+  !adminCategoriesRoute.includes("New category")
+) {
+  violations.push(
+    "admin category editing must keep slugs stable and parent selection constrained to existing taxonomy",
   );
 }
 
