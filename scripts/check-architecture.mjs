@@ -3380,7 +3380,7 @@ console.log(
 
 if (
   !csvParser.includes("export function parseCsvRecords") ||
-  !csvParser.includes('text[index + 1] === '"'') ||
+  !csvParser.includes("text[index + 1] === '\"'") ||
   !vendorImportsRoute.includes("parseCsvRecords(text)") ||
   !vendorImportsRoute.includes("Duplicate CSV column(s)")
 ) {
