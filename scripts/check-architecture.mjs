@@ -2142,7 +2142,7 @@ if (
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
   ).includes('EXPECTED_SCHEMA_VERSION: "20261002131500"') ||
-  !vendorAssetWriteAuthorityMigration.includes("SELECT '20261002131500'")
+  !vendorAssetReferenceAuthorityMigration.includes("SELECT '20261002131500'")
 ) {
   violations.push(
     "production health/migration gates must track schema 20261002131500",
