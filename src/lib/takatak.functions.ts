@@ -71,7 +71,11 @@ export const drainTakatakOutboxNow = createServerFn({ method: "POST" })
       return {
         ok: false,
         setupRequired: res.setupRequired,
-        reason: "TAKATAK Master API is not configured — events stay safely queued.",
+        reason:
+          res.reason ??
+          (res.setupRequired
+            ? "TAKATAK Master API is not configured — events stay safely queued."
+            : "TAKATAK outbox drain failed safely."),
       };
     }
     return { ok: true, processed: res.processed, delivered: res.delivered, failed: res.failed };
