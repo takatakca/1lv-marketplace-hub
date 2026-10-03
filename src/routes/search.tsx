@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { z } from "zod";
 import { useState, useMemo, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Filter, Search as SearchIcon, SlidersHorizontal, X, Sparkles } from "lucide-react";
 import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { AppLayout } from "@/components/AppLayout";
@@ -10,6 +11,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { categories } from "@/lib/data";
 import { usePublicCatalog } from "@/hooks/use-public-catalog";
 import { QUICK_CHIPS, toSearchNavigation } from "@/services/ai-search";
+import { searchPublicCatalogProducts } from "@/services/public-catalog";
 
 const searchSchema = z.object({
   q: fallback(z.string(), "").default(""),
@@ -46,7 +48,7 @@ const PRICE_CEILING = 2000;
 function SearchPage() {
   const sp = Route.useSearch();
   const navigate = Route.useNavigate();
-  const { products, demo } = usePublicCatalog();
+  const { products, demo, loading: catalogLoading } = usePublicCatalog();
   const term = (sp.q ?? "").trim().toLowerCase();
 
   const safeSort: Sort = SORTS.includes(sp.sort as Sort) ? (sp.sort as Sort) : "relevance";
@@ -84,13 +86,49 @@ function SearchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sp.q, sp.raw, sp.category, sp.minPrice, sp.maxPrice, sp.freeShipping, sp.canadian, sp.rating, sp.sale, sp.sort]);
 
+  const liveSearchQuery = useQuery({
+    queryKey: [
+      "public-marketplace-search",
+      term,
+      category,
+      minPrice,
+      maxPrice,
+      caOnly,
+      saleOnly,
+      effectiveSort,
+    ],
+    queryFn: () =>
+      searchPublicCatalogProducts({
+        query: term,
+        categorySlug: category,
+        minPrice,
+        maxPrice,
+        canadianOnly: caOnly,
+        saleOnly,
+        sort: effectiveSort === "rating" ? "relevance" : effectiveSort,
+        limit: 200,
+      }),
+    enabled: !demo && !catalogLoading,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
+
   const results = useMemo(() => {
+    if (!demo) return liveSearchQuery.data ?? [];
+
     let r = term
-      ? products.filter((p) => p.title.toLowerCase().includes(term) || p.category.includes(term))
+      ? products.filter(
+          (p) =>
+            p.title.toLowerCase().includes(term) ||
+            p.category.includes(term),
+        )
       : products;
     if (category) r = r.filter((p) => p.category === category);
-    if (demo && freeShip) r = r.filter((p) => p.shipping === "free" || p.shipping === "fast");
-    if (demo && minRating > 0) r = r.filter((p) => p.rating >= minRating);
+    if (freeShip) {
+      r = r.filter((p) => p.shipping === "free" || p.shipping === "fast");
+    }
+    if (minRating > 0) r = r.filter((p) => p.rating >= minRating);
     if (saleOnly) r = r.filter((p) => p.compareAt && p.compareAt > p.price);
     if (caOnly) {
       r = r.filter((p) => p.vendorCountry === "CA" || p.tags.includes("local"));
@@ -98,13 +136,41 @@ function SearchPage() {
     r = r.filter((p) => p.price <= maxPrice && p.price >= minPrice);
 
     switch (effectiveSort) {
-      case "price-asc": r = [...r].sort((a, b) => a.price - b.price); break;
-      case "price-desc": r = [...r].sort((a, b) => b.price - a.price); break;
-      case "rating": r = [...r].sort((a, b) => b.rating - a.rating); break;
-      case "sold": r = [...r].sort((a, b) => b.sold - a.sold); break;
+      case "price-asc":
+        r = [...r].sort((a, b) => a.price - b.price);
+        break;
+      case "price-desc":
+        r = [...r].sort((a, b) => b.price - a.price);
+        break;
+      case "rating":
+        r = [...r].sort((a, b) => b.rating - a.rating);
+        break;
+      case "sold":
+        r = [...r].sort((a, b) => b.sold - a.sold);
+        break;
     }
     return r;
-  }, [products, demo, term, effectiveSort, maxPrice, minPrice, freeShip, minRating, caOnly, saleOnly, category]);
+  }, [
+    products,
+    demo,
+    liveSearchQuery.data,
+    term,
+    effectiveSort,
+    maxPrice,
+    minPrice,
+    freeShip,
+    minRating,
+    caOnly,
+    saleOnly,
+    category,
+  ]);
+
+  const searchLoading =
+    catalogLoading || (!demo && liveSearchQuery.isPending);
+  const searchError =
+    !demo && liveSearchQuery.error instanceof Error
+      ? liveSearchQuery.error.message
+      : null;
 
   const smartBits = [
     sp.q ? sp.q : null,
@@ -247,7 +313,7 @@ function SearchPage() {
         </div>
 
         <div className="mt-3 flex items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">{results.length} products</p>
+          <p className="text-sm text-muted-foreground">{searchLoading ? "Searching…" : `${results.length} products`}</p>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setDrawerOpen(true)}
@@ -283,7 +349,19 @@ function SearchPage() {
           </aside>
 
           <div>
-            {results.length > 0 ? (
+            {searchLoading ? (
+              <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+                Searching the live marketplace…
+              </div>
+            ) : searchError ? (
+              <EmptyState
+                icon={SearchIcon}
+                title="Search unavailable"
+                description="The live marketplace search could not be loaded. Please try again."
+                actionLabel="Browse categories"
+                to="/categories"
+              />
+            ) : results.length > 0 ? (
               <ProductGrid products={results} cols={6} />
             ) : (
               <EmptyState
