@@ -265,6 +265,10 @@ const newArrivalsRoute = readFileSync(
   join(root, "src/routes/new-arrivals.tsx"),
   "utf8",
 );
+const homeRoute = readFileSync(
+  join(root, "src/routes/index.tsx"),
+  "utf8",
+);
 const searchRoute = readFileSync(
   join(root, "src/routes/search.tsx"),
   "utf8",
@@ -2418,6 +2422,20 @@ if (
 ) {
   violations.push(
     "trending and new-arrival live rankings must be computed in PostgreSQL before limits",
+  );
+}
+
+if (
+  !homeRoute.includes("searchPublicCatalogProducts") ||
+  !homeRoute.includes('sort: "sold"') ||
+  !homeRoute.includes('sort: "newest"') ||
+  !homeRoute.includes("canadianOnly: true") ||
+  !homeRoute.includes("maxPrice: 24.99") ||
+  homeRoute.includes("products.length.toLocaleString()} live products") ||
+  homeRoute.includes("vendors.length.toLocaleString()} active stores")
+) {
+  violations.push(
+    "live homepage merchandising must use scoped server rankings and must not present capped snapshot lengths as marketplace totals",
   );
 }
 
