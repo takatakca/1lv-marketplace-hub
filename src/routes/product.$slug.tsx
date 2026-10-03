@@ -22,8 +22,9 @@ import {
 } from "@/lib/data";
 import {
   getPublicCatalogProductBySlug,
-  listPublicCatalogProducts,
-  listPublicCatalogVendors,
+  getPublicCatalogVendorBySlug,
+  listPublicCatalogProductsForCategory,
+  listPublicCatalogProductsForVendor,
 } from "@/services/public-catalog";
 import { getPublicMarketplaceSettings } from "@/lib/public-marketplace-settings.functions";
 import { useCart } from "@/hooks/use-cart";
@@ -45,31 +46,23 @@ export const Route = createFileRoute("/product/$slug")({
     const settings = await getPublicMarketplaceSettings().catch(() => null);
 
     try {
-      const [liveProduct, liveProducts, liveVendors] = await Promise.all([
-        getPublicCatalogProductBySlug(params.slug),
-        listPublicCatalogProducts(),
-        listPublicCatalogVendors(),
-      ]);
+      const liveProduct = await getPublicCatalogProductBySlug(params.slug);
 
       if (liveProduct) {
+        const [vendor, categoryProducts, vendorProducts] = await Promise.all([
+          getPublicCatalogVendorBySlug(liveProduct.vendorSlug),
+          listPublicCatalogProductsForCategory(liveProduct.category, 7),
+          listPublicCatalogProductsForVendor(liveProduct.vendorSlug, 9),
+        ]);
+
         return {
           product: liveProduct,
-          vendor:
-            liveVendors.find((vendor) => vendor.slug === liveProduct.vendorSlug) ??
-            null,
-          related: liveProducts
-            .filter(
-              (item) =>
-                item.category === liveProduct.category &&
-                item.id !== liveProduct.id,
-            )
+          vendor,
+          related: categoryProducts
+            .filter((item) => item.id !== liveProduct.id)
             .slice(0, 6),
-          fromStore: liveProducts
-            .filter(
-              (item) =>
-                item.vendorSlug === liveProduct.vendorSlug &&
-                item.id !== liveProduct.id,
-            )
+          fromStore: vendorProducts
+            .filter((item) => item.id !== liveProduct.id)
             .slice(0, 8),
           demo: false,
         };
