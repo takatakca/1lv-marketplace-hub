@@ -312,6 +312,13 @@ const takatakOutboxAtomicCompletionMigration = readFileSync(
   ),
   "utf8",
 );
+const catalogSearchVerifiedReviewsMigration = readFileSync(
+  join(
+    root,
+    "supabase/migrations/20261003012500_catalog_search_verified_reviews.sql",
+  ),
+  "utf8",
+);
 const payoutService = readFileSync(
   join(root, "src/services/payouts.ts"),
   "utf8",
@@ -851,7 +858,22 @@ for (const [content, marker, label] of [
   [
     takatakOutboxAtomicCompletionMigration,
     "SELECT '20261002191500'",
-    "final production schema marker includes atomic TAKATAK completion",
+    "atomic TAKATAK completion retains its historical schema marker",
+  ],
+  [
+    catalogSearchVerifiedReviewsMigration,
+    "SELECT '20261003012500'",
+    "final production schema marker includes marketplace search and verified reviews",
+  ],
+  [
+    catalogSearchVerifiedReviewsMigration,
+    "CREATE OR REPLACE FUNCTION public.search_public_catalog_products_v2",
+    "marketplace-grade public search v2 exists",
+  ],
+  [
+    catalogSearchVerifiedReviewsMigration,
+    "CREATE OR REPLACE FUNCTION public.submit_verified_product_review",
+    "verified-purchase reviews are database-authoritative",
   ],
   [
     takatakOutboxAtomicCompletionMigration,
@@ -2624,19 +2646,19 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002191500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261003012500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002191500"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261003012500"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002191500"') ||
-  !takatakOutboxAtomicCompletionMigration.includes(
-    "SELECT '20261002191500'",
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261003012500"') ||
+  !catalogSearchVerifiedReviewsMigration.includes(
+    "SELECT '20261003012500'",
   )
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002191500",
+    "production health/migration gates must track schema 20261003012500",
   );
 }
 
