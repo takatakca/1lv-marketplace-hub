@@ -853,8 +853,12 @@ jobs:
       # ------------------------------------------------------------
       - name: Roll back failed release
         if: >
+          always() &&
           steps.deployment.outputs.enabled == 'true' &&
-          steps.health.outcome == 'failure'
+          (
+            steps.activate.outcome == 'failure' ||
+            steps.health.outcome == 'failure'
+          )
         shell: bash
         env:
           HOST: ${{ secrets.MOCHAHOST_HOST }}
@@ -949,8 +953,12 @@ jobs:
       # ------------------------------------------------------------
       - name: Fail workflow after rollback
         if: >
+          always() &&
           steps.deployment.outputs.enabled == 'true' &&
-          steps.health.outcome == 'failure'
+          (
+            steps.activate.outcome == 'failure' ||
+            steps.health.outcome == 'failure'
+          )
         shell: bash
         run: |
           echo "Deployment failed its health check."
