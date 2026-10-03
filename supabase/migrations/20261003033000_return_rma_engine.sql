@@ -155,6 +155,8 @@ GRANT SELECT, INSERT, UPDATE, DELETE
 ON TABLE public.return_requests TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE
 ON TABLE public.return_items TO service_role;
+REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+ON TABLE public.return_events FROM service_role;
 GRANT SELECT, INSERT
 ON TABLE public.return_events TO service_role;
 
