@@ -2297,6 +2297,16 @@ if (
   );
 }
 
+if (
+  !deployWorkflow.includes("always() &&") ||
+  !deployWorkflow.includes("steps.activate.outcome == 'failure'") ||
+  !deployWorkflow.includes("steps.health.outcome == 'failure'")
+) {
+  violations.push(
+    "MochaHost rollback must run after either a partial activation failure or a failed production health check",
+  );
+}
+
 const migrateProductionWorkflow = readFileSync(
   join(root, ".github/workflows/migrate-production-db.yml"),
   "utf8",
