@@ -1076,7 +1076,12 @@ for (const [content, marker, label] of [
   ],
   [
     healthRoute,
-    "revision: process.env.RELEASE_REVISION?.trim() || null",
+    "releaseRevisionReady = /^[0-9a-f]{40}$/.test(releaseRevision)",
+    "health endpoint requires a full active release revision before reporting ready",
+  ],
+  [
+    healthRoute,
+    "revision: releaseRevision || null",
     "health endpoint reports the active application revision",
   ],
   [
