@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { Zap, Flame, ArrowRight } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
@@ -6,6 +7,7 @@ import { SectionHead } from "@/components/ProductRail";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { usePublicCatalog } from "@/hooks/use-public-catalog";
 import { CouponStrip } from "@/components/CouponStrip";
+import { searchPublicCatalogProducts } from "@/services/public-catalog";
 
 export const Route = createFileRoute("/deals")({
   component: DealsPage,
@@ -23,10 +25,45 @@ export const Route = createFileRoute("/deals")({
 
 
 function DealsPage() {
-  const { products, demo } = usePublicCatalog();
-  const discounted = products
-    .filter((p) => p.compareAt && p.compareAt > p.price)
-    .sort((a, b) => ((b.compareAt! - b.price) / b.compareAt!) - ((a.compareAt! - a.price) / a.compareAt!));
+  const { products, demo, loading: catalogLoading } = usePublicCatalog();
+
+  const liveDealsQuery = useQuery({
+    queryKey: ["public-marketplace-deals", "markdowns"],
+    queryFn: () =>
+      searchPublicCatalogProducts({
+        saleOnly: true,
+        sort: "relevance",
+        limit: 500,
+      }),
+    enabled: !demo && !catalogLoading,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
+
+  const liveBudgetQuery = useQuery({
+    queryKey: ["public-marketplace-deals", "under-25"],
+    queryFn: () =>
+      searchPublicCatalogProducts({
+        maxPrice: 24.99,
+        sort: "price-asc",
+        limit: 500,
+      }),
+    enabled: !demo && !catalogLoading,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
+
+  const discounted = (demo
+    ? products.filter((p) => p.compareAt && p.compareAt > p.price)
+    : liveDealsQuery.data ?? []
+  ).sort(
+    (a, b) =>
+      ((b.compareAt! - b.price) / b.compareAt!) -
+      ((a.compareAt! - a.price) / a.compareAt!),
+  );
+
   const maxDiscount = discounted.reduce((max, product) => {
     const compareAt = product.compareAt ?? product.price;
     if (compareAt <= product.price) return max;
@@ -35,12 +72,36 @@ function DealsPage() {
       Math.round(((compareAt - product.price) / compareAt) * 100),
     );
   }, 0);
-  const under10 = products.filter((p) => p.price < 10);
-  const under25 = products.filter((p) => p.price < 25);
-  const halfOff = discounted.filter((p) => (p.compareAt! - p.price) / p.compareAt! >= 0.4);
+
+  const budgetProducts = demo
+    ? products.filter((p) => p.price < 25)
+    : liveBudgetQuery.data ?? [];
+  const under10 = budgetProducts.filter((p) => p.price < 10);
+  const under25 = budgetProducts;
+  const halfOff = discounted.filter(
+    (p) => (p.compareAt! - p.price) / p.compareAt! >= 0.4,
+  );
+  const loading =
+    catalogLoading ||
+    (!demo && (liveDealsQuery.isPending || liveBudgetQuery.isPending));
+  const loadError =
+    !demo &&
+    (liveDealsQuery.error instanceof Error ||
+      liveBudgetQuery.error instanceof Error);
 
   return (
     <AppLayout>
+      {loading && (
+        <div className="border-b border-border bg-card px-4 py-3 text-center text-sm text-muted-foreground">
+          Loading live marketplace deals…
+        </div>
+      )}
+      {loadError && !loading && (
+        <div className="border-b border-destructive/30 bg-card px-4 py-3 text-center text-sm text-destructive">
+          Live deal data could not be loaded. Please try again.
+        </div>
+      )}
+
       {/* Campaign header */}
       <section className="relative overflow-hidden bg-gradient-deal text-white">
         <div className="relative mx-auto flex max-w-7xl flex-wrap items-end justify-between gap-4 px-4 py-8">
