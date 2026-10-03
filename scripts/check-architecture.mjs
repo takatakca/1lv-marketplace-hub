@@ -213,6 +213,10 @@ const ordersService = readFileSync(
   join(root, "src/services/orders.ts"),
   "utf8",
 );
+const demoMode = readFileSync(
+  join(root, "src/lib/demo-mode.ts"),
+  "utf8",
+);
 const vendorOrderDetailRoute = readFileSync(
   join(root, "src/routes/vendor.orders.$id.tsx"),
   "utf8",
@@ -2027,6 +2031,16 @@ if (
 ) {
   violations.push(
     "frontend build and server runtime must remain pinned to the exact 1LV Supabase production project",
+  );
+}
+
+if (
+  !demoMode.includes("return !user;") ||
+  demoMode.includes("hasRealData") ||
+  demoMode.includes("!hasRealData")
+) {
+  violations.push(
+    "demo data must remain strictly unauthenticated preview-only and never replace empty authenticated production data",
   );
 }
 
