@@ -293,6 +293,22 @@ const takatakOutboxClaimLintMigration = readFileSync(
   join(root, "supabase/migrations/20261002181500_takatak_outbox_claim_lint.sql"),
   "utf8",
 );
+const atomicSupplierImportMigration = readFileSync(
+  join(root, "supabase/migrations/20261002183000_atomic_supplier_import_row.sql"),
+  "utf8",
+);
+const importService = readFileSync(
+  join(root, "src/services/imports.ts"),
+  "utf8",
+);
+const vendorImportsRoute = readFileSync(
+  join(root, "src/routes/vendor.imports.tsx"),
+  "utf8",
+);
+const csvParser = readFileSync(
+  join(root, "src/lib/csv-parser.ts"),
+  "utf8",
+);
 const publicCategoryService = readFileSync(
   join(root, "src/services/public-categories.ts"),
   "utf8",
@@ -792,7 +808,27 @@ for (const [content, marker, label] of [
   [
     takatakOutboxClaimLintMigration,
     "SELECT '20261002181500'",
-    "final production schema marker includes lint-clean TAKATAK outbox claim",
+    "lint-clean TAKATAK outbox claim retains its historical schema marker",
+  ],
+  [
+    atomicSupplierImportMigration,
+    "SELECT '20261002183000'",
+    "final production schema marker includes atomic supplier import rows",
+  ],
+  [
+    atomicSupplierImportMigration,
+    "product_import_job_rows_job_row_unique",
+    "supplier import source rows are unique within each import job",
+  ],
+  [
+    atomicSupplierImportMigration,
+    "INSERT INTO public.products",
+    "supplier product draft creation occurs inside the atomic import RPC",
+  ],
+  [
+    atomicSupplierImportMigration,
+    "INSERT INTO public.product_import_job_rows",
+    "supplier import audit row is committed in the same transaction as the product",
   ],
   [
     takatakOutboxClaimLintMigration,
@@ -2520,17 +2556,17 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002181500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002183000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002181500"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002183000"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002181500"') ||
-  !takatakOutboxClaimLintMigration.includes("SELECT '20261002181500'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002183000"') ||
+  !atomicSupplierImportMigration.includes("SELECT '20261002183000'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002181500",
+    "production health/migration gates must track schema 20261002183000",
   );
 }
 
@@ -2618,6 +2654,46 @@ if (
 ) {
   violations.push(
     "payout scheduler settings must remain readable only by marketplace admins",
+  );
+}
+
+if (
+  !atomicSupplierImportMigration.includes(
+    "CREATE OR REPLACE FUNCTION public.import_product_draft_row",
+  ) ||
+  !atomicSupplierImportMigration.includes(
+    "public.is_takatak_authorized_session()",
+  ) ||
+  !atomicSupplierImportMigration.includes("FOR UPDATE") ||
+  !atomicSupplierImportMigration.includes(
+    "product_import_job_rows_job_row_unique",
+  ) ||
+  !atomicSupplierImportMigration.includes(
+    "INSERT INTO public.products",
+  ) ||
+  !atomicSupplierImportMigration.includes(
+    "INSERT INTO public.product_import_job_rows",
+  ) ||
+  !atomicSupplierImportMigration.includes(
+    "'draft'::public.product_status",
+  ) ||
+  !importService.includes('"import_product_draft_row" as never') ||
+  !vendorImportsRoute.includes("importDraftProductRow") ||
+  vendorImportsRoute.includes("createProduct(")
+) {
+  violations.push(
+    "supplier CSV imports must create each draft product and its audit row through the guarded atomic import RPC",
+  );
+}
+
+if (
+  !csvParser.includes("export function parseCsvRecords") ||
+  !csvParser.includes('text[index + 1] === '"'') ||
+  !vendorImportsRoute.includes("parseCsvRecords(text)") ||
+  !vendorImportsRoute.includes("Duplicate CSV column(s)")
+) {
+  violations.push(
+    "supplier CSV parsing must preserve quoted commas/escaped quotes and reject duplicate headers",
   );
 }
 
