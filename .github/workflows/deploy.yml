@@ -902,16 +902,24 @@ jobs:
           PREVIOUS_RELEASE="$APP_ROOT/releases/$PREVIOUS"
 
           test -f "$PREVIOUS_RELEASE/server.cjs"
+          test -f "$PREVIOUS_RELEASE/package.json"
+          test -d "$PREVIOUS_RELEASE/node_modules"
           test -f "$PREVIOUS_RELEASE/dist/client/index.html"
+          test -f "$PREVIOUS_RELEASE/dist/server/server.js"
 
           echo "Rolling back to: $PREVIOUS"
 
           cp "$PREVIOUS_RELEASE/server.cjs" "$APP_ROOT/server.cjs.new"
           mv -f "$APP_ROOT/server.cjs.new" "$APP_ROOT/server.cjs"
 
-          if [ -f "$PREVIOUS_RELEASE/package.json" ]; then
-            cp "$PREVIOUS_RELEASE/package.json" "$APP_ROOT/package.json.new"
-            mv -f "$APP_ROOT/package.json.new" "$APP_ROOT/package.json"
+          cp "$PREVIOUS_RELEASE/package.json" "$APP_ROOT/package.json.new"
+          mv -f "$APP_ROOT/package.json.new" "$APP_ROOT/package.json"
+
+          if [ -f "$PREVIOUS_RELEASE/package-lock.json" ]; then
+            cp "$PREVIOUS_RELEASE/package-lock.json" "$APP_ROOT/package-lock.json.new"
+            mv -f "$APP_ROOT/package-lock.json.new" "$APP_ROOT/package-lock.json"
+          else
+            rm -f "$APP_ROOT/package-lock.json"
           fi
 
           rm -rf "$APP_ROOT/dist.new"
