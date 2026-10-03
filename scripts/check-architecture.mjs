@@ -269,6 +269,10 @@ const categoryWriteIntegrityMigration = readFileSync(
   join(root, "supabase/migrations/20261002164500_category_write_integrity.sql"),
   "utf8",
 );
+const retainedSalesTruthMigration = readFileSync(
+  join(root, "supabase/migrations/20261002170000_retained_sales_truth.sql"),
+  "utf8",
+);
 const publicCategoryService = readFileSync(
   join(root, "src/services/public-categories.ts"),
   "utf8",
@@ -738,7 +742,12 @@ for (const [content, marker, label] of [
   [
     categoryWriteIntegrityMigration,
     "SELECT '20261002164500'",
-    "final production schema marker includes category write integrity",
+    "category write integrity retains its historical schema marker",
+  ],
+  [
+    retainedSalesTruthMigration,
+    "SELECT '20261002170000'",
+    "final production schema marker includes retained public sales truth",
   ],
   [
     publicCategoryCatalogScopeMigration,
@@ -2421,17 +2430,17 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002164500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002170000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002164500"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002170000"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002164500"') ||
-  !categoryWriteIntegrityMigration.includes("SELECT '20261002164500'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002170000"') ||
+  !retainedSalesTruthMigration.includes("SELECT '20261002170000'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002164500",
+    "production health/migration gates must track schema 20261002170000",
   );
 }
 
@@ -2504,6 +2513,25 @@ if (
 ) {
   violations.push(
     "public category consumers must use the persistent active taxonomy projection",
+  );
+}
+
+if (
+  !retainedSalesTruthMigration.includes(
+    "CREATE OR REPLACE FUNCTION public.retained_product_sold_count",
+  ) ||
+  !retainedSalesTruthMigration.includes(
+    "rr.status = 'refunded'::public.refund_status",
+  ) ||
+  !retainedSalesTruthMigration.includes(
+    "COALESCE(vr.refunded_amount, 0) + 0.005 < vo.subtotal",
+  ) ||
+  !retainedSalesTruthMigration.includes(
+    "public.retained_product_sold_count(p.id)",
+  )
+) {
+  violations.push(
+    "public sold counts must exclude fully refunded vendor splits without guessing partial line-item allocation",
   );
 }
 
