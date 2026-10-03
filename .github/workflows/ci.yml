@@ -34,6 +34,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate GitHub workflow YAML
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          while IFS= read -r workflow; do
+            echo "Parsing workflow: $workflow"
+            npx prettier "$workflow" > /dev/null
+          done < <(
+            find .github/workflows -type f \( -name '*.yml' -o -name '*.yaml' \) -print | sort
+          )
+
       - name: Audit production dependencies
         run: |
           set -euo pipefail
