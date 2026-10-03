@@ -53,6 +53,18 @@ jobs:
             exit 1
           fi
 
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] && \
+             [ "$APPLY_REQUESTED" = "true" ]; then
+            case "${GITHUB_REF}" in
+              refs/heads/main|refs/heads/upgrade/persistent-commerce-settings)
+                ;;
+              *)
+                echo "ERROR: production migration apply is allowed only from main or the certified 1LV hardening branch."
+                exit 1
+                ;;
+            esac
+          fi
+
           missing=()
           [ -n "${SUPABASE_ACCESS_TOKEN:-}" ] || missing+=("SUPABASE_ACCESS_TOKEN")
           [ -n "${SUPABASE_DB_PASSWORD:-}" ] || missing+=("SUPABASE_DB_PASSWORD")
