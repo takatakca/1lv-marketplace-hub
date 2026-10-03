@@ -261,6 +261,14 @@ const publicCategoryTaxonomyMigration = readFileSync(
   join(root, "supabase/migrations/20261002161500_public_category_taxonomy.sql"),
   "utf8",
 );
+const publicCategoryService = readFileSync(
+  join(root, "src/services/public-categories.ts"),
+  "utf8",
+);
+const publicCategoryHook = readFileSync(
+  join(root, "src/hooks/use-public-categories.ts"),
+  "utf8",
+);
 const trendingRoute = readFileSync(
   join(root, "src/routes/trending.tsx"),
   "utf8",
@@ -2455,6 +2463,20 @@ if (
 ) {
   violations.push(
     "trending and new-arrival live rankings must be computed in PostgreSQL before limits",
+  );
+}
+
+if (
+  !publicCategoryService.includes('"list_public_categories" as never') ||
+  !publicCategoryService.includes('"get_public_category_by_slug" as never') ||
+  !publicCategoryHook.includes("listPublicCategories") ||
+  !categoriesRoute.includes("usePublicCategories") ||
+  !searchRoute.includes("usePublicCategories") ||
+  !categoryRoute.includes("getPublicCategoryBySlug") ||
+  !homeRoute.includes("usePublicCategories")
+) {
+  violations.push(
+    "public category consumers must use the persistent active taxonomy projection",
   );
 }
 
