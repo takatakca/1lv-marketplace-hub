@@ -2517,6 +2517,23 @@ values (
 
 set local session_replication_role = origin;
 
+insert into public.categories (
+  slug,
+  name_en,
+  name_fr,
+  parent_slug,
+  active,
+  position
+)
+values (
+  'tests',
+  'Tests',
+  'Tests',
+  null,
+  true,
+  0
+);
+
 select throws_ok(
   $sql$
     insert into public.products (
@@ -2879,18 +2896,18 @@ select ok(
 
 select ok(
   position(
-    'WHERE c.active = true'
+    'public.category_is_public'
     in pg_get_functiondef(
       'public.list_public_categories()'::regprocedure
     )
   ) > 0
   and position(
-    'WHERE c.active = true'
+    'public.category_is_public'
     in pg_get_functiondef(
       'public.get_public_category_by_slug(text)'::regprocedure
     )
   ) > 0,
-  'public category projections expose active taxonomy only'
+  'public category projections expose only hierarchy-safe active taxonomy'
 );
 
 select * from finish();
