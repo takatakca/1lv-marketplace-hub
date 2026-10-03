@@ -104,7 +104,6 @@ DECLARE
   v_requested_count integer;
   v_owned_count integer;
   v_affected integer;
-  v_id uuid;
 BEGIN
   v_vendor := public.require_vendor_catalog_authority(_vendor_id);
 
@@ -169,16 +168,12 @@ BEGIN
     v_effective_status := _requested_status;
   END IF;
 
-  FOR v_id IN
-    SELECT id
-    FROM public.products
-    WHERE vendor_id = _vendor_id
-      AND id = ANY(_product_ids)
-    ORDER BY id
-    FOR UPDATE
-  LOOP
-    PERFORM 1;
-  END LOOP;
+  PERFORM id
+  FROM public.products
+  WHERE vendor_id = _vendor_id
+    AND id = ANY(_product_ids)
+  ORDER BY id
+  FOR UPDATE;
 
   UPDATE public.products
   SET
@@ -241,7 +236,6 @@ SET search_path = ''
 AS $$
 DECLARE
   v_user_id uuid := auth.uid();
-  v_vendor public.vendors%ROWTYPE;
   v_operation record;
   v_product public.products%ROWTYPE;
   v_variant public.product_variants%ROWTYPE;
@@ -251,7 +245,7 @@ DECLARE
   v_parent_count integer := 0;
   v_variant_count integer := 0;
 BEGIN
-  v_vendor := public.require_vendor_catalog_authority(_vendor_id);
+  PERFORM public.require_vendor_catalog_authority(_vendor_id);
 
   IF _operations IS NULL
      OR jsonb_typeof(_operations) <> 'array'
