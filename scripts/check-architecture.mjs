@@ -245,6 +245,14 @@ const publicSoldCountRefundTruthMigration = readFileSync(
   join(root, "supabase/migrations/20261002150000_public_sold_count_refund_truth.sql"),
   "utf8",
 );
+const publicCatalogSearchMigration = readFileSync(
+  join(root, "supabase/migrations/20261002151500_public_catalog_search_scope.sql"),
+  "utf8",
+);
+const searchRoute = readFileSync(
+  join(root, "src/routes/search.tsx"),
+  "utf8",
+);
 const publicCatalogService = readFileSync(
   join(root, "src/services/public-catalog.ts"),
   "utf8",
@@ -644,7 +652,12 @@ for (const [content, marker, label] of [
   [
     publicSoldCountRefundTruthMigration,
     "SELECT '20261002150000'",
-    "final production schema marker excludes fully refunded orders from public sold counts",
+    "truthful public sold counts retain their historical schema marker",
+  ],
+  [
+    publicCatalogSearchMigration,
+    "SELECT '20261002151500'",
+    "final production schema marker includes server-scoped public catalog search",
   ],
   [
     publicCategoryCatalogScopeMigration,
@@ -2327,17 +2340,40 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002150000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002151500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002150000"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002151500"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002150000"') ||
-  !publicSoldCountRefundTruthMigration.includes("SELECT '20261002150000'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002151500"') ||
+  !publicCatalogSearchMigration.includes("SELECT '20261002151500'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002150000",
+    "production health/migration gates must track schema 20261002151500",
+  );
+}
+
+if (
+  !publicCatalogSearchMigration.includes(
+    "CREATE OR REPLACE FUNCTION public.search_public_catalog_products",
+  ) ||
+  !publicCatalogSearchMigration.includes(
+    "v.subscription_status IN ('active', 'trialing')",
+  ) ||
+  !publicCatalogSearchMigration.includes(
+    "NOT p.track_inventory OR p.inventory_quantity > 0",
+  ) ||
+  publicCatalogSearchMigration.includes(
+    "'refunded'::public.payment_status",
+  ) ||
+  !publicCatalogService.includes(
+    '"search_public_catalog_products" as never',
+  ) ||
+  !searchRoute.includes("searchPublicCatalogProducts")
+) {
+  violations.push(
+    "live storefront search must filter the eligible public catalog in PostgreSQL before the result limit",
   );
 }
 
