@@ -10,12 +10,24 @@ export type CartItem = {
   image: string;
   vendorSlug: string;
   qty: number;
+  variantId?: string;
+  variantSku?: string;
   variant?: Record<string, string>;
 };
 
 type CartContextValue = {
   items: CartItem[];
-  add: (p: Product, qty?: number, variant?: Record<string, string>) => void;
+  add: (
+    p: Product,
+    qty?: number,
+    variant?: Record<string, string>,
+    variantIdentity?: {
+      id: string;
+      sku?: string;
+      price?: number;
+      image?: string;
+    },
+  ) => void;
   remove: (lineId: string) => void;
   setQty: (lineId: string, qty: number) => void;
   clear: () => void;
@@ -42,7 +54,12 @@ function normalizeVariant(
 function createLineId(
   productId: string,
   variant?: Record<string, string>,
+  variantId?: string,
 ): string {
+  if (variantId?.trim()) {
+    return `${productId}::variant:${variantId.trim()}`;
+  }
+
   const normalized = normalizeVariant(variant);
   if (!normalized) return productId;
 
@@ -79,10 +96,18 @@ function restoreCartItem(value: unknown): CartItem | null {
       ? normalizeVariant(raw.variant)
       : undefined;
   const qty = Math.max(1, Math.min(99, Math.floor(raw.qty)));
+  const variantId =
+    typeof raw.variantId === "string" && raw.variantId.trim()
+      ? raw.variantId.trim()
+      : undefined;
+  const variantSku =
+    typeof raw.variantSku === "string" && raw.variantSku.trim()
+      ? raw.variantSku.trim()
+      : undefined;
   const lineId =
     typeof raw.lineId === "string" && raw.lineId.trim()
       ? raw.lineId
-      : createLineId(raw.productId, variant);
+      : createLineId(raw.productId, variant, variantId);
 
   return {
     lineId,
@@ -93,6 +118,8 @@ function restoreCartItem(value: unknown): CartItem | null {
     image: raw.image,
     vendorSlug: raw.vendorSlug,
     qty,
+    ...(variantId ? { variantId } : {}),
+    ...(variantSku ? { variantSku } : {}),
     ...(variant ? { variant } : {}),
   };
 }
@@ -144,10 +171,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(KEY, JSON.stringify(items));
   }, [items]);
 
-  const add: CartContextValue["add"] = (product, qty = 1, variantInput) =>
+  const add: CartContextValue["add"] = (
+    product,
+    qty = 1,
+    variantInput,
+    variantIdentity,
+  ) =>
     setItems((previous) => {
       const variant = normalizeVariant(variantInput);
-      const lineId = createLineId(product.id, variant);
+      const variantId = variantIdentity?.id?.trim() || undefined;
+      const variantSku = variantIdentity?.sku?.trim() || undefined;
+      const lineId = createLineId(product.id, variant, variantId);
       const safeQty = Math.max(1, Math.min(99, Math.floor(qty)));
       const existing = previous.find((item) => item.lineId === lineId);
 
@@ -166,10 +200,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
           productId: product.id,
           slug: product.slug,
           title: product.title,
-          price: product.price,
-          image: product.images[0] ?? "",
+          price:
+            typeof variantIdentity?.price === "number" &&
+            Number.isFinite(variantIdentity.price)
+              ? variantIdentity.price
+              : product.price,
+          image: variantIdentity?.image || product.images[0] || "",
           vendorSlug: product.vendorSlug,
           qty: safeQty,
+          ...(variantId ? { variantId } : {}),
+          ...(variantSku ? { variantSku } : {}),
           ...(variant ? { variant } : {}),
         },
       ];
