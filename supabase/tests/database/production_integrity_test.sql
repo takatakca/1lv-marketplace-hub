@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(169);
+select plan(170);
 
 select is(
   public.get_1lv_schema_version(),
@@ -940,6 +940,15 @@ select ok(
     'EXECUTE'
   ),
   'historical one-argument inventory release RPC is retired from service role'
+);
+
+select ok(
+  not has_function_privilege(
+    'service_role',
+    'public.release_expired_inventory_reservations(integer)',
+    'EXECUTE'
+  ),
+  'historical bulk expired-inventory release RPC is retired from service role'
 );
 
 select ok(
