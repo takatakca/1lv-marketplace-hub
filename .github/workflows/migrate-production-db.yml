@@ -183,7 +183,7 @@ jobs:
           VERIFY_OUTPUT="$(supabase db push --linked --dry-run 2>&1)"
           printf '%s\n' "$VERIFY_OUTPUT"
 
-          if printf '%s\n' "$VERIFY_OUTPUT" | grep -Eqi 'would apply|pending migration|applying migration'; then
+          if printf '%s\n' "$VERIFY_OUTPUT" | grep -Eqi 'would apply|would push|would be applied|to be pushed|pending migration|applying migration'; then
             echo "ERROR: production still reports pending migrations after push."
             exit 1
           fi
