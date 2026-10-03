@@ -261,6 +261,10 @@ const publicCategoryTaxonomyMigration = readFileSync(
   join(root, "supabase/migrations/20261002161500_public_category_taxonomy.sql"),
   "utf8",
 );
+const publicCategoryAuthorityMigration = readFileSync(
+  join(root, "supabase/migrations/20261002163000_public_category_authority.sql"),
+  "utf8",
+);
 const publicCategoryService = readFileSync(
   join(root, "src/services/public-categories.ts"),
   "utf8",
@@ -283,6 +287,10 @@ const homeRoute = readFileSync(
 );
 const categoriesRoute = readFileSync(
   join(root, "src/routes/categories.tsx"),
+  "utf8",
+);
+const adminCategoriesRoute = readFileSync(
+  join(root, "src/routes/admin.categories.tsx"),
   "utf8",
 );
 const searchRoute = readFileSync(
@@ -716,7 +724,12 @@ for (const [content, marker, label] of [
   [
     publicCategoryTaxonomyMigration,
     "SELECT '20261002161500'",
-    "final production schema marker includes public category taxonomy",
+    "public category taxonomy retains its historical schema marker",
+  ],
+  [
+    publicCategoryAuthorityMigration,
+    "SELECT '20261002163000'",
+    "final production schema marker includes public category authority",
   ],
   [
     publicCategoryCatalogScopeMigration,
@@ -2399,37 +2412,42 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002161500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002163000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002161500"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002163000"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002161500"') ||
-  !publicCategoryTaxonomyMigration.includes("SELECT '20261002161500'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002163000"') ||
+  !publicCategoryAuthorityMigration.includes("SELECT '20261002163000'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002161500",
+    "production health/migration gates must track schema 20261002163000",
   );
 }
 
 if (
-  !publicCategoryTaxonomyMigration.includes(
+  !publicCategoryAuthorityMigration.includes(
+    'DROP POLICY IF EXISTS "Categories viewable by everyone"',
+  ) ||
+  !publicCategoryAuthorityMigration.includes(
+    "CREATE OR REPLACE FUNCTION public.category_is_public",
+  ) ||
+  !publicCategoryAuthorityMigration.includes(
+    "CREATE TRIGGER zz_products_public_category_authority",
+  ) ||
+  !publicCategoryAuthorityMigration.includes(
+    "public.category_is_public(p.category_slug)",
+  ) ||
+  !publicCategoryAuthorityMigration.includes(
     "CREATE OR REPLACE FUNCTION public.list_public_categories",
   ) ||
-  !publicCategoryTaxonomyMigration.includes(
+  !publicCategoryAuthorityMigration.includes(
     "CREATE OR REPLACE FUNCTION public.get_public_category_by_slug",
-  ) ||
-  !publicCategoryTaxonomyMigration.includes("WHERE c.active = true") ||
-  !publicCategoryTaxonomyMigration.includes(
-    "GRANT EXECUTE ON FUNCTION public.list_public_categories()",
-  ) ||
-  !publicCategoryTaxonomyMigration.includes(
-    "GRANT EXECUTE ON FUNCTION public.get_public_category_by_slug(text)",
   )
 ) {
   violations.push(
-    "public category taxonomy must expose only active storefront-safe category projections through dedicated RPCs",
+    "public categories must be hierarchy-safe, hide inactive taxonomy, and gate every public product projection",
   );
 }
 
@@ -2477,6 +2495,17 @@ if (
 ) {
   violations.push(
     "public category consumers must use the persistent active taxonomy projection",
+  );
+}
+
+if (
+  adminCategoriesRoute.includes("seoTitle") ||
+  adminCategoriesRoute.includes("seoDesc") ||
+  adminCategoriesRoute.includes("Category image URL") ||
+  adminCategoriesRoute.includes("SEO &amp; image placeholders")
+) {
+  violations.push(
+    "admin category UI must not expose non-persistent SEO/image controls",
   );
 }
 
