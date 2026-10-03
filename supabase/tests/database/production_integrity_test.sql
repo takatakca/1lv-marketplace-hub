@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(214);
+select plan(215);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002180000',
+  '20261002181500',
   'production schema marker is current'
 );
 
@@ -70,6 +70,16 @@ select ok(
       and data_type = 'uuid'
   ),
   'TAKATAK outbox stores a UUID claim token for processing leases'
+);
+
+select ok(
+  position(
+    'WHEN o.attempt_count >= v_max_attempts'
+    in pg_get_functiondef(
+      'public.claim_takatak_outbox(integer,integer)'::regprocedure
+    )
+  ) > 0,
+  'TAKATAK stale-lease retry budget uses an unambiguous table-qualified attempt count'
 );
 
 select ok(
