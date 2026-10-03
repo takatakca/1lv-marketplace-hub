@@ -140,6 +140,30 @@ export async function getPublicCatalogProductBySlug(
   return row ? mapPublicProduct(row as unknown as PublicCatalogProductRow) : null;
 }
 
+export async function listPublicCatalogProductsForCategory(
+  categorySlug: string,
+  limit = 24,
+): Promise<Product[]> {
+  const { data, error } = await supabase.rpc(
+    "list_public_catalog_products_for_category" as never,
+    { _category_slug: categorySlug, _limit: limit } as never,
+  );
+  if (error) throw error;
+  return ((data ?? []) as unknown as PublicCatalogProductRow[]).map(mapPublicProduct);
+}
+
+export async function getPublicCatalogVendorBySlug(
+  slug: string,
+): Promise<Vendor | null> {
+  const { data, error } = await supabase.rpc(
+    "get_public_vendor_by_slug" as never,
+    { _slug: slug } as never,
+  );
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? mapPublicVendor(row as unknown as PublicCatalogVendorRow) : null;
+}
+
 export async function listPublicCatalogVendors(limit = 200): Promise<Vendor[]> {
   const { data, error } = await supabase.rpc(
     "list_public_vendors" as never,
