@@ -289,6 +289,10 @@ const takatakOutboxAtomicClaimMigration = readFileSync(
   join(root, "supabase/migrations/20261002180000_takatak_outbox_atomic_claim.sql"),
   "utf8",
 );
+const takatakOutboxClaimLintMigration = readFileSync(
+  join(root, "supabase/migrations/20261002181500_takatak_outbox_claim_lint.sql"),
+  "utf8",
+);
 const publicCategoryService = readFileSync(
   join(root, "src/services/public-categories.ts"),
   "utf8",
@@ -783,7 +787,17 @@ for (const [content, marker, label] of [
   [
     takatakOutboxAtomicClaimMigration,
     "SELECT '20261002180000'",
-    "final production schema marker includes atomic TAKATAK outbox claim",
+    "atomic TAKATAK outbox claim retains its historical schema marker",
+  ],
+  [
+    takatakOutboxClaimLintMigration,
+    "SELECT '20261002181500'",
+    "final production schema marker includes lint-clean TAKATAK outbox claim",
+  ],
+  [
+    takatakOutboxClaimLintMigration,
+    "WHEN o.attempt_count >= v_max_attempts",
+    "TAKATAK stale-lease retry budget uses a table-qualified attempt count",
   ],
   [
     takatakOutboxAtomicClaimMigration,
@@ -2506,17 +2520,30 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002180000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002181500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002180000"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002181500"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002180000"') ||
-  !takatakOutboxAtomicClaimMigration.includes("SELECT '20261002180000'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002181500"') ||
+  !takatakOutboxClaimLintMigration.includes("SELECT '20261002181500'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002180000",
+    "production health/migration gates must track schema 20261002181500",
+  );
+}
+
+if (
+  !takatakOutboxClaimLintMigration.includes(
+    "WHEN o.attempt_count >= v_max_attempts",
+  ) ||
+  takatakOutboxClaimLintMigration.includes(
+    "WHEN attempt_count >= v_max_attempts",
+  )
+) {
+  violations.push(
+    "TAKATAK stale-lease claim recovery must use table-qualified attempt_count references so PostgreSQL lint remains unambiguous",
   );
 }
 
