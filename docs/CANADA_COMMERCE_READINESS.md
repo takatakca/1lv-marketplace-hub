@@ -44,7 +44,7 @@ Official references:
 
 ## Server-authoritative atomic checkout
 
-This branch contains the P0 checkout boundary and its production migration. The code and migration suite are CI-validated; production activation remains fail-closed until the exact 1LV Supabase project is migrated through schema version `20261002143000` and every required server/scheduler secret is configured.
+This branch contains the P0 checkout boundary and its production migration. The code and migration suite are CI-validated; production activation remains fail-closed until the exact 1LV Supabase project is migrated through schema version `20261002144500` and every required server/scheduler secret is configured.
 
 The new flow:
 
@@ -68,7 +68,7 @@ The database RPC is executable only by `service_role`; it uses `SECURITY INVOKER
 
 Before this branch is merged/deployed:
 
-- apply the complete ordered migration set through `20261002143000_public_category_catalog_scope.sql` to the exact 1LV.CA Supabase project `odoybkshqszucvoxzjyz`;
+- apply the complete ordered migration set through `20261002144500_inventory_release_payment_binding.sql` to the exact 1LV.CA Supabase project `odoybkshqszucvoxzjyz`;
 - configure `CHECKOUT_GUEST_TOKEN_SECRET`, `TAKATAK_DRAIN_CRON_SECRET` and `INVENTORY_MAINTENANCE_CRON_SECRET` as separate random server-only secrets of at least 32 characters;
 - keep `SUPABASE_SERVICE_ROLE_KEY`, Stripe secret keys and all scheduler/guest capability secrets server-only;
 - configure the repository `PRODUCTION_URL` variable exactly as `https://1lv.ca`; the secured schedulers refuse any other origin before sending their bearer secrets;
@@ -106,7 +106,7 @@ Do not enable fully automatic payment/payout operations solely because this UI b
 
 Recommended release sequence:
 
-1. apply and verify every migration through schema `20261002143000` on the exact 1LV.CA Supabase project;
+1. apply and verify every migration through schema `20261002144500` on the exact 1LV.CA Supabase project;
 2. configure the guest checkout, TAKATAK drain and inventory-maintenance secrets plus the production URL;
 3. verify hosted 1LV Auth keeps public signup and anonymous users disabled;
 4. merge this Canada commerce/security upgrade only after CI, migration replay, pgTAP and real TAKATAK Auth/JWT/RLS verification are green;
