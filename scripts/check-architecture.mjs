@@ -3073,20 +3073,20 @@ if (
 }
 
 if (
-  !publicCatalogSearchMigration.includes(
-    "CREATE OR REPLACE FUNCTION public.search_public_catalog_products",
+  !catalogSearchVerifiedReviewsMigration.includes(
+    "CREATE OR REPLACE FUNCTION public.search_public_catalog_products_v2",
   ) ||
-  !publicCatalogSearchMigration.includes(
+  !catalogSearchVerifiedReviewsMigration.includes(
     "v.subscription_status IN ('active', 'trialing')",
   ) ||
-  !publicCatalogSearchMigration.includes(
+  !catalogSearchVerifiedReviewsMigration.includes(
     "NOT p.track_inventory OR p.inventory_quantity > 0",
   ) ||
-  publicCatalogSearchMigration.includes(
+  catalogSearchVerifiedReviewsMigration.includes(
     "'refunded'::public.payment_status",
   ) ||
   !publicCatalogService.includes(
-    '"search_public_catalog_products" as never',
+    '"search_public_catalog_products_v2" as never',
   ) ||
   !searchRoute.includes("searchPublicCatalogProducts")
 ) {
