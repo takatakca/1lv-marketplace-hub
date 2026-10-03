@@ -27,20 +27,16 @@ jobs:
           test -n "$SITE_URL" || (echo "Missing PRODUCTION_URL repository variable" && exit 1)
           test -n "$DRAIN_SECRET" || (echo "Missing TAKATAK_DRAIN_CRON_SECRET repository secret" && exit 1)
 
-          node -e '
-            const url = new URL(process.argv[1]);
-            if (
-              url.protocol !== "https:" ||
-              url.username ||
-              url.password ||
-              url.pathname !== "/" ||
-              url.search ||
-              url.hash
-            ) process.exit(1);
-          ' "$SITE_URL" || {
-            echo "PRODUCTION_URL must be a clean HTTPS origin."
+          SITE_URL="${SITE_URL%/}"
+          if [ "$SITE_URL" != "https://1lv.ca" ]; then
+            echo "PRODUCTION_URL must be exactly https://1lv.ca."
             exit 1
-          }
+          fi
+
+          if [ "${#DRAIN_SECRET}" -lt 32 ]; then
+            echo "TAKATAK_DRAIN_CRON_SECRET must be at least 32 characters."
+            exit 1
+          fi
 
       - name: Drain queued TAKATAK events
         shell: bash
