@@ -138,7 +138,12 @@ BEGIN
   END IF;
 
   IF v_vendor_id IS NOT NULL
-     AND NOT public.owns_vendor(v_vendor_id, v_owner_id) THEN
+     AND NOT EXISTS (
+       SELECT 1
+       FROM public.vendors AS v
+       WHERE v.id = v_vendor_id
+         AND v.user_id = v_owner_id
+     ) THEN
     RAISE EXCEPTION 'Import job vendor does not belong to owner'
       USING ERRCODE = '42501';
   END IF;
