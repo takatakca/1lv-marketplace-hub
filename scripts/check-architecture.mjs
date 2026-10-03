@@ -1777,6 +1777,9 @@ if (
     "REVOKE ALL ON FUNCTION public.release_order_inventory(uuid)",
   ) ||
   !inventoryReleasePaymentBindingMigration.includes(
+    "REVOKE ALL ON FUNCTION public.release_expired_inventory_reservations(integer)",
+  ) ||
+  !inventoryReleasePaymentBindingMigration.includes(
     "FROM PUBLIC, anon, authenticated, service_role",
   ) ||
   !stripeFunctions.includes(
