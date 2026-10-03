@@ -160,6 +160,15 @@ jobs:
                 exit 1
               }
 
+              OVERSIZE_FILE="$(mktemp)"
+              head -c 2097153 /dev/zero > "$OVERSIZE_FILE"
+              OVERSIZE_STATUS="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 --request POST --header "Content-Type: application/octet-stream" --data-binary "@$OVERSIZE_FILE" "http://127.0.0.1:$PORT/api/internal/takatak/drain")"
+              rm -f "$OVERSIZE_FILE"
+              test "$OVERSIZE_STATUS" = "413" || {
+                echo "Expected oversized request body to return 413, got $OVERSIZE_STATUS"
+                exit 1
+              }
+
               STRIPE_HEADERS_FILE="$(mktemp)"
               STRIPE_STATUS="$(curl --silent --output /dev/null --dump-header "$STRIPE_HEADERS_FILE" --write-out '%{http_code}' --max-time 5 --request POST --data '{}' "http://127.0.0.1:$PORT/api/public/webhooks/stripe")"
               test "$STRIPE_STATUS" = "401" || {
