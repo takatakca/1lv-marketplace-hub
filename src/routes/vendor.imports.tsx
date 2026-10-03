@@ -107,7 +107,9 @@ function Page() {
     setImporting(true);
 
     const badIdx = new Set(parsed.rowIssues.map((r) => r.index));
-    const validRows = parsed.rows.filter((_, i) => !badIdx.has(i + 1));
+    const validRows = parsed.rows
+      .map((row, index) => ({ row, rowIndex: index + 1 }))
+      .filter(({ rowIndex }) => !badIdx.has(rowIndex));
 
     let job: ImportJob | null = null;
     try {
@@ -127,19 +129,25 @@ function Page() {
     let ok = 0;
     let fail = parsed.rowIssues.length;
 
-    // Log invalid rows
+    // Log invalid rows with their original CSV row index.
     for (const issue of parsed.rowIssues) {
-      await insertJobRow({
-        job_id: job.id,
-        row_index: issue.index,
-        row_status: "failed",
-        raw: parsed.rows[issue.index - 1] ?? {},
-        errors: issue.errors,
-      }).catch(() => {});
+      try {
+        await insertJobRow({
+          job_id: job.id,
+          row_index: issue.index,
+          row_status: "failed",
+          raw: parsed.rows[issue.index - 1] ?? {},
+          errors: issue.errors,
+        });
+      } catch (auditError) {
+        console.error(
+          "[1lv.ca] Could not persist invalid import-row audit:",
+          auditError instanceof Error ? auditError.message : auditError,
+        );
+      }
     }
 
-    for (let i = 0; i < validRows.length; i++) {
-      const r = validRows[i];
+    for (const { row: r, rowIndex } of validRows) {
       try {
         const p = await createProduct(v.id, {
           title: r.title,
@@ -157,23 +165,32 @@ function Page() {
           supplier_product_id: r.supplier_product_id || null,
           status: "draft",
         });
-        ok++;
+
         await insertJobRow({
           job_id: job.id,
-          row_index: i + 1,
+          row_index: rowIndex,
           row_status: "imported",
           raw: r,
           product_id: p.id,
-        }).catch(() => {});
+        });
+
+        ok++;
       } catch (e) {
         fail++;
-        await insertJobRow({
-          job_id: job.id,
-          row_index: i + 1,
-          row_status: "failed",
-          raw: r,
-          errors: [(e as Error).message],
-        }).catch(() => {});
+        try {
+          await insertJobRow({
+            job_id: job.id,
+            row_index: rowIndex,
+            row_status: "failed",
+            raw: r,
+            errors: [(e as Error).message],
+          });
+        } catch (auditError) {
+          console.error(
+            "[1lv.ca] Could not persist failed import-row audit:",
+            auditError instanceof Error ? auditError.message : auditError,
+          );
+        }
       }
     }
 
