@@ -6,6 +6,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 
 export type ServerCheckoutItem = {
   productId: string;
+  variantId?: string | null;
   quantity: number;
 };
 
@@ -179,6 +180,12 @@ function validateCheckoutInput(data: ServerCheckoutInput): ServerCheckoutInput {
       throw new Error("Invalid product in cart.");
     }
     if (
+      item.variantId != null &&
+      (typeof item.variantId !== "string" || !UUID_RE.test(item.variantId))
+    ) {
+      throw new Error("Invalid product variant in cart.");
+    }
+    if (
       typeof item.quantity !== "number" ||
       !Number.isInteger(item.quantity) ||
       item.quantity < 1 ||
@@ -186,7 +193,11 @@ function validateCheckoutInput(data: ServerCheckoutInput): ServerCheckoutInput {
     ) {
       throw new Error("Invalid product quantity.");
     }
-    return { productId: item.productId, quantity: item.quantity };
+    return {
+      productId: item.productId,
+      variantId: item.variantId ?? null,
+      quantity: item.quantity,
+    };
   });
 
   if (typeof data.email !== "string") {
@@ -266,6 +277,7 @@ export const createMarketplaceOrder = createServerFn({ method: "POST" })
         _billing_address: data.billingAddress ?? null,
         _items: data.items.map((item) => ({
           product_id: item.productId,
+          variant_id: item.variantId ?? null,
           quantity: item.quantity,
         })),
         _idempotency_key: data.idempotencyKey,
