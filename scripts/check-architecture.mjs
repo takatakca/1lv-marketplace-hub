@@ -2031,6 +2031,18 @@ if (
 }
 
 if (
+  !healthRoute.includes("MIN_32_CHAR_SECRET_ENV") ||
+  !healthRoute.includes('"CHECKOUT_GUEST_TOKEN_SECRET"') ||
+  !healthRoute.includes('"TAKATAK_DRAIN_CRON_SECRET"') ||
+  !healthRoute.includes('"INVENTORY_MAINTENANCE_CRON_SECRET"') ||
+  !healthRoute.includes("strongRuntimeSecretsConfigured")
+) {
+  violations.push(
+    "production health must reject weak guest-payment and internal cron secrets",
+  );
+}
+
+if (
   !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002123000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
   !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002123000"') ||
