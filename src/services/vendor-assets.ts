@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 const BUCKET = "vendor-assets";
 const MAX_BYTES = 4 * 1024 * 1024; // 4MB
+const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 hour
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EXTENSION_BY_MIME = {
@@ -49,7 +50,15 @@ export async function uploadVendorAsset(
   return path;
 }
 
-/** Resolve a stored path to a signed URL (1y TTL). Pass-through if it's already an http(s) URL. */
+export async function deleteVendorAsset(
+  path: string | null | undefined,
+): Promise<void> {
+  if (!path || /^https?:\/\//i.test(path)) return;
+  const { error } = await supabase.storage.from(BUCKET).remove([path]);
+  if (error) throw error;
+}
+
+/** Resolve a stored path to a short-lived signed URL. Pass-through supports legacy admin-managed http(s) URLs. */
 export async function resolveAssetUrl(
   pathOrUrl: string | null | undefined,
 ): Promise<string | null> {
@@ -57,7 +66,7 @@ export async function resolveAssetUrl(
   if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
   const { data, error } = await supabase.storage
     .from(BUCKET)
-    .createSignedUrl(pathOrUrl, 60 * 60 * 24 * 365);
+    .createSignedUrl(pathOrUrl, SIGNED_URL_TTL_SECONDS);
   if (error) return null;
   return data?.signedUrl ?? null;
 }
