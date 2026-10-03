@@ -890,10 +890,30 @@ jobs:
             -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
             -p "$PORT" \
             "$USER@$HOST" \
-            "bash -s -- '$APP_ROOT'" <<'REMOTE'
+            "bash -s -- '$APP_ROOT' '$GITHUB_SHA'" <<'REMOTE'
           set -Eeuo pipefail
 
           APP_ROOT="$1"
+          FAILED_SHA="$2"
+
+          if ! printf '%s' "$FAILED_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "ERROR: Failed release SHA is invalid."
+            exit 1
+          fi
+
+          CURRENT=""
+          [ -s "$APP_ROOT/CURRENT" ] && CURRENT="$(tr -d '\r\n' < "$APP_ROOT/CURRENT")"
+
+          if [ -n "$CURRENT" ] && ! printf '%s' "$CURRENT" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "ERROR: CURRENT contains an invalid release identifier."
+            exit 1
+          fi
+
+          if [ "$CURRENT" != "$FAILED_SHA" ]; then
+            echo "Activation failed before CURRENT switched to the failed release."
+            echo "Existing production release remains active; no rollback switch is required."
+            exit 0
+          fi
 
           if [ ! -s "$APP_ROOT/PREVIOUS" ]; then
             echo "ERROR: No previous release is available."
@@ -902,8 +922,13 @@ jobs:
 
           PREVIOUS="$(tr -d '\r\n' < "$APP_ROOT/PREVIOUS")"
 
-          if [ -z "$PREVIOUS" ]; then
-            echo "ERROR: PREVIOUS is empty."
+          if ! printf '%s' "$PREVIOUS" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "ERROR: PREVIOUS does not contain a valid full Git SHA."
+            exit 1
+          fi
+
+          if [ "$PREVIOUS" = "$FAILED_SHA" ]; then
+            echo "ERROR: PREVIOUS unexpectedly points to the failed release."
             exit 1
           fi
 
