@@ -4,7 +4,3 @@ import type { User } from "@supabase/supabase-js";
 export function isDemoMode(user: User | null | undefined) {
   return !user;
 }
-
-export function shouldUseDemoData(user: User | null | undefined, hasRealData: boolean) {
-  return isDemoMode(user) || !hasRealData;
-}
