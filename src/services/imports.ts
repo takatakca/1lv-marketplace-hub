@@ -114,12 +114,50 @@ export async function createImportJob(input: {
   return data as unknown as ImportJob;
 }
 
+export type FinalizeImportJobResult = {
+  jobId: string;
+  status: JobStatus;
+  totalRows: number;
+  successRows: number;
+  failedRows: number;
+};
+
 export async function finalizeImportJob(
   id: string,
-  patch: { status: JobStatus; success_rows: number; failed_rows: number; errors?: unknown },
-) {
-  const { error } = await supabase.from("product_import_jobs").update(patch as never).eq("id", id);
+): Promise<FinalizeImportJobResult> {
+  const { data, error } = await supabase.rpc(
+    "finalize_product_import_job" as never,
+    { _job_id: id } as never,
+  );
   if (error) throw error;
+
+  const result = (data ?? {}) as unknown as {
+    ok?: boolean;
+    job_id?: string;
+    status?: JobStatus;
+    total_rows?: number;
+    success_rows?: number;
+    failed_rows?: number;
+  };
+
+  if (
+    result.ok !== true ||
+    result.job_id !== id ||
+    !["completed", "failed", "partial"].includes(String(result.status)) ||
+    !Number.isInteger(result.total_rows) ||
+    !Number.isInteger(result.success_rows) ||
+    !Number.isInteger(result.failed_rows)
+  ) {
+    throw new Error("Import finalization returned an invalid result.");
+  }
+
+  return {
+    jobId: result.job_id,
+    status: result.status as JobStatus,
+    totalRows: result.total_rows as number,
+    successRows: result.success_rows as number,
+    failedRows: result.failed_rows as number,
+  };
 }
 
 export async function importDraftProductRow(input: {
