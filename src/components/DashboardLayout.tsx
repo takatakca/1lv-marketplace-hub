@@ -42,6 +42,7 @@ const adminItems: Item[] = [
   { to: "/admin/coupons", icon: DollarSign, label: "Coupons" },
   { to: "/admin/disputes", icon: BarChart3, label: "Disputes" },
   { to: "/admin/integrations", icon: Settings, label: "Integrations" },
+  { to: "/admin/integrations/takatak", icon: Upload, label: "TAKATAK Master Sync" },
   { to: "/admin/settings", icon: Settings, label: "Settings" },
 ];
 
