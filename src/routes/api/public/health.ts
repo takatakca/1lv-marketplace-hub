@@ -96,6 +96,9 @@ export const Route = createFileRoute("/api/public/health")({
         );
         const masterIntegrationReady = takatakConfigured();
         const supabaseTargetReady = supabaseTargetConfigured();
+        const releaseRevision =
+          process.env.RELEASE_REVISION?.trim().toLowerCase() ?? "";
+        const releaseRevisionReady = /^[0-9a-f]{40}$/.test(releaseRevision);
 
         if (missing.length > 0) {
           console.error(
@@ -116,10 +119,17 @@ export const Route = createFileRoute("/api/public/health")({
           );
         }
 
+        if (!releaseRevisionReady) {
+          console.error(
+            "[1lv.ca] RELEASE_REVISION is missing or is not a full Git commit SHA.",
+          );
+        }
+
         const configurationReady =
           missing.length === 0 &&
           masterIntegrationReady &&
-          supabaseTargetReady;
+          supabaseTargetReady &&
+          releaseRevisionReady;
 
         const database = configurationReady
           ? await checkDatabaseSchema()
@@ -135,7 +145,7 @@ export const Route = createFileRoute("/api/public/health")({
             service: "1lv.ca",
             runtime: "tanstack-start",
             database: database.status,
-            revision: process.env.RELEASE_REVISION?.trim() || null,
+            revision: releaseRevision || null,
           }),
           {
             status: ok ? 200 : 503,
