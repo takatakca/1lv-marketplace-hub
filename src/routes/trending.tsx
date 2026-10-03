@@ -1,10 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { TrendingUp, Flame } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
 import { SectionHead } from "@/components/ProductRail";
 import { categories } from "@/lib/data";
 import { usePublicCatalog } from "@/hooks/use-public-catalog";
+import { searchPublicCatalogProducts } from "@/services/public-catalog";
 
 export const Route = createFileRoute("/trending")({
   component: TrendingPage,
@@ -21,22 +23,76 @@ export const Route = createFileRoute("/trending")({
 });
 
 function TrendingPage() {
-  const { products } = usePublicCatalog();
-  const trending = [...products].sort((a, b) => b.sold - a.sold);
+  const { products, demo, loading: catalogLoading } = usePublicCatalog();
+
+  const liveTrendingQuery = useQuery({
+    queryKey: ["public-marketplace-trending", "sold"],
+    queryFn: () =>
+      searchPublicCatalogProducts({
+        sort: "sold",
+        limit: 500,
+      }),
+    enabled: !demo && !catalogLoading,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
+
+  const liveNewestQuery = useQuery({
+    queryKey: ["public-marketplace-trending", "newest"],
+    queryFn: () =>
+      searchPublicCatalogProducts({
+        sort: "newest",
+        limit: 6,
+      }),
+    enabled: !demo && !catalogLoading,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
+
+  const trending = demo
+    ? [...products].sort((a, b) => b.sold - a.sold)
+    : liveTrendingQuery.data ?? [];
   const top = trending.slice(0, 12);
-  const rising = [...products]
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime(),
-    )
-    .slice(0, 6);
+  const rising = demo
+    ? [...products]
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt ?? 0).getTime() -
+            new Date(a.createdAt ?? 0).getTime(),
+        )
+        .slice(0, 6)
+    : liveNewestQuery.data ?? [];
   const hotCategories = categories
-    .map((c) => ({ c, sold: products.filter((p) => p.category === c.slug).reduce((s, p) => s + p.sold, 0) }))
+    .map((c) => ({
+      c,
+      sold: trending
+        .filter((p) => p.category === c.slug)
+        .reduce((s, p) => s + p.sold, 0),
+    }))
     .sort((a, b) => b.sold - a.sold)
     .slice(0, 6);
+  const loading =
+    catalogLoading ||
+    (!demo && (liveTrendingQuery.isPending || liveNewestQuery.isPending));
+  const loadError =
+    !demo &&
+    (liveTrendingQuery.error instanceof Error ||
+      liveNewestQuery.error instanceof Error);
 
   return (
     <AppLayout>
+      {loading && (
+        <div className="border-b border-border bg-card px-4 py-3 text-center text-sm text-muted-foreground">
+          Loading live marketplace rankings…
+        </div>
+      )}
+      {loadError && !loading && (
+        <div className="border-b border-destructive/30 bg-card px-4 py-3 text-center text-sm text-destructive">
+          Live ranking data could not be loaded. Please try again.
+        </div>
+      )}
       <section className="bg-gradient-hero text-white">
         <div className="mx-auto max-w-7xl px-4 py-8">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/70">Live marketplace data</p>
