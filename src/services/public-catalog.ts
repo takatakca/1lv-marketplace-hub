@@ -116,6 +116,18 @@ export async function listPublicCatalogProducts(limit = 200): Promise<Product[]>
   return ((data ?? []) as unknown as PublicCatalogProductRow[]).map(mapPublicProduct);
 }
 
+export async function listPublicCatalogProductsForVendor(
+  vendorSlug: string,
+  limit = 200,
+): Promise<Product[]> {
+  const { data, error } = await supabase.rpc(
+    "list_public_catalog_products_for_vendor" as never,
+    { _vendor_slug: vendorSlug, _limit: limit } as never,
+  );
+  if (error) throw error;
+  return ((data ?? []) as unknown as PublicCatalogProductRow[]).map(mapPublicProduct);
+}
+
 export async function getPublicCatalogProductBySlug(
   slug: string,
 ): Promise<Product | null> {
