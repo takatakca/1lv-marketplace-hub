@@ -2,12 +2,64 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(177);
+select plan(180);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002160000',
+  '20261002161500',
   'production schema marker is current'
+);
+
+select ok(
+  to_regprocedure('public.list_public_categories()') is not null
+  and to_regprocedure('public.get_public_category_by_slug(text)') is not null,
+  'public active category taxonomy RPCs exist'
+);
+
+select ok(
+  has_function_privilege(
+    'anon',
+    'public.list_public_categories()',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.list_public_categories()',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.list_public_categories()',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'anon',
+    'public.get_public_category_by_slug(text)',
+    'EXECUTE'
+  ),
+  'public category taxonomy RPCs are available to storefront callers'
+);
+
+select ok(
+  position(
+    'c.active = true'
+    in pg_get_functiondef(
+      'public.list_public_categories()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'c.active = true'
+    in pg_get_functiondef(
+      'public.get_public_category_by_slug(text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'c.slug = btrim(COALESCE(_slug, ''''))'
+    in pg_get_functiondef(
+      'public.get_public_category_by_slug(text)'::regprocedure
+    )
+  ) > 0,
+  'public taxonomy exposes active categories only and slug lookups are scoped'
 );
 
 select ok(
