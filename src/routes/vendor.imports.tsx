@@ -167,9 +167,6 @@ function Page() {
       return;
     }
 
-    let ok = 0;
-    let fail = parsed.rowIssues.length;
-
     // Log invalid rows with their original CSV row index.
     for (const issue of parsed.rowIssues) {
       try {
@@ -208,9 +205,7 @@ function Page() {
           },
         });
 
-        ok++;
       } catch (e) {
-        fail++;
         try {
           await insertJobRow({
             job_id: job.id,
@@ -228,15 +223,27 @@ function Page() {
       }
     }
 
-    await finalizeImportJob(job.id, {
-      status: fail === 0 ? "completed" : ok === 0 ? "failed" : "partial",
-      success_rows: ok,
-      failed_rows: fail,
-    }).catch(() => {});
+    let finalized;
+    try {
+      finalized = await finalizeImportJob(job.id);
+    } catch (error) {
+      setImporting(false);
+      setParsed(null);
+      setFilename(null);
+      toast.error(
+        "Products were processed, but the import audit could not be finalized. " +
+          "Do not rerun this file until the import job is reviewed. " +
+          (error instanceof Error ? error.message : ""),
+      );
+      return;
+    }
 
     setImporting(false);
     setParsed(null);
     setFilename(null);
+
+    const ok = finalized.successRows;
+    const fail = finalized.failedRows;
     toast[fail ? "error" : "success"](
       `Imported ${ok} draft${ok === 1 ? "" : "s"}${fail ? `, ${fail} failed` : ""}`,
     );
