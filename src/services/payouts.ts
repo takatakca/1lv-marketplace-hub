@@ -3,6 +3,7 @@ import {
   generateVendorPayouts as generateFn,
   setPayoutStatus as setStatusFn,
   processApprovedPayout as processFn,
+  listAdminPayouts as listAdminPayoutsFn,
   type PayoutStatus,
   type GenerateResult,
   type TransferResult,
@@ -129,12 +130,8 @@ export async function listVendorPayouts(
 
 /** Admin list — RLS still applies; non-admins simply see only their own rows. */
 export async function listAllPayouts(): Promise<PayoutRecord[]> {
-  const { data } = await supabase
-    .from("payouts" as never)
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(500);
-  return (data ?? []) as unknown as PayoutRecord[];
+  const data = await listAdminPayoutsFn();
+  return data as unknown as PayoutRecord[];
 }
 
 export async function listPayoutItems(payoutId: string): Promise<PayoutItemRecord[]> {
