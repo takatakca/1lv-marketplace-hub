@@ -305,6 +305,13 @@ const payoutColumnPrivacyMigration = readFileSync(
   join(root, "supabase/migrations/20261002190000_payout_column_privacy.sql"),
   "utf8",
 );
+const takatakOutboxAtomicCompletionMigration = readFileSync(
+  join(
+    root,
+    "supabase/migrations/20261002191500_takatak_outbox_atomic_completion.sql",
+  ),
+  "utf8",
+);
 const payoutService = readFileSync(
   join(root, "src/services/payouts.ts"),
   "utf8",
@@ -839,7 +846,27 @@ for (const [content, marker, label] of [
   [
     payoutColumnPrivacyMigration,
     "SELECT '20261002190000'",
-    "final production schema marker includes payout column privacy",
+    "payout column privacy retains its historical schema marker",
+  ],
+  [
+    takatakOutboxAtomicCompletionMigration,
+    "SELECT '20261002191500'",
+    "final production schema marker includes atomic TAKATAK completion",
+  ],
+  [
+    takatakOutboxAtomicCompletionMigration,
+    "CREATE OR REPLACE FUNCTION public.complete_takatak_outbox_delivery",
+    "TAKATAK successful delivery completes through a token-fenced database RPC",
+  ],
+  [
+    takatakOutboxAtomicCompletionMigration,
+    "AND o.claim_token = _claim_token",
+    "TAKATAK completion locks only the current claim token",
+  ],
+  [
+    takatakOutboxAtomicCompletionMigration,
+    "FOR UPDATE",
+    "TAKATAK completion locks the claimed outbox row transactionally",
   ],
   [
     payoutColumnPrivacyMigration,
@@ -2597,17 +2624,19 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002190000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002191500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002190000"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002191500"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002190000"') ||
-  !payoutColumnPrivacyMigration.includes("SELECT '20261002190000'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002191500"') ||
+  !takatakOutboxAtomicCompletionMigration.includes(
+    "SELECT '20261002191500'",
+  )
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002190000",
+    "production health/migration gates must track schema 20261002191500",
   );
 }
 
@@ -2656,9 +2685,9 @@ if (
 
 if (
   !masterOutbox.includes('"claim_takatak_outbox"') ||
+  !masterOutbox.includes('"complete_takatak_outbox_delivery"') ||
   !masterOutbox.includes('claim_token: string;') ||
   !masterOutbox.includes('.eq("claim_token", claimToken)') ||
-  !masterOutbox.includes("claimStillCurrent") ||
   !masterOutbox.includes("transitionClaim") ||
   !masterOutbox.includes("row.claim_token") ||
   !masterOutbox.includes("const attempt = row.attempt_count;") ||
@@ -2667,10 +2696,20 @@ if (
   masterOutbox.includes('.eq("status", "pending")\n    .lt("attempt_count"') ||
   masterOutbox.includes(
     'update({ status: "processing" }).eq("id", row.id)',
+  ) ||
+  !takatakOutboxAtomicCompletionMigration.includes(
+    "AND o.claim_token = _claim_token",
+  ) ||
+  !takatakOutboxAtomicCompletionMigration.includes(
+    "AND claim_token = _claim_token",
+  ) ||
+  !takatakOutboxAtomicCompletionMigration.includes("FOR UPDATE") ||
+  !takatakOutboxAtomicCompletionMigration.includes(
+    "GRANT EXECUTE ON FUNCTION public.complete_takatak_outbox_delivery",
   )
 ) {
   violations.push(
-    "TAKATAK drain must use token-fenced PostgreSQL claims and must never let a stale worker overwrite a reclaimed event",
+    "TAKATAK drain must use token-fenced PostgreSQL claims and atomic token-fenced completion so stale workers cannot overwrite reclaimed events",
   );
 }
 
