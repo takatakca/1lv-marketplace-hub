@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Product, Vendor } from "@/lib/data";
 
-type PublicCatalogProductRow = {
+export type PublicCatalogProductRow = {
   id: string;
   vendor_id: string;
   vendor_slug: string;
