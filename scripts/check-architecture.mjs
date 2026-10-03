@@ -2321,6 +2321,18 @@ if (
   );
 }
 
+if (
+  !deployWorkflow.includes("id: rollback") ||
+  !deployWorkflow.includes("id: rollback_health") ||
+  !deployWorkflow.includes("Rollback health check attempt") ||
+  !deployWorkflow.includes("payload.revision !== process.env.RECOVERED_SHA") ||
+  !deployWorkflow.includes("Manual production recovery is required")
+) {
+  violations.push(
+    "MochaHost rollback must verify the restored release health and never claim recovery when verification fails",
+  );
+}
+
 const migrateProductionWorkflow = readFileSync(
   join(root, ".github/workflows/migrate-production-db.yml"),
   "utf8",
