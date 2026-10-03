@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(149);
+select plan(151);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002121500',
+  '20261002123000',
   'production schema marker is current'
 );
 
@@ -30,6 +30,27 @@ select ok(
     'EXECUTE'
   ),
   'checkout address normalization is service-role only'
+);
+
+select is(
+  (
+    select p.provolatile::text
+    from pg_proc as p
+    where p.oid =
+      'public.normalize_canadian_checkout_address(jsonb,text)'::regprocedure
+  ),
+  's',
+  'checkout address normalization is correctly marked STABLE'
+);
+
+select ok(
+  position(
+    'v_existing_order_id'
+    in pg_get_functiondef(
+      'public.create_marketplace_order_locked_unchecked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'::regprocedure
+    )
+  ) = 0,
+  'locked checkout implementation has no unused existing-order variable'
 );
 
 select is(
