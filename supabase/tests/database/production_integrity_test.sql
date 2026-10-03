@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(152);
+select plan(156);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002124500',
+  '20261002130000',
   'production schema marker is current'
 );
 
@@ -26,6 +26,81 @@ select ok(
       and cardinality(b.allowed_mime_types) = 4
   ),
   'vendor asset bucket enforces private 4MB image-only uploads'
+);
+
+select ok(
+  to_regprocedure('public.can_manage_vendor_asset(text)') is not null
+  and not has_function_privilege(
+    'anon',
+    'public.can_manage_vendor_asset(text)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.can_manage_vendor_asset(text)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.can_manage_vendor_asset(text)',
+    'EXECUTE'
+  ),
+  'vendor asset write authority is unavailable to anonymous callers'
+);
+
+select ok(
+  position(
+    'is_takatak_authorized_session'
+    in pg_get_functiondef(
+      'public.can_manage_vendor_asset(text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'FROM public.vendors'
+    in pg_get_functiondef(
+      'public.can_manage_vendor_asset(text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'storage.foldername'
+    in pg_get_functiondef(
+      'public.can_manage_vendor_asset(text)'::regprocedure
+    )
+  ) > 0,
+  'vendor asset write authority requires TAKATAK session, vendor ownership and owner-prefixed paths'
+);
+
+select ok(
+  (
+    select roles = ARRAY['authenticated']::name[]
+      and coalesce(with_check, '') like '%can_manage_vendor_asset%'
+    from pg_policies
+    where schemaname = 'storage'
+      and tablename = 'objects'
+      and policyname = 'vendor-assets owner insert'
+  )
+  and (
+    select roles = ARRAY['authenticated']::name[]
+      and coalesce(qual, '') like '%can_manage_vendor_asset%'
+      and coalesce(with_check, '') like '%can_manage_vendor_asset%'
+    from pg_policies
+    where schemaname = 'storage'
+      and tablename = 'objects'
+      and policyname = 'vendor-assets owner update'
+  ),
+  'vendor asset insert/update policies require the centralized write authority'
+);
+
+select ok(
+  (
+    select roles = ARRAY['authenticated']::name[]
+      and coalesce(qual, '') like '%can_manage_vendor_asset%'
+    from pg_policies
+    where schemaname = 'storage'
+      and tablename = 'objects'
+      and policyname = 'vendor-assets owner delete'
+  ),
+  'vendor asset delete policy requires the centralized write authority'
 );
 
 select ok(
