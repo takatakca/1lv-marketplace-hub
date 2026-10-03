@@ -1366,6 +1366,18 @@ if (
 }
 
 if (
+  !productionServer.includes(
+    'const INVALID_CONTENT_LENGTH_CODE = "ERR_1LV_INVALID_CONTENT_LENGTH";',
+  ) ||
+  !productionServer.includes("error.code === INVALID_CONTENT_LENGTH_CODE") ||
+  !productionServer.includes("res.writeHead(400")
+) {
+  violations.push(
+    "production server must classify invalid Content-Length as a 400 client error",
+  );
+}
+
+if (
   !ciWorkflow.includes("Expected oversized request body to return 413") ||
   !ciWorkflow.includes("head -c 2097153 /dev/zero")
 ) {
