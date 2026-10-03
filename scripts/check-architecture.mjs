@@ -2683,6 +2683,7 @@ if (
   !atomicSupplierImportMigration.includes(
     "public.is_takatak_authorized_session()",
   ) ||
+  !atomicSupplierImportMigration.includes("auth.uid()") ||
   !atomicSupplierImportMigration.includes("FOR UPDATE") ||
   !atomicSupplierImportMigration.includes(
     "product_import_job_rows_job_row_unique",
@@ -2697,17 +2698,13 @@ if (
   !atomicSupplierImportMigration.includes("public.owns_vendor") ||
   !atomicSupplierImportMigration.includes("99999999.99") ||
   !atomicSupplierImportMigration.includes("2147483647") ||
-  !atomicSupplierImportMigration.includes(
-    "'^[0-9]{1,8}([.][0-9]{1,2})?$'",
-  ) ||
-  !atomicSupplierImportMigration.includes("'^[0-9]{1,10}$'") ||
   !importService.includes('"import_product_draft_row" as never') ||
   !vendorImportsRoute.includes("importDraftProductRow") ||
   !vendorImportsRoute.includes("2_147_483_647") ||
   vendorImportsRoute.includes("createProduct(")
 ) {
   violations.push(
-    "supplier CSV imports must create each draft product and its audit row through the guarded atomic import RPC",
+    "supplier CSV imports must use the guarded atomic RPC with tenant checks, durable row audit, and bounded numeric inputs",
   );
 }
 
@@ -2720,13 +2717,18 @@ if (
     "Import job audit row count mismatch",
   ) ||
   !supplierImportFinalizationMigration.includes("REVOKE UPDATE (") ||
+  !supplierImportFinalizationMigration.includes("FROM public.vendors AS v") ||
+  !supplierImportFinalizationMigration.includes("v.user_id = v_owner_id") ||
+  supplierImportFinalizationMigration.includes(
+    "public.owns_vendor(v_vendor_id, v_owner_id)",
+  ) ||
   !importService.includes('"finalize_product_import_job" as never') ||
   !vendorImportsRoute.includes("finalizeImportJob(job.id)") ||
   vendorImportsRoute.includes("success_rows: ok") ||
   vendorImportsRoute.includes("failed_rows: fail")
 ) {
   violations.push(
-    "supplier import completion must derive status and counters from durable audit rows in PostgreSQL",
+    "supplier import completion must derive counters from durable audit rows and validate recorded vendor ownership independently of the admin caller",
   );
 }
 
