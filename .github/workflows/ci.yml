@@ -1,0 +1,367 @@
+name: Pull Request CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Lint, build, typecheck and server smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate GitHub workflow YAML
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          while IFS= read -r workflow; do
+            echo "Parsing workflow: $workflow"
+            npx prettier "$workflow" > /dev/null
+          done < <(
+            find .github/workflows -type f \( -name '*.yml' -o -name '*.yaml' \) -print | sort
+          )
+
+      - name: Audit production dependencies
+        run: |
+          set -euo pipefail
+          npm audit --omit=dev --audit-level=high
+
+      - name: Enforce GROUPE TAKATAK architecture boundary
+        run: npm run check:architecture
+
+      - name: Verify trusted public origin handling
+        run: npm run qa:request-origin
+
+      - name: Verify CSV parser handling
+        run: npm run qa:csv-parser
+
+      - name: Lint changed source files
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mapfile -d '' files < <(git diff --name-only --diff-filter=ACMR -z "$BASE_SHA" "$HEAD_SHA" -- '*.ts' '*.tsx' '*.js' '*.jsx' '*.cjs' '*.mjs')
+          if (( ${#files[@]} == 0 )); then
+            echo "No changed lintable files."
+          else
+            printf 'Linting %s\n' "${files[@]}"
+            npx eslint --max-warnings=0 --rule "prettier/prettier: off" "${files[@]}"
+          fi
+
+      - name: Lint entire repository
+        run: |
+          npx eslint . --max-warnings=0 --rule "prettier/prettier: off"
+
+      # TanStack Start regenerates src/routeTree.gen.ts during the Vite build.
+      # Keep this before tsc so newly-added file routes are present in generated types.
+      - name: Production build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          test -n "$VITE_SUPABASE_URL" || (echo "Missing VITE_SUPABASE_URL" && exit 1)
+          test -n "$VITE_SUPABASE_PUBLISHABLE_KEY" || (echo "Missing VITE_SUPABASE_PUBLISHABLE_KEY" && exit 1)
+          npm run build
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: Validate production server bundle
+        run: |
+          set -euo pipefail
+          node --check server.cjs
+          test -f dist/client/index.html || (echo "Missing dist/client/index.html" && exit 1)
+          test -f dist/server/server.js || (echo "Missing dist/server/server.js" && exit 1)
+
+      - name: Smoke test production server runtime
+        env:
+          PORT: "4178"
+          SUPABASE_URL: "https://odoybkshqszucvoxzjyz.supabase.co"
+          SUPABASE_PUBLISHABLE_KEY: "ci-publishable-key"
+          SUPABASE_SERVICE_ROLE_KEY: "ci-service-role-key"
+          STRIPE_SECRET_KEY: "sk_test_ci"
+          STRIPE_WEBHOOK_SECRET: "whsec_ci"
+          CHECKOUT_GUEST_TOKEN_SECRET: "ci-checkout-guest-token-secret-0000000000000000"
+          STRIPE_PRICE_VENDOR_STARTER_MONTHLY: "price_ci_starter"
+          STRIPE_PRICE_VENDOR_GROWTH_MONTHLY: "price_ci_growth"
+          STRIPE_PRICE_VENDOR_SCALE_MONTHLY: "price_ci_scale"
+          TAKATAK_MASTER_API_URL: "https://takatak.invalid"
+          TAKATAK_1LV_API_KEY: ${{ github.sha }}
+          TAKATAK_DRAIN_CRON_SECRET: "ci-takatak-drain-secret-000000000000000000"
+          INVENTORY_MAINTENANCE_CRON_SECRET: "ci-inventory-maintenance-secret-000000000000000"
+          HEALTH_SKIP_DATABASE_CHECK: "1"
+          RELEASE_REVISION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          node server.cjs > /tmp/1lv-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if HEALTH="$(curl --fail --silent --show-error --max-time 5 "http://127.0.0.1:$PORT/api/public/health")"; then
+              printf '%s\n' "$HEALTH"
+              node -e '
+                const payload = JSON.parse(process.argv[1]);
+                if (
+                  payload.ok !== true ||
+                  payload.runtime !== "tanstack-start" ||
+                  payload.database !== "skipped" ||
+                  payload.revision !== process.env.GITHUB_SHA
+                ) process.exit(1);
+              ' "$HEALTH"
+              for route in / /search /categories /deals /trending /new-arrivals /cart /login /signup /vendor-pricing /help /privacy /terms /returns /shipping; do
+                echo "Smoke testing public route: $route"
+                curl --fail --silent --show-error --max-time 5 "http://127.0.0.1:$PORT$route" > /dev/null
+              done
+
+              PRIVATE_HEADERS="$(curl --silent --show-error --max-time 5 --dump-header - --output /dev/null "http://127.0.0.1:$PORT/login" | tr -d '\r')"
+              printf '%s\n' "$PRIVATE_HEADERS" | grep -qi '^Cache-Control: no-store' || {
+                echo "Expected /login to be non-cacheable."
+                printf '%s\n' "$PRIVATE_HEADERS"
+                exit 1
+              }
+              printf '%s\n' "$PRIVATE_HEADERS" | grep -qi '^Cross-Origin-Opener-Policy: same-origin-allow-popups' || {
+                echo "Expected /login to retain popup-safe origin isolation."
+                printf '%s\n' "$PRIVATE_HEADERS"
+                exit 1
+              }
+              printf '%s\n' "$PRIVATE_HEADERS" | grep -qi '^Origin-Agent-Cluster: ?1' || {
+                echo "Expected /login to opt into an origin-keyed agent cluster."
+                printf '%s\n' "$PRIVATE_HEADERS"
+                exit 1
+              }
+              printf '%s\n' "$PRIVATE_HEADERS" | grep -qi '^X-Permitted-Cross-Domain-Policies: none' || {
+                echo "Expected /login to refuse Adobe cross-domain policy files."
+                printf '%s\n' "$PRIVATE_HEADERS"
+                exit 1
+              }
+
+              TAKATAK_STATUS="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 --request POST "http://127.0.0.1:$PORT/api/internal/takatak/drain")"
+              test "$TAKATAK_STATUS" = "401" || {
+                echo "Expected unauthenticated TAKATAK drain to return 401, got $TAKATAK_STATUS"
+                exit 1
+              }
+
+              INVENTORY_STATUS="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 --request POST "http://127.0.0.1:$PORT/api/internal/inventory/cleanup")"
+              test "$INVENTORY_STATUS" = "401" || {
+                echo "Expected unauthenticated inventory cleanup to return 401, got $INVENTORY_STATUS"
+                exit 1
+              }
+
+              OVERSIZE_FILE="$(mktemp)"
+              head -c 2097153 /dev/zero > "$OVERSIZE_FILE"
+              OVERSIZE_STATUS="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 --request POST --header "Content-Type: application/octet-stream" --data-binary "@$OVERSIZE_FILE" "http://127.0.0.1:$PORT/api/internal/takatak/drain")"
+              rm -f "$OVERSIZE_FILE"
+              test "$OVERSIZE_STATUS" = "413" || {
+                echo "Expected oversized request body to return 413, got $OVERSIZE_STATUS"
+                exit 1
+              }
+
+              STRIPE_HEADERS_FILE="$(mktemp)"
+              STRIPE_STATUS="$(curl --silent --output /dev/null --dump-header "$STRIPE_HEADERS_FILE" --write-out '%{http_code}' --max-time 5 --request POST --data '{}' "http://127.0.0.1:$PORT/api/public/webhooks/stripe")"
+              test "$STRIPE_STATUS" = "401" || {
+                echo "Expected unsigned Stripe webhook to return 401, got $STRIPE_STATUS"
+                exit 1
+              }
+              tr -d '\r' < "$STRIPE_HEADERS_FILE" | grep -qi '^Cache-Control: no-store' || {
+                echo "Expected Stripe webhook responses to be non-cacheable."
+                cat "$STRIPE_HEADERS_FILE"
+                exit 1
+              }
+
+              exit 0
+            fi
+
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              cat /tmp/1lv-server.log
+              exit 1
+            fi
+
+            sleep 1
+          done
+
+          cat /tmp/1lv-server.log
+          exit 1
+
+
+      - name: Prune to shipped production dependencies
+        run: |
+          set -euo pipefail
+          npm prune --omit=dev
+
+      - name: Smoke test shipped dependency tree
+        env:
+          PORT: "4179"
+          SUPABASE_URL: "https://odoybkshqszucvoxzjyz.supabase.co"
+          SUPABASE_PUBLISHABLE_KEY: "ci-publishable-key"
+          SUPABASE_SERVICE_ROLE_KEY: "ci-service-role-key"
+          STRIPE_SECRET_KEY: "sk_test_ci"
+          STRIPE_WEBHOOK_SECRET: "whsec_ci"
+          CHECKOUT_GUEST_TOKEN_SECRET: "ci-checkout-guest-token-secret-0000000000000000"
+          STRIPE_PRICE_VENDOR_STARTER_MONTHLY: "price_ci_starter"
+          STRIPE_PRICE_VENDOR_GROWTH_MONTHLY: "price_ci_growth"
+          STRIPE_PRICE_VENDOR_SCALE_MONTHLY: "price_ci_scale"
+          TAKATAK_MASTER_API_URL: "https://takatak.invalid"
+          TAKATAK_1LV_API_KEY: ${{ github.sha }}
+          TAKATAK_DRAIN_CRON_SECRET: "ci-takatak-drain-secret-000000000000000000"
+          INVENTORY_MAINTENANCE_CRON_SECRET: "ci-inventory-maintenance-secret-000000000000000"
+          HEALTH_SKIP_DATABASE_CHECK: "1"
+          RELEASE_REVISION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          node server.cjs > /tmp/1lv-pruned-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if HEALTH="$(curl --fail --silent --show-error --max-time 5 "http://127.0.0.1:$PORT/api/public/health")"; then
+              node -e '
+                const payload = JSON.parse(process.argv[1]);
+                if (
+                  payload.ok !== true ||
+                  payload.runtime !== "tanstack-start" ||
+                  payload.database !== "skipped" ||
+                  payload.revision !== process.env.GITHUB_SHA
+                ) process.exit(1);
+              ' "$HEALTH"
+
+              for route in / /search /login /vendor-pricing; do
+                echo "Pruned-runtime route check: $route"
+                curl --fail --silent --show-error --max-time 5 "http://127.0.0.1:$PORT$route" > /dev/null
+              done
+
+              exit 0
+            fi
+
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              cat /tmp/1lv-pruned-server.log
+              exit 1
+            fi
+
+            sleep 1
+          done
+
+          cat /tmp/1lv-pruned-server.log
+          exit 1
+
+  database-migrations:
+    name: Rebuild Supabase migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SUPABASE_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js for local Auth integration test
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies for local Auth integration test
+        run: npm ci --ignore-scripts
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v3.0.1
+        with:
+          version: "2.118.0"
+
+      - name: Start full local Supabase stack
+        run: supabase start
+
+      - name: Export local Supabase Auth environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          eval "$(supabase status -o env)"
+          ANON="${ANON_KEY:-${PUBLISHABLE_KEY:-}}"
+          SERVICE="${SERVICE_ROLE_KEY:-${SECRET_KEY:-}}"
+          API="${API_URL:-http://127.0.0.1:54321}"
+
+          test -n "$ANON"
+          test -n "$SERVICE"
+          case "$API" in
+            http://127.0.0.1:*|http://localhost:*) ;;
+            *)
+              echo "ERROR: refusing non-local Supabase URL in Auth integration test."
+              exit 1
+              ;;
+          esac
+
+          {
+            echo "SUPABASE_LOCAL_URL=$API"
+            echo "SUPABASE_LOCAL_ANON_KEY=$ANON"
+            echo "SUPABASE_LOCAL_SERVICE_ROLE_KEY=$SERVICE"
+          } >> "$GITHUB_ENV"
+
+      - name: Replay all migrations from scratch
+        run: supabase db reset --local --no-seed
+
+      - name: Lint public database functions
+        run: |
+          set -euo pipefail
+          supabase db lint --local --schema public --level warning --fail-on warning
+
+      - name: Run database integrity tests
+        run: |
+          set -euo pipefail
+          supabase test db --local
+
+      - name: Verify real TAKATAK Auth JWT and RLS boundary
+        run: node scripts/ci-takatak-local-auth-session.mjs
+
+      - name: Capture local Auth and Postgres diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          echo "=== Supabase containers ==="
+          docker ps --format '{{.Names}}'
+
+          AUTH_CONTAINER="$(docker ps --format '{{.Names}}' | grep '^supabase_auth_' | head -n1)"
+          DB_CONTAINER="$(docker ps --format '{{.Names}}' | grep '^supabase_db_' | head -n1)"
+
+          if [ -n "$AUTH_CONTAINER" ]; then
+            echo "=== Auth logs (tail 200) ==="
+            docker logs "$AUTH_CONTAINER" --tail 200 2>&1
+          fi
+
+          if [ -n "$DB_CONTAINER" ]; then
+            echo "=== Postgres logs (tail 200) ==="
+            docker logs "$DB_CONTAINER" --tail 200 2>&1
+          fi
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup || true

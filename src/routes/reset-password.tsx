@@ -1,52 +1,42 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AuthShell } from "@/components/AuthShell";
-import { PasswordField, passwordStrength } from "@/components/PasswordField";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 
 export const Route = createFileRoute("/reset-password")({
   component: ResetPassword,
-  head: () => ({ meta: [{ title: "Set new password — 1LV.CA" }] }),
+  head: () => ({ meta: [{ title: "Secure sign in — 1LV.CA" }] }),
 });
 
 function ResetPassword() {
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const nav = useNavigate();
-
-  const onSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (loading) return;
-    if (passwordStrength(password).score < 2) {
-      toast.error("Choose a stronger password.");
-      return;
-    }
-    setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password });
-    setLoading(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Password updated.");
-    nav({ to: "/account" });
-  };
-
   return (
-    <AuthShell title="Choose a new password" subtitle="Make it long and unique.">
-      <form onSubmit={onSubmit} className="space-y-3">
-        <PasswordField
-          value={password}
-          onChange={setPassword}
-          label="New password"
-          autoComplete="new-password"
-          showStrength
-        />
-        <button
-          disabled={loading}
-          className="w-full rounded-md bg-electric px-4 py-2.5 text-sm font-bold text-electric-foreground hover:opacity-90 disabled:opacity-60"
+    <AuthShell
+      title="Password reset is no longer used"
+      subtitle="1LV authentication is controlled by GROUPE TAKATAK."
+      footer={
+        <Link
+          to="/login"
+          className="font-semibold text-electric hover:underline"
         >
-          {loading ? "Updating…" : "Update password"}
-        </button>
-      </form>
+          ← Back to secure sign in
+        </Link>
+      }
+    >
+      <div className="space-y-3 text-sm text-muted-foreground">
+        <p>
+          For security and identity isolation, this route cannot change a
+          local 1LV password.
+        </p>
+        <p>
+          Use the verified-phone sign-in flow. GROUPE TAKATAK authenticates
+          the identity; 1LV then creates only its own local marketplace
+          session.
+        </p>
+        <Link
+          to="/login"
+          className="inline-flex w-full items-center justify-center rounded-md bg-electric px-4 py-2.5 text-sm font-bold text-electric-foreground hover:opacity-90"
+        >
+          Continue to secure sign in
+        </Link>
+      </div>
     </AuthShell>
   );
 }

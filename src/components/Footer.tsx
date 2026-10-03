@@ -11,7 +11,7 @@ export function Footer() {
             1LV.CA is Canada's marketplace for everyday essentials and unique finds — powered by trusted Canadian and global vendors.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            {["🇨🇦 CAD", "EN / FR", "Secure checkout", "Klarna ready"].map((t) => (
+            {["🇨🇦 CAD", "EN / FR", "Secure checkout", "Buyer protection"].map((t) => (
               <span key={t} className="rounded-md border border-white/15 px-2 py-1 text-[11px] text-white/80">
                 {t}
               </span>

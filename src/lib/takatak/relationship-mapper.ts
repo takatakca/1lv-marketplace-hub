@@ -7,17 +7,14 @@ export type RelationshipInput = {
   firstSeenAt?: string | null;
   lastSeenAt?: string | null;
   orderCount?: number | null;
-  /** Lifetime value WITH THIS VENDOR ONLY. Never aggregate across merchants. */
-  lifetimeValue?: number | null;
-  currency?: string;
 };
 
 /**
  * Build a single "person is a customer of this vendor, through 1LV" edge.
  *
  * TAKATAK stitches these edges into the global relationship graph. The graph
- * is NEVER sent back down to a vendor: Vendor B must not learn that the same
- * person also buys from Vendor C, PPP, Ramasse, QMAPS, etc.
+ * is NEVER sent back down to a vendor: one 1LV merchant must never learn
+ * that the same person also uses another merchant, company, or application.
  */
 export function mapRelationship(input: RelationshipInput): TakatakRelationshipPayload {
   return {
@@ -30,7 +27,5 @@ export function mapRelationship(input: RelationshipInput): TakatakRelationshipPa
     first_seen_at: input.firstSeenAt ?? null,
     last_seen_at: input.lastSeenAt ?? null,
     order_count: input.orderCount ?? null,
-    lifetime_value: input.lifetimeValue ?? null,
-    currency: input.currency ?? "CAD",
   };
 }

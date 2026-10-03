@@ -1,9 +1,10 @@
 import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
-import { products } from "@/lib/data";
+import { usePublicCatalog } from "@/hooks/use-public-catalog";
 import { ProductRail, SectionHead } from "./ProductRail";
 
 export function RecentlyViewed({ excludeId }: { excludeId?: string }) {
   const { ids } = useRecentlyViewed();
+  const { products } = usePublicCatalog();
   const items = ids
     .map((id) => products.find((p) => p.id === id))
     .filter((p): p is NonNullable<typeof p> => !!p && p.id !== excludeId)

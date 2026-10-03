@@ -25,7 +25,7 @@ function RoleSelect() {
           <span className="flex-1">
             <span className="block text-base font-bold text-navy">Shop as a customer</span>
             <span className="block text-xs text-muted-foreground">
-              Browse millions of products, save wishlists, track orders, and earn coupons.
+              Browse live marketplace products, save wishlists, and track your orders.
             </span>
           </span>
           <span className="self-center text-electric opacity-0 transition group-hover:opacity-100">→</span>
@@ -41,7 +41,7 @@ function RoleSelect() {
           <span className="flex-1">
             <span className="block text-base font-bold text-navy">Sell as a vendor</span>
             <span className="block text-xs text-muted-foreground">
-              Open a store, upload products, and reach Canadian shoppers. Onboarding takes ~5 min.
+              Create a store profile, complete vendor onboarding, and publish approved products.
             </span>
           </span>
           <span className="self-center text-deal opacity-0 transition group-hover:opacity-100">→</span>

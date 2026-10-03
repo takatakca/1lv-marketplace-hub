@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
+import { usePublicMarketplaceSettings } from "@/hooks/use-marketplace-settings";
 import { getMyVendor, type VendorRecord } from "@/services/vendors";
 import { createProduct } from "@/services/products";
 import { isDemoMode } from "@/lib/demo-mode";
@@ -10,6 +11,7 @@ import { DemoBanner, PreviewModeNotice } from "@/components/DemoBanner";
 function Page() {
   const nav = useNavigate();
   const { user } = useAuth();
+  const { settings: marketplaceSettings } = usePublicMarketplaceSettings();
   const demo = isDemoMode(user);
   const [vendor, setVendor] = useState<VendorRecord | null>(null);
   const [saving, setSaving] = useState(false);
@@ -42,6 +44,7 @@ function Page() {
 
   const subActive = vendor?.subscription_status === "active" || vendor?.subscription_status === "trialing";
   const canPublish = vendor?.status === "active" && subActive;
+  const requiresProductApproval = marketplaceSettings?.require_product_approval ?? true;
 
   const submit = async (status: "draft" | "pending_review") => {
     if (demo) {
@@ -55,12 +58,16 @@ function Page() {
       return;
     }
     if (status === "pending_review" && !canPublish) {
-      toast.error("Vendor must be approved and have an active subscription to submit for review. Draft saved instead.");
+      toast.error(
+        requiresProductApproval
+          ? "Vendor must be approved and have an active subscription to submit for review. Draft saved instead."
+          : "Vendor must be approved and have an active subscription to publish. Draft saved instead.",
+      );
       status = "draft";
     }
     setSaving(true);
     try {
-      await createProduct(vendor.id, {
+      const saved = await createProduct(vendor.id, {
         title: f.title,
         description: f.description,
         short_description: f.short_description,
@@ -76,7 +83,13 @@ function Page() {
         supplier_url: f.supplier_url || null,
         status,
       });
-      toast.success(status === "draft" ? "Draft saved" : "Submitted for review");
+      toast.success(
+        status === "draft"
+          ? "Draft saved"
+          : saved.status === "active"
+            ? "Product published"
+            : "Submitted for review",
+      );
       nav({ to: "/vendor/products" });
     } catch (err) {
       toast.error((err as Error).message);
@@ -120,7 +133,9 @@ function Page() {
         </div>
         <div className="flex flex-wrap gap-3">
           <button type="submit" disabled={saving} className="rounded-md border border-border bg-background px-4 py-2 text-sm font-semibold text-navy disabled:opacity-50">Save draft</button>
-          <button type="button" disabled={saving} onClick={() => submit("pending_review")} className="rounded-md bg-electric px-4 py-2 text-sm font-semibold text-electric-foreground disabled:opacity-50">Submit for review</button>
+          <button type="button" disabled={saving} onClick={() => submit("pending_review")} className="rounded-md bg-electric px-4 py-2 text-sm font-semibold text-electric-foreground disabled:opacity-50">
+            {requiresProductApproval ? "Submit for review" : "Publish product"}
+          </button>
         </div>
       </form>
     </div>

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DataTable } from "@/components/DataTable";
 import { DisputeThread } from "@/components/DisputeThread";
@@ -150,15 +150,21 @@ function DisputeDrawer({
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const reload = () => {
+  const reload = useCallback(() => {
     Promise.all([getDispute(disputeId), listRefundsForDispute(disputeId)]).then(([d, r]) => {
       setDispute(d);
       setRefunds(r);
-      if (d && !amount) setAmount(String(d.approved_refund_amount || d.requested_refund_amount || ""));
+      if (d) {
+        setAmount((current) =>
+          current || String(d.approved_refund_amount || d.requested_refund_amount || ""),
+        );
+      }
     });
-  };
+  }, [disputeId]);
 
-  useEffect(reload, [disputeId]);
+  useEffect(() => {
+    reload();
+  }, [reload]);
 
   const act = async (
     action: Parameters<typeof runDisputeAction>[0]["action"],
@@ -214,11 +220,29 @@ function DisputeDrawer({
                 disabled={busy}
                 className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
               >
-                {DISPUTE_STATUSES.map((s) => (
+                {DISPUTE_STATUSES.filter(
+                  (s) =>
+                    ![
+                      "resolved_customer",
+                      "resolved_vendor",
+                      "rejected",
+                      "cancelled",
+                    ].includes(s),
+                ).map((s) => (
                   <option key={s} value={s}>
                     {disputeStatusLabel(s)}
                   </option>
                 ))}
+                {[
+                  "resolved_customer",
+                  "resolved_vendor",
+                  "rejected",
+                  "cancelled",
+                ].includes(dispute.status) && (
+                  <option value={dispute.status}>
+                    {disputeStatusLabel(dispute.status)}
+                  </option>
+                )}
               </select>
             </div>
 
@@ -262,6 +286,9 @@ function DisputeDrawer({
               <button disabled={busy} onClick={() => act("reject")} className="rounded-md border border-border px-3 py-2 text-xs font-semibold text-destructive">
                 Reject dispute
               </button>
+              <button disabled={busy} onClick={() => act("cancel")} className="rounded-md border border-border px-3 py-2 text-xs font-semibold text-muted-foreground">
+                Cancel dispute
+              </button>
             </div>
 
             {refunds.length > 0 && (
@@ -275,13 +302,17 @@ function DisputeDrawer({
                         {r.status}
                       </span>
                       {r.failure_reason && <span className="text-xs text-destructive">{r.failure_reason}</span>}
-                      {r.status === "approved" && (
+                      {["approved", "processing", "failed"].includes(r.status) && (
                         <button
                           disabled={busy}
                           onClick={() => runRefund(r.id)}
                           className="ml-auto rounded-md bg-navy px-3 py-1.5 text-xs font-semibold text-navy-foreground disabled:opacity-60"
                         >
-                          Process refund
+                          {r.status === "approved"
+                            ? "Process refund"
+                            : r.status === "processing"
+                              ? "Recheck refund"
+                              : "Retry refund"}
                         </button>
                       )}
                     </li>

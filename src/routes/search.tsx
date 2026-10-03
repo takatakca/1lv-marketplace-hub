@@ -1,14 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { z } from "zod";
 import { useState, useMemo, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Filter, Search as SearchIcon, SlidersHorizontal, X, Sparkles } from "lucide-react";
 import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { AppLayout } from "@/components/AppLayout";
 import { AISearchBar } from "@/components/AISearchBar";
 import { ProductGrid } from "@/components/ProductGrid";
 import { EmptyState } from "@/components/EmptyState";
-import { products, vendors, categories } from "@/lib/data";
-import { QUICK_CHIPS } from "@/services/ai-search";
+import { usePublicCategories } from "@/hooks/use-public-categories";
+import { usePublicCatalog } from "@/hooks/use-public-catalog";
+import { QUICK_CHIPS, toSearchNavigation } from "@/services/ai-search";
+import { searchPublicCatalogProducts } from "@/services/public-catalog";
 
 const searchSchema = z.object({
   q: fallback(z.string(), "").default(""),
@@ -29,7 +32,7 @@ export const Route = createFileRoute("/search")({
   head: () => ({
     meta: [
       { title: "Search products — 1LV.CA Marketplace" },
-      { name: "description", content: "Search 1LV.CA with smart filters and voice search: price, free shipping, Canadian sellers, ratings and deals." },
+      { name: "description", content: "Search live 1LV.CA marketplace products with price, category, Canadian seller and deal filters." },
       { property: "og:title", content: "Search products — 1LV.CA" },
       { property: "og:description", content: "Smart, voice-enabled product search across Canadian and global vendors." },
       { property: "og:type", content: "website" },
@@ -45,10 +48,19 @@ const PRICE_CEILING = 2000;
 function SearchPage() {
   const sp = Route.useSearch();
   const navigate = Route.useNavigate();
+  const { products, demo, loading: catalogLoading } = usePublicCatalog();
+  const {
+    categories: publicCategories,
+    loading: categoriesLoading,
+  } = usePublicCategories();
   const term = (sp.q ?? "").trim().toLowerCase();
 
   const safeSort: Sort = SORTS.includes(sp.sort as Sort) ? (sp.sort as Sort) : "relevance";
-  const smartCategory = categories.some((c) => c.slug === sp.category) ? sp.category : "";
+  const smartCategory = publicCategories.some(
+    (category) => category.slug === sp.category,
+  )
+    ? sp.category
+    : "";
 
   const [sort, setSort] = useState<Sort>(safeSort);
   const [maxPrice, setMaxPrice] = useState<number>(
@@ -61,6 +73,10 @@ function SearchPage() {
   const [saleOnly, setSaleOnly] = useState(sp.sale);
   const [category, setCategory] = useState(smartCategory);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const effectiveSort: Sort = sort;
+  const quickChips = demo
+    ? QUICK_CHIPS
+    : QUICK_CHIPS.filter((chip) => chip.label !== "Free shipping");
 
   // Re-sync when the URL changes (new search submitted from the header).
   useEffect(() => {
@@ -73,34 +89,101 @@ function SearchPage() {
     setSaleOnly(sp.sale);
     setCategory(smartCategory);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sp.q, sp.raw, sp.category, sp.minPrice, sp.maxPrice, sp.freeShipping, sp.canadian, sp.rating, sp.sale, sp.sort]);
+  }, [sp.q, sp.raw, sp.category, sp.minPrice, sp.maxPrice, sp.freeShipping, sp.canadian, sp.rating, sp.sale, sp.sort, smartCategory]);
+
+  const liveSearchQuery = useQuery({
+    queryKey: [
+      "public-marketplace-search",
+      term,
+      category,
+      minPrice,
+      maxPrice,
+      caOnly,
+      saleOnly,
+      minRating,
+      effectiveSort,
+    ],
+    queryFn: () =>
+      searchPublicCatalogProducts({
+        query: term,
+        categorySlug: category,
+        minPrice,
+        maxPrice,
+        canadianOnly: caOnly,
+        saleOnly,
+        minRating,
+        sort: effectiveSort,
+        limit: 60,
+      }),
+    enabled: !demo && !catalogLoading,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
 
   const results = useMemo(() => {
+    if (!demo) return liveSearchQuery.data ?? [];
+
     let r = term
-      ? products.filter((p) => p.title.toLowerCase().includes(term) || p.category.includes(term))
+      ? products.filter(
+          (p) =>
+            p.title.toLowerCase().includes(term) ||
+            p.category.includes(term),
+        )
       : products;
     if (category) r = r.filter((p) => p.category === category);
-    if (freeShip) r = r.filter((p) => p.shipping === "free" || p.shipping === "fast");
+    if (freeShip) {
+      r = r.filter((p) => p.shipping === "free" || p.shipping === "fast");
+    }
     if (minRating > 0) r = r.filter((p) => p.rating >= minRating);
     if (saleOnly) r = r.filter((p) => p.compareAt && p.compareAt > p.price);
     if (caOnly) {
-      const caVendors = new Set(vendors.filter((v) => v.country === "CA").map((v) => v.slug));
-      r = r.filter((p) => caVendors.has(p.vendorSlug));
+      r = r.filter((p) => p.vendorCountry === "CA" || p.tags.includes("local"));
     }
     r = r.filter((p) => p.price <= maxPrice && p.price >= minPrice);
 
-    switch (sort) {
-      case "price-asc": r = [...r].sort((a, b) => a.price - b.price); break;
-      case "price-desc": r = [...r].sort((a, b) => b.price - a.price); break;
-      case "rating": r = [...r].sort((a, b) => b.rating - a.rating); break;
-      case "sold": r = [...r].sort((a, b) => b.sold - a.sold); break;
+    switch (effectiveSort) {
+      case "price-asc":
+        r = [...r].sort((a, b) => a.price - b.price);
+        break;
+      case "price-desc":
+        r = [...r].sort((a, b) => b.price - a.price);
+        break;
+      case "rating":
+        r = [...r].sort((a, b) => b.rating - a.rating);
+        break;
+      case "sold":
+        r = [...r].sort((a, b) => b.sold - a.sold);
+        break;
     }
     return r;
-  }, [term, sort, maxPrice, minPrice, freeShip, minRating, caOnly, saleOnly, category]);
+  }, [
+    products,
+    demo,
+    liveSearchQuery.data,
+    term,
+    effectiveSort,
+    maxPrice,
+    minPrice,
+    freeShip,
+    minRating,
+    caOnly,
+    saleOnly,
+    category,
+  ]);
+
+  const searchLoading =
+    catalogLoading ||
+    categoriesLoading ||
+    (!demo && liveSearchQuery.isPending);
+  const searchError =
+    !demo && liveSearchQuery.error instanceof Error
+      ? liveSearchQuery.error.message
+      : null;
 
   const smartBits = [
     sp.q ? sp.q : null,
-    smartCategory ? `in ${categories.find((c) => c.slug === smartCategory)?.name}` : null,
+    smartCategory ? `in ${publicCategories.find((category) => category.slug === smartCategory)?.name_en}` : null,
     sp.minPrice !== undefined && sp.maxPrice !== undefined
       ? `between $${sp.minPrice} and $${sp.maxPrice}`
       : sp.maxPrice !== undefined
@@ -108,23 +191,36 @@ function SearchPage() {
         : sp.minPrice !== undefined
           ? `over $${sp.minPrice}`
           : null,
-    sp.freeShipping ? "with free shipping" : null,
+    demo && sp.freeShipping ? "with free shipping" : null,
     sp.canadian ? "from Canadian sellers" : null,
-    sp.rating ? `rated ${sp.rating}+ stars` : null,
+    sp.rating ? `rated ${sp.rating}+ verified stars` : null,
     sp.sale ? "on sale" : null,
   ].filter(Boolean);
 
   const hasSmart =
     sp.maxPrice !== undefined ||
     sp.minPrice !== undefined ||
-    sp.freeShipping ||
+    (demo && sp.freeShipping) ||
     sp.canadian ||
     sp.sale ||
     sp.rating > 0 ||
     !!smartCategory;
 
   const clearSmart = () =>
-    navigate({ search: { q: sp.q, sort: "relevance", category: "", freeShipping: false, canadian: false, sale: false, rating: 0 } as any });
+    navigate({
+      search: {
+        q: sp.q,
+        raw: undefined,
+        sort: "relevance",
+        category: "",
+        minPrice: undefined,
+        maxPrice: undefined,
+        freeShipping: false,
+        canadian: false,
+        sale: false,
+        rating: 0,
+      },
+    });
 
   const FilterPanel = () => (
     <div className="space-y-5 text-sm">
@@ -136,8 +232,11 @@ function SearchPage() {
           className="w-full rounded-md border border-border bg-white px-2 py-1.5 text-xs text-navy outline-none focus:border-electric"
         >
           <option value="">All categories</option>
-          {categories.map((c) => (
-            <option key={c.slug} value={c.slug}>{c.name}</option>
+          {publicCategories.map((category) => (
+            <option key={category.slug} value={category.slug}>
+              {category.parent_slug ? "↳ " : ""}
+              {category.name_en}
+            </option>
           ))}
         </select>
       </div>
@@ -154,15 +253,17 @@ function SearchPage() {
           aria-label="Maximum price"
         />
       </div>
+      {demo && (
+        <div className="space-y-2">
+          <p className="font-semibold text-navy">Shipping</p>
+          <label className="flex items-center gap-2 text-xs">
+            <input type="checkbox" checked={freeShip} onChange={(e) => setFreeShip(e.target.checked)} />
+            Free / fast shipping
+          </label>
+        </div>
+      )}
       <div className="space-y-2">
-        <p className="font-semibold text-navy">Shipping</p>
-        <label className="flex items-center gap-2 text-xs">
-          <input type="checkbox" checked={freeShip} onChange={(e) => setFreeShip(e.target.checked)} />
-          Free / fast shipping
-        </label>
-      </div>
-      <div className="space-y-2">
-        <p className="font-semibold text-navy">Rating</p>
+        <p className="font-semibold text-navy">Verified rating</p>
         {[0, 3, 4, 4.5].map((r) => (
           <label key={r} className="flex items-center gap-2 text-xs">
             <input type="radio" name="rating" checked={minRating === r} onChange={() => setMinRating(r)} />
@@ -209,11 +310,11 @@ function SearchPage() {
         )}
 
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {QUICK_CHIPS.map((chip) => (
+          {quickChips.map((chip) => (
             <Link
               key={chip.label}
               to="/search"
-              search={chip.search as any}
+              search={toSearchNavigation(chip.search)}
               className="rounded-full border border-border bg-white px-2.5 py-1 text-xs text-navy hover:border-electric hover:text-electric"
             >
               {chip.label}
@@ -222,7 +323,7 @@ function SearchPage() {
         </div>
 
         <div className="mt-3 flex items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">{results.length} products</p>
+          <p className="text-sm text-muted-foreground">{searchLoading ? "Searching…" : `${results.length} products`}</p>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setDrawerOpen(true)}
@@ -233,7 +334,7 @@ function SearchPage() {
             <label className="inline-flex items-center gap-2 text-xs">
               <span className="text-muted-foreground">Sort:</span>
               <select
-                value={sort}
+                value={effectiveSort}
                 onChange={(e) => setSort(e.target.value as Sort)}
                 className="rounded-md border border-border bg-white px-2 py-1.5 text-xs font-medium text-navy outline-none focus:border-electric"
               >
@@ -258,7 +359,19 @@ function SearchPage() {
           </aside>
 
           <div>
-            {results.length > 0 ? (
+            {searchLoading ? (
+              <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+                Searching the live marketplace…
+              </div>
+            ) : searchError ? (
+              <EmptyState
+                icon={SearchIcon}
+                title="Search unavailable"
+                description="The live marketplace search could not be loaded. Please try again."
+                actionLabel="Browse categories"
+                to="/categories"
+              />
+            ) : results.length > 0 ? (
               <ProductGrid products={results} cols={6} />
             ) : (
               <EmptyState

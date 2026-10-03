@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { signalVendorOrderDelivered } from "./takatak-sync";
+import { auditMissingVendorOrdersServer } from "@/lib/admin-marketplace.functions";
 
 export type OrderRecord = {
   id: string;
@@ -49,42 +50,80 @@ export type VendorOrderRecord = {
 
 // ---------- Vendor-facing: vendor_orders ----------
 
+export type VendorOrderListRecord = VendorOrderRecord & {
+  orders: {
+    id: string;
+    order_number: string;
+    payment_status: string;
+    customer_email: string | null;
+    created_at: string;
+  };
+};
+
+export type VendorOrderDetailRecord = VendorOrderRecord & {
+  orders: {
+    id: string;
+    order_number: string;
+    payment_status: string;
+    shipping_address: Record<string, unknown> | null;
+    customer_email: string | null;
+    customer_phone: string | null;
+    created_at: string;
+  };
+};
+
 export async function listVendorOrders(vendorId: string) {
-  const { data, error } = await supabase
-    .from("vendor_orders" as never)
-    .select("*, orders!inner(id, order_number, payment_status, total, customer_email, created_at)")
-    .eq("vendor_id", vendorId)
-    .order("created_at", { ascending: false });
+  const { data, error } = await supabase.rpc(
+    "list_vendor_orders_for_current_user",
+    { _vendor_id: vendorId },
+  );
   if (error) throw error;
-  return (data ?? []) as Array<
-    VendorOrderRecord & {
-      orders: { id: string; order_number: string; payment_status: string; total: number; customer_email: string | null; created_at: string };
-    }
-  >;
+
+  const rows = data as unknown;
+  return (Array.isArray(rows) ? rows : []) as VendorOrderListRecord[];
 }
 
 export async function getVendorOrder(vendorOrderId: string) {
-  const { data, error } = await supabase
-    .from("vendor_orders" as never)
-    .select("*, orders!inner(*)")
-    .eq("id", vendorOrderId)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc(
+    "get_vendor_order_for_current_user",
+    { _vendor_order_id: vendorOrderId },
+  );
   if (error) throw error;
-  return data as
-    | (VendorOrderRecord & { orders: Record<string, unknown> })
-    | null;
+
+  const row = data as unknown;
+  if (!row || typeof row !== "object" || Array.isArray(row)) return null;
+  return row as VendorOrderDetailRecord;
 }
 
 export async function updateVendorOrder(
   id: string,
   patch: Partial<Pick<VendorOrderRecord, "status" | "tracking_number" | "carrier">>,
 ) {
-  const { error } = await supabase
-    .from("vendor_orders" as never)
-    .update(patch as never)
-    .eq("id", id);
+  if (!patch.status) {
+    throw new Error("A fulfillment status is required.");
+  }
+
+  const { data, error } = await supabase.rpc(
+    "update_vendor_order_fulfillment" as never,
+    {
+      _vendor_order_id: id,
+      _next_status: patch.status,
+      _tracking_number: patch.tracking_number ?? null,
+      _carrier: patch.carrier ?? null,
+    } as never,
+  );
+
   if (error) throw error;
-  if (patch.status === "delivered") signalVendorOrderDelivered(id);
+
+  const result = (data ?? {}) as unknown as {
+    ok?: boolean;
+    status?: VendorOrderStatus;
+  };
+  if (result.ok !== true) {
+    throw new Error("Vendor fulfillment update was not accepted.");
+  }
+
+  if (result.status === "delivered") signalVendorOrderDelivered(id);
 }
 
 // ---------- Order items (still used to show per-line products) ----------
@@ -92,32 +131,13 @@ export async function updateVendorOrder(
 export async function listItemsForVendorOrder(orderId: string, vendorId: string) {
   const { data, error } = await supabase
     .from("order_items")
-    .select("*")
+    .select(
+      "id, order_id, product_id, vendor_id, title, quantity, unit_price, status, tracking_number, carrier, created_at, updated_at",
+    )
     .eq("order_id", orderId)
     .eq("vendor_id", vendorId);
   if (error) throw error;
   return data ?? [];
-}
-
-// ---------- Legacy helpers kept for compatibility ----------
-
-export async function getOrderForVendor(orderId: string) {
-  const { data, error } = await supabase
-    .from("orders")
-    .select("*, order_items(*)")
-    .eq("id", orderId)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
-}
-
-export type FulfillmentStatus = "pending" | "processing" | "shipped" | "delivered" | "cancelled";
-export async function updateOrderItem(
-  itemId: string,
-  patch: { status?: FulfillmentStatus; tracking_number?: string | null; carrier?: string | null },
-) {
-  const { error } = await supabase.from("order_items").update(patch).eq("id", itemId);
-  if (error) throw error;
 }
 
 // ---------- Admin ----------
@@ -145,49 +165,11 @@ export async function listAllOrdersWithSplits() {
 }
 
 /**
- * Admin-only: create vendor_orders for any orders that have order_items but
- * no vendor_orders rows yet. Uses vendor.commission_rate (default 10%).
+ * Admin-only audit for legacy orders missing vendor splits.
+ *
+ * No financial rows are created because historical order items do not carry an
+ * immutable commission-rate snapshot.
  */
-export async function backfillVendorOrders(): Promise<{ created: number; skipped: number }> {
-  const { data: orders, error } = await supabase
-    .from("orders")
-    .select("id, order_items(vendor_id, quantity, unit_price), vendor_orders(id)");
-  if (error) throw error;
-
-  let created = 0;
-  let skipped = 0;
-  for (const o of (orders ?? []) as Array<{
-    id: string;
-    order_items: Array<{ vendor_id: string; quantity: number; unit_price: number }>;
-    vendor_orders: Array<{ id: string }>;
-  }>) {
-    if ((o.vendor_orders ?? []).length > 0 || (o.order_items ?? []).length === 0) {
-      skipped++;
-      continue;
-    }
-    const byVendor = new Map<string, number>();
-    for (const it of o.order_items) {
-      byVendor.set(it.vendor_id, (byVendor.get(it.vendor_id) ?? 0) + Number(it.unit_price) * it.quantity);
-    }
-    const vendorIds = Array.from(byVendor.keys());
-    const { data: vs } = await supabase
-      .from("vendors").select("id, commission_rate").in("id", vendorIds);
-    const rateBy = new Map<string, number>(
-      (vs ?? []).map((r) => [r.id, Number((r as { commission_rate?: number }).commission_rate ?? 0.1)]),
-    );
-    const rows = vendorIds.map((vid) => {
-      const sub = byVendor.get(vid)!;
-      const rate = rateBy.get(vid) ?? 0.1;
-      const commission = +(sub * rate).toFixed(2);
-      return {
-        order_id: o.id, vendor_id: vid, subtotal: sub,
-        commission_amount: commission, vendor_payout_amount: +(sub - commission).toFixed(2),
-        status: "pending" as const,
-      };
-    });
-    const { error: insErr } = await supabase.from("vendor_orders" as never).insert(rows as never);
-    if (insErr) throw insErr;
-    created += rows.length;
-  }
-  return { created, skipped };
+export async function auditMissingVendorOrders() {
+  return await auditMissingVendorOrdersServer();
 }

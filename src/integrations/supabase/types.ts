@@ -220,6 +220,7 @@ export type Database = {
           carrier: string | null
           created_at: string
           id: string
+          inventory_reserved: boolean
           order_id: string
           product_id: string | null
           quantity: number
@@ -234,6 +235,7 @@ export type Database = {
           carrier?: string | null
           created_at?: string
           id?: string
+          inventory_reserved?: boolean
           order_id: string
           product_id?: string | null
           quantity?: number
@@ -248,6 +250,7 @@ export type Database = {
           carrier?: string | null
           created_at?: string
           id?: string
+          inventory_reserved?: boolean
           order_id?: string
           product_id?: string | null
           quantity?: number
@@ -299,7 +302,12 @@ export type Database = {
       orders: {
         Row: {
           billing_address: Json | null
+          checkout_idempotency_hash: string | null
+          checkout_request_hash: string | null
           created_at: string
+          inventory_committed_at: string | null
+          inventory_released_at: string | null
+          inventory_reserved_until: string | null
           currency: string
           customer_email: string | null
           customer_id: string | null
@@ -308,6 +316,9 @@ export type Database = {
           id: string
           order_number: string
           payment_status: Database["public"]["Enums"]["payment_status"]
+          promotion_code: string | null
+          promotion_id: string | null
+          promotion_savings_total: number
           shipping_address: Json | null
           shipping_total: number
           status: Database["public"]["Enums"]["order_status"]
@@ -322,7 +333,12 @@ export type Database = {
         }
         Insert: {
           billing_address?: Json | null
+          checkout_idempotency_hash?: string | null
+          checkout_request_hash?: string | null
           created_at?: string
+          inventory_committed_at?: string | null
+          inventory_released_at?: string | null
+          inventory_reserved_until?: string | null
           currency?: string
           customer_email?: string | null
           customer_id?: string | null
@@ -331,6 +347,9 @@ export type Database = {
           id?: string
           order_number?: string
           payment_status?: Database["public"]["Enums"]["payment_status"]
+          promotion_code?: string | null
+          promotion_id?: string | null
+          promotion_savings_total?: number
           shipping_address?: Json | null
           shipping_total?: number
           status?: Database["public"]["Enums"]["order_status"]
@@ -345,7 +364,12 @@ export type Database = {
         }
         Update: {
           billing_address?: Json | null
+          checkout_idempotency_hash?: string | null
+          checkout_request_hash?: string | null
           created_at?: string
+          inventory_committed_at?: string | null
+          inventory_released_at?: string | null
+          inventory_reserved_until?: string | null
           currency?: string
           customer_email?: string | null
           customer_id?: string | null
@@ -377,6 +401,7 @@ export type Database = {
           kind: string
           note: string | null
           payout_id: string | null
+          refund_id: string | null
           vendor_id: string
           vendor_order_id: string | null
         }
@@ -388,6 +413,7 @@ export type Database = {
           kind?: string
           note?: string | null
           payout_id?: string | null
+          refund_id?: string | null
           vendor_id: string
           vendor_order_id?: string | null
         }
@@ -399,6 +425,7 @@ export type Database = {
           kind?: string
           note?: string | null
           payout_id?: string | null
+          refund_id?: string | null
           vendor_id?: string
           vendor_order_id?: string | null
         }
@@ -802,6 +829,168 @@ export type Database = {
           },
         ]
       }
+      promotion_redemptions: {
+        Row: {
+          code_snapshot: string
+          created_at: string
+          customer_email: string
+          customer_id: string | null
+          discount_amount: number
+          expires_at: string | null
+          id: string
+          merchandise_discount: number
+          order_id: string
+          promotion_id: string
+          redeemed_at: string | null
+          refunded_at: string | null
+          released_at: string | null
+          shipping_discount: number
+          status: string
+        }
+        Insert: {
+          code_snapshot: string
+          created_at?: string
+          customer_email: string
+          customer_id?: string | null
+          discount_amount?: number
+          expires_at?: string | null
+          id?: string
+          merchandise_discount?: number
+          order_id: string
+          promotion_id: string
+          redeemed_at?: string | null
+          refunded_at?: string | null
+          released_at?: string | null
+          shipping_discount?: number
+          status?: string
+        }
+        Update: {
+          code_snapshot?: string
+          created_at?: string
+          customer_email?: string
+          customer_id?: string | null
+          discount_amount?: number
+          expires_at?: string | null
+          id?: string
+          merchandise_discount?: number
+          order_id?: string
+          promotion_id?: string
+          redeemed_at?: string | null
+          refunded_at?: string | null
+          released_at?: string | null
+          shipping_discount?: number
+          status?: string
+        }
+        Relationships: []
+      }
+      promotion_targets: {
+        Row: {
+          category_slug: string | null
+          created_at: string
+          id: string
+          is_exclusion: boolean
+          product_id: string | null
+          promotion_id: string
+          target_type: string
+          vendor_id: string | null
+        }
+        Insert: {
+          category_slug?: string | null
+          created_at?: string
+          id?: string
+          is_exclusion?: boolean
+          product_id?: string | null
+          promotion_id: string
+          target_type: string
+          vendor_id?: string | null
+        }
+        Update: {
+          category_slug?: string | null
+          created_at?: string
+          id?: string
+          is_exclusion?: boolean
+          product_id?: string | null
+          promotion_id?: string
+          target_type?: string
+          vendor_id?: string | null
+        }
+        Relationships: []
+      }
+      promotions: {
+        Row: {
+          active: boolean
+          code: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          discount_type: string
+          discount_value: number
+          ends_at: string | null
+          exclusive_group: string | null
+          first_order_only: boolean
+          global_usage_limit: number | null
+          id: string
+          max_discount: number | null
+          min_order: number
+          name: string
+          per_customer_limit: number | null
+          priority: number
+          publicly_listed: boolean
+          restores_on_refund: boolean
+          stackable: boolean
+          starts_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          code: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          discount_type: string
+          discount_value?: number
+          ends_at?: string | null
+          exclusive_group?: string | null
+          first_order_only?: boolean
+          global_usage_limit?: number | null
+          id?: string
+          max_discount?: number | null
+          min_order?: number
+          name: string
+          per_customer_limit?: number | null
+          priority?: number
+          publicly_listed?: boolean
+          restores_on_refund?: boolean
+          stackable?: boolean
+          starts_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          discount_type?: string
+          discount_value?: number
+          ends_at?: string | null
+          exclusive_group?: string | null
+          first_order_only?: boolean
+          global_usage_limit?: number | null
+          id?: string
+          max_discount?: number | null
+          min_order?: number
+          name?: string
+          per_customer_limit?: number | null
+          priority?: number
+          publicly_listed?: boolean
+          restores_on_refund?: boolean
+          stackable?: boolean
+          starts_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       products: {
         Row: {
           category_slug: string | null
@@ -882,6 +1071,56 @@ export type Database = {
             columns: ["vendor_id"]
             isOneToOne: false
             referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profile_consent_events: {
+        Row: {
+          captured_at: string
+          consent_revision: string
+          created_at: string
+          id: string
+          marketing_consent_revision: string | null
+          marketing_opt_in: boolean
+          privacy_accepted: boolean
+          profile_id: string
+          source: string
+          takatak_person_id: string
+          terms_accepted: boolean
+        }
+        Insert: {
+          captured_at?: string
+          consent_revision: string
+          created_at?: string
+          id?: string
+          marketing_consent_revision?: string | null
+          marketing_opt_in?: boolean
+          privacy_accepted: boolean
+          profile_id: string
+          source?: string
+          takatak_person_id: string
+          terms_accepted: boolean
+        }
+        Update: {
+          captured_at?: string
+          consent_revision?: string
+          created_at?: string
+          id?: string
+          marketing_consent_revision?: string | null
+          marketing_opt_in?: boolean
+          privacy_accepted?: boolean
+          profile_id?: string
+          source?: string
+          takatak_person_id?: string
+          terms_accepted?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_consent_events_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1022,21 +1261,30 @@ export type Database = {
       stripe_event_log: {
         Row: {
           id: string
+          last_error: string | null
           payload: Json | null
-          processed_at: string
+          processed_at: string | null
+          status: string
           type: string
+          updated_at: string
         }
         Insert: {
           id: string
+          last_error?: string | null
           payload?: Json | null
-          processed_at?: string
+          processed_at?: string | null
+          status?: string
           type: string
+          updated_at?: string
         }
         Update: {
           id?: string
+          last_error?: string | null
           payload?: Json | null
-          processed_at?: string
+          processed_at?: string | null
+          status?: string
           type?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -1099,6 +1347,7 @@ export type Database = {
           aggregate_id: string
           aggregate_type: string
           attempt_count: number
+          claim_token: string | null
           created_at: string
           delivered_at: string | null
           event_key: string | null
@@ -1116,6 +1365,7 @@ export type Database = {
           aggregate_id: string
           aggregate_type: string
           attempt_count?: number
+          claim_token?: string | null
           created_at?: string
           delivered_at?: string | null
           event_key?: string | null
@@ -1133,6 +1383,7 @@ export type Database = {
           aggregate_id?: string
           aggregate_type?: string
           attempt_count?: number
+          claim_token?: string | null
           created_at?: string
           delivered_at?: string | null
           event_key?: string | null
@@ -1427,6 +1678,54 @@ export type Database = {
           },
         ]
       }
+      public_promotions: {
+        Row: {
+          code: string | null
+          description: string | null
+          discount_type: string | null
+          discount_value: number | null
+          ends_at: string | null
+          first_order_only: boolean | null
+          id: string | null
+          max_discount: number | null
+          min_order: number | null
+          name: string | null
+          priority: number | null
+          stackable: boolean | null
+          starts_at: string | null
+        }
+        Insert: {
+          code?: string | null
+          description?: string | null
+          discount_type?: string | null
+          discount_value?: number | null
+          ends_at?: string | null
+          first_order_only?: boolean | null
+          id?: string | null
+          max_discount?: number | null
+          min_order?: number | null
+          name?: string | null
+          priority?: number | null
+          stackable?: boolean | null
+          starts_at?: string | null
+        }
+        Update: {
+          code?: string | null
+          description?: string | null
+          discount_type?: string | null
+          discount_value?: number | null
+          ends_at?: string | null
+          first_order_only?: boolean | null
+          id?: string | null
+          max_discount?: number | null
+          min_order?: number | null
+          name?: string | null
+          priority?: number | null
+          stackable?: boolean | null
+          starts_at?: string | null
+        }
+        Relationships: []
+      }
       public_vendors: {
         Row: {
           banner_url: string | null
@@ -1477,8 +1776,32 @@ export type Database = {
       }
     }
     Functions: {
+      claim_takatak_outbox: {
+        Args: { _limit?: number; _max_attempts?: number }
+        Returns: {
+          aggregate_id: string
+          aggregate_type: string
+          attempt_count: number
+          claim_token: string
+          event_type: string
+          id: string
+          payload: Json
+        }[]
+      }
+      claim_stripe_event: {
+        Args: { _id: string; _payload: Json; _type: string }
+        Returns: boolean
+      }
+      finalize_refund_accounting: {
+        Args: { _refund_id: string; _stripe_refund_id: string }
+        Returns: Json
+      }
       can_access_dispute: {
         Args: { _dispute_id: string; _user_id: string }
+        Returns: boolean
+      }
+      commit_order_inventory: {
+        Args: { _order_id: string }
         Returns: boolean
       }
       get_vendor_commission_rates: {
@@ -1495,10 +1818,81 @@ export type Database = {
         }
         Returns: boolean
       }
-      lookup_guest_order: { Args: { _order_number: string }; Returns: Json }
+      create_marketplace_order: {
+        Args: {
+          _billing_address: Json | null
+          _customer_email: string
+          _customer_id: string | null
+          _customer_phone: string
+          _idempotency_key: string
+          _items: Json
+          _promotion_code?: string | null
+          _shipping_address: Json
+        }
+        Returns: Json
+      }
+      create_marketplace_order_locked: {
+        Args: {
+          _billing_address: Json | null
+          _customer_email: string
+          _customer_id: string | null
+          _customer_phone: string
+          _idempotency_key: string
+          _items: Json
+          _promotion_code?: string | null
+          _shipping_address: Json
+        }
+        Returns: Json
+      }
+      create_vendor_payout_atomic: {
+        Args: {
+          _eligible_through: string
+          _period_end: string
+          _period_start: string
+          _vendor_id: string
+        }
+        Returns: Json
+      }
+      get_vendor_order_for_current_user: {
+        Args: { _vendor_order_id: string }
+        Returns: Json
+      }
+      list_vendor_orders_for_current_user: {
+        Args: { _vendor_id: string }
+        Returns: Json
+      }
+      lookup_guest_order: {
+        Args: { _checkout_key: string; _order_number: string }
+        Returns: Json
+      }
+      mark_order_promotion_refunded: {
+        Args: { _order_id: string }
+        Returns: boolean
+      }
       owns_vendor: {
         Args: { _user_id: string; _vendor_id: string }
         Returns: boolean
+      }
+      release_expired_inventory_reservations: {
+        Args: { _limit?: number }
+        Returns: number
+      }
+      release_order_inventory: {
+        Args: {
+          _expected_payment_intent_id: string | null
+          _order_id: string
+        }
+        Returns: boolean
+      }
+      reserve_order_promotion: {
+        Args: {
+          _base_shipping: number
+          _customer_email: string
+          _customer_id: string | null
+          _order_id: string
+          _promotion_code: string
+        }
+        Returns: Json
       }
     }
     Enums: {

@@ -1,14 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Upload, X, Image as ImageIcon } from "lucide-react";
-import { resolveAssetUrl, uploadVendorAsset, validateImageFile, type VendorAssetKind } from "@/services/vendor-assets";
+import {
+  deleteVendorAsset,
+  resolveAssetUrl,
+  uploadVendorAsset,
+  validateImageFile,
+  type VendorAssetKind,
+} from "@/services/vendor-assets";
 
 type Props = {
   kind: VendorAssetKind;
   label: string;
   userId?: string | null;
   value: string | null;
-  onChange: (path: string | null) => void;
+  onChange: (path: string | null) => void | Promise<void>;
   aspect?: "square" | "banner";
   disabled?: boolean;
 };
@@ -40,13 +46,30 @@ export function VendorAssetUpload({ kind, label, userId, value, onChange, aspect
     setBusy(true);
     try {
       const path = await uploadVendorAsset(userId, kind, f);
-      onChange(path);
+      try {
+        await onChange(path);
+      } catch (saveError) {
+        await deleteVendorAsset(path).catch(() => undefined);
+        throw saveError;
+      }
       toast.success(`${label} updated`);
     } catch (er) { toast.error((er as Error).message); }
     finally { setBusy(false); if (inputRef.current) inputRef.current.value = ""; }
   };
 
-  const clear = () => { onChange(null); setUrl(null); };
+  const clear = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await onChange(null);
+      setUrl(null);
+      toast.success(`${label} removed`);
+    } catch (er) {
+      toast.error((er as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const ratio = aspect === "banner" ? "aspect-[4/1]" : "aspect-square";
   return (
@@ -61,7 +84,6 @@ export function VendorAssetUpload({ kind, label, userId, value, onChange, aspect
       </div>
       <div className={`group relative overflow-hidden rounded-lg border border-dashed border-border bg-muted/30 ${ratio}`}>
         {url ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img src={url} alt={label} className="h-full w-full object-cover" />
         ) : (
           <div className="grid h-full place-items-center text-xs text-muted-foreground">

@@ -98,3 +98,118 @@ export async function listAllProducts() {
   if (error) throw error;
   return (data ?? []) as unknown as ProductRecord[];
 }
+
+
+export type BulkInventoryOperation = {
+  productId: string;
+  variantId?: string | null;
+  mode: "set" | "delta";
+  quantity: number;
+};
+
+export async function bulkSetVendorProductStatus(
+  vendorId: string,
+  productIds: string[],
+  status: Extract<ProductStatus, "draft" | "pending_review" | "archived">,
+) {
+  const ids = [...new Set(productIds)];
+  if (ids.length < 1 || ids.length > 500) {
+    throw new Error("Select between 1 and 500 products.");
+  }
+
+  const { data, error } = await supabase.rpc(
+    "bulk_set_vendor_product_status" as never,
+    {
+      _vendor_id: vendorId,
+      _product_ids: ids,
+      _requested_status: status,
+    } as never,
+  );
+  if (error) throw error;
+  return data as unknown as {
+    ok: true;
+    vendor_id: string;
+    requested_status: ProductStatus;
+    effective_status: ProductStatus;
+    affected_count: number;
+  };
+}
+
+export async function bulkAdjustVendorInventory(
+  vendorId: string,
+  operations: BulkInventoryOperation[],
+) {
+  if (operations.length < 1 || operations.length > 1000) {
+    throw new Error("Inventory batch must contain 1 to 1000 operations.");
+  }
+
+  const { data, error } = await supabase.rpc(
+    "bulk_adjust_vendor_inventory" as never,
+    {
+      _vendor_id: vendorId,
+      _operations: operations.map((operation) => ({
+        product_id: operation.productId,
+        variant_id: operation.variantId ?? null,
+        mode: operation.mode,
+        quantity: operation.quantity,
+      })),
+    } as never,
+  );
+  if (error) throw error;
+  return data as unknown as {
+    ok: true;
+    vendor_id: string;
+    affected_count: number;
+    parent_products: number;
+    variants: number;
+  };
+}
+
+export async function getVendorInventorySnapshot(
+  vendorId: string,
+  limit = 500,
+  offset = 0,
+) {
+  const { data, error } = await supabase.rpc(
+    "get_vendor_inventory_snapshot" as never,
+    {
+      _vendor_id: vendorId,
+      _limit: limit,
+      _offset: offset,
+    } as never,
+  );
+  if (error) throw error;
+  return (data ?? []) as unknown as Array<{
+    product_id: string;
+    product_title: string;
+    product_status: ProductStatus;
+    variant_id: string | null;
+    sku: string | null;
+    inventory_quantity: number;
+    track_inventory: boolean;
+    variant_active: boolean;
+    updated_at: string;
+  }>;
+}
+
+export async function listVendorCatalogAuditEvents(
+  vendorId: string,
+  limit = 100,
+) {
+  const { data, error } = await supabase.rpc(
+    "list_vendor_catalog_audit_events" as never,
+    {
+      _vendor_id: vendorId,
+      _limit: limit,
+    } as never,
+  );
+  if (error) throw error;
+  return (data ?? []) as unknown as Array<{
+    id: string;
+    kind: "bulk_status" | "bulk_inventory";
+    affected_count: number;
+    request_payload: Record<string, unknown>;
+    result_payload: Record<string, unknown>;
+    created_at: string;
+  }>;
+}

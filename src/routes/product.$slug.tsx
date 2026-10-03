@@ -1,7 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
-  ChevronRight, Heart, Minus, Plus, ShieldCheck, Truck, RefreshCw, Store, Ticket, Star, Lock, PackageCheck,
+  ChevronRight, Heart, Minus, Plus, ShieldCheck, Truck, RefreshCw, Store, BadgePercent, Star, Lock, PackageCheck,
 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
@@ -10,20 +10,98 @@ import { ProductImage } from "@/components/ProductImage";
 import { RatingStars } from "@/components/RatingStars";
 import { StickyBuyBar } from "@/components/StickyBuyBar";
 import { RecentlyViewed } from "@/components/RecentlyViewed";
-import { getProduct, getVendor, products, productsByCategory, formatCAD, getCategory, type Product } from "@/lib/data";
+import {
+  getProduct as getDemoProduct,
+  getVendor as getDemoVendor,
+  products as demoProducts,
+  productsByCategory as demoProductsByCategory,
+  formatCAD,
+  getCategory,
+  type Product,
+  type Vendor,
+} from "@/lib/data";
+import {
+  getPublicCatalogProductBySlug,
+  getPublicCatalogVendorBySlug,
+  listPublicCatalogProductsForCategory,
+  listPublicCatalogProductsForVendor,
+} from "@/services/public-catalog";
+import { getPublicMarketplaceSettings } from "@/lib/public-marketplace-settings.functions";
 import { useCart } from "@/hooks/use-cart";
 import { useWishlist } from "@/hooks/use-wishlist";
 import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 import { toast } from "sonner";
+import {
+  getPublicProductVariantMatrix,
+  type PublicProductVariantMatrix,
+} from "@/services/product-variants";
 
-type LoaderData = { product: Product };
+type LoaderData = {
+  product: Product;
+  vendor: Vendor | null;
+  related: Product[];
+  fromStore: Product[];
+  variantMatrix: PublicProductVariantMatrix;
+  demo: boolean;
+};
 
 export const Route = createFileRoute("/product/$slug")({
   component: ProductPage,
-  loader: ({ params }): LoaderData => {
-    const product = getProduct(params.slug);
-    if (!product) throw notFound();
-    return { product };
+  loader: async ({ params }): Promise<LoaderData> => {
+    const settings = await getPublicMarketplaceSettings().catch(() => null);
+
+    try {
+      const liveProduct = await getPublicCatalogProductBySlug(params.slug);
+
+      if (liveProduct) {
+        const [vendor, categoryProducts, vendorProducts, variantMatrix] =
+          await Promise.all([
+            getPublicCatalogVendorBySlug(liveProduct.vendorSlug),
+            listPublicCatalogProductsForCategory(liveProduct.category, 7),
+            listPublicCatalogProductsForVendor(liveProduct.vendorSlug, 9),
+            getPublicProductVariantMatrix(liveProduct.id),
+          ]);
+
+        return {
+          product: liveProduct,
+          vendor,
+          related: categoryProducts
+            .filter((item) => item.id !== liveProduct.id)
+            .slice(0, 6),
+          fromStore: vendorProducts
+            .filter((item) => item.id !== liveProduct.id)
+            .slice(0, 8),
+          variantMatrix,
+          demo: false,
+        };
+      }
+    } catch (error) {
+      if (!settings?.demo_mode) throw error;
+    }
+
+    if (settings?.demo_mode) {
+      const demoProduct = getDemoProduct(params.slug);
+      if (demoProduct) {
+        return {
+          product: demoProduct,
+          vendor: getDemoVendor(demoProduct.vendorSlug) ?? null,
+          related: demoProductsByCategory(demoProduct.category)
+            .filter((item) => item.id !== demoProduct.id)
+            .slice(0, 6),
+          fromStore: demoProducts
+            .filter(
+              (item) =>
+                item.vendorSlug === demoProduct.vendorSlug &&
+                item.id !== demoProduct.id,
+            )
+            .slice(0, 8),
+          variantMatrix: { options: [], variants: [] },
+          demo: true,
+        };
+      }
+    }
+
+    throw notFound();
   },
   head: ({ loaderData }) => {
     const data = loaderData as LoaderData | undefined;
@@ -59,25 +137,106 @@ function Accordion({ title, children, defaultOpen = false }: { title: string; ch
 }
 
 function ProductPage() {
-  const { product } = Route.useLoaderData() as LoaderData;
-  const vendor = getVendor(product.vendorSlug);
+  const { product, vendor, related, fromStore, variantMatrix, demo } =
+    Route.useLoaderData() as LoaderData;
   const category = getCategory(product.category);
-  const related = productsByCategory(product.category).filter((p) => p.id !== product.id).slice(0, 6);
-  const fromStore = products.filter((p) => p.vendorSlug === product.vendorSlug && p.id !== product.id).slice(0, 8);
   const [activeImg, setActiveImg] = useState(0);
   const [qty, setQty] = useState(1);
   const initialVariant: Record<string, string> = {};
-  product.variants?.forEach((v) => { initialVariant[v.name] = v.options[0]; });
-  const [variant, setVariant] = useState<Record<string, string>>(initialVariant);
+  if (demo) {
+    product.variants?.forEach((item) => {
+      const first = item.options[0];
+      if (first) initialVariant[item.name] = first;
+    });
+  } else {
+    const firstLiveVariant =
+      variantMatrix.variants.find((item) => item.available) ??
+      variantMatrix.variants[0];
+    if (firstLiveVariant) {
+      Object.assign(initialVariant, firstLiveVariant.attributes);
+    }
+  }
+  const [variant, setVariant] =
+    useState<Record<string, string>>(initialVariant);
   const { add } = useCart();
   const { has, toggle } = useWishlist();
   const { push } = useRecentlyViewed();
-  useEffect(() => { push(product.id); }, [product.id, push]);
 
-  const off = product.compareAt && product.compareAt > product.price
-    ? Math.round(((product.compareAt - product.price) / product.compareAt) * 100)
-    : 0;
-  const eta = new Date(Date.now() + 1000 * 60 * 60 * 24 * (product.shipping === "fast" ? 2 : 6));
+  useEffect(() => {
+    setActiveImg(0);
+    setQty(1);
+
+    const nextVariant: Record<string, string> = {};
+    if (demo) {
+      product.variants?.forEach((item) => {
+        const first = item.options[0];
+        if (first) nextVariant[item.name] = first;
+      });
+    } else {
+      const firstLiveVariant =
+        variantMatrix.variants.find((item) => item.available) ??
+        variantMatrix.variants[0];
+      if (firstLiveVariant) {
+        Object.assign(nextVariant, firstLiveVariant.attributes);
+      }
+    }
+    setVariant(nextVariant);
+  }, [demo, product.id, product.variants, variantMatrix]);
+
+  useEffect(() => {
+    push(product.id);
+  }, [product.id, push]);
+
+  const hasLiveVariants = !demo && variantMatrix.variants.length > 0;
+  const selectedLiveVariant = hasLiveVariants
+    ? variantMatrix.variants.find((item) =>
+        Object.entries(item.attributes).every(
+          ([name, value]) => variant[name] === value,
+        ),
+      ) ?? null
+    : null;
+  const currentPrice = selectedLiveVariant?.price ?? product.price;
+  const currentCompareAt =
+    selectedLiveVariant?.compare_at_price ?? product.compareAt;
+  const off =
+    currentCompareAt && currentCompareAt > currentPrice
+      ? Math.round(((currentCompareAt - currentPrice) / currentCompareAt) * 100)
+      : 0;
+  const cartVariantIdentity = selectedLiveVariant
+    ? {
+        id: selectedLiveVariant.id,
+        sku: selectedLiveVariant.sku,
+        price: selectedLiveVariant.price,
+        image: selectedLiveVariant.image_url ?? undefined,
+      }
+    : undefined;
+  const canSelectLiveOption = (name: string, value: string) =>
+    variantMatrix.variants.some(
+      (candidate) =>
+        candidate.available &&
+        candidate.attributes[name] === value &&
+        Object.entries(variant).every(
+          ([selectedName, selectedValue]) =>
+            selectedName === name ||
+            candidate.attributes[selectedName] === selectedValue,
+        ),
+    );
+  const eta = demo
+    ? new Date(
+        Date.now() +
+          1000 * 60 * 60 * 24 * (product.shipping === "fast" ? 2 : 6),
+      )
+    : null;
+  const soldOut = hasLiveVariants
+    ? !selectedLiveVariant?.available
+    : product.trackInventory &&
+      typeof product.inventoryQuantity === "number" &&
+      product.inventoryQuantity <= 0;
+  const maxQty = hasLiveVariants
+    ? 99
+    : product.trackInventory && typeof product.inventoryQuantity === "number"
+      ? Math.max(0, product.inventoryQuantity)
+      : 99;
 
   return (
     <AppLayout>
@@ -112,25 +271,24 @@ function ProductPage() {
           {/* Gallery */}
           <div className="group order-1 lg:order-2">
             <div className="relative aspect-square overflow-hidden rounded-xl border border-border bg-muted shadow-merch">
-              <ProductImage src={product.images[activeImg]} alt={product.title} eager />
+              <ProductImage
+                src={
+                  selectedLiveVariant?.image_url ??
+                  product.images[activeImg]
+                }
+                alt={product.title}
+                eager
+              />
               {off > 0 && (
                 <span className="absolute left-3 top-3 rounded-md bg-gradient-deal px-2 py-1 text-xs font-extrabold text-white shadow">
-                  -{off}% today
+                  -{off}% off
                 </span>
               )}
             </div>
 
-            {/* Details on desktop under gallery */}
+            {/* Detailed product information remains close to the gallery on desktop. */}
             <div className="mt-6 hidden lg:block">
-              <h1 className="font-display text-2xl font-extrabold tracking-tight text-navy">{product.title}</h1>
-              <div className="mt-2 flex flex-wrap items-center gap-3">
-                <RatingStars rating={product.rating} reviews={product.reviews} />
-                <span className="text-xs text-muted-foreground">{product.sold.toLocaleString()} sold</span>
-                {product.tags.includes("local") && (
-                  <span className="rounded-md bg-success/10 px-2 py-0.5 text-[11px] font-bold text-success">🇨🇦 Ships from Canada</span>
-                )}
-              </div>
-              <div className="mt-4 rounded-xl border border-border bg-card">
+              <div className="rounded-xl border border-border bg-card">
                 <div className="px-4">
                   <Accordion title="Product details" defaultOpen>
                     {product.description}
@@ -138,21 +296,39 @@ function ProductPage() {
                   <Accordion title="Specifications">
                     <ul className="space-y-1">
                       <li>Category: {category?.name ?? product.category}</li>
-                      <li>Seller: {vendor?.name}</li>
-                      <li>SKU: {product.id.toUpperCase()}</li>
-                      {product.variants?.map((v) => <li key={v.name}>{v.name}: {v.options.join(", ")}</li>)}
+                      {vendor?.name && <li>Seller: {vendor.name}</li>}
+                      <li>Product ID: {product.id}</li>
+                      {hasLiveVariants
+                        ? variantMatrix.options.map((option) => (
+                            <li key={option.id}>
+                              {option.name}:{" "}
+                              {option.values
+                                .map((value) => value.value)
+                                .join(", ")}
+                            </li>
+                          ))
+                        : product.variants?.map((item) => (
+                            <li key={item.name}>
+                              {item.name}: {item.options.join(", ")}
+                            </li>
+                          ))}
                     </ul>
                   </Accordion>
                   <Accordion title="Shipping & delivery">
-                    {product.shipping === "fast"
-                      ? "Express 2-day delivery across Canada."
-                      : product.shipping === "free"
-                      ? "Free standard shipping, 4–8 business days."
-                      : "Standard shipping, 5–10 business days. Free over $49 CAD."}
+                    {demo
+                      ? product.shipping === "fast"
+                        ? "Express 2-day delivery across Canada."
+                        : product.shipping === "free"
+                          ? "Free standard shipping, 4–8 business days."
+                          : "Standard shipping, 5–10 business days."
+                      : vendor?.shippingPolicy ??
+                        "Shipping options and delivery estimates are confirmed at checkout."}
                   </Accordion>
                   <Accordion title="Returns & buyer protection">
-                    30-day returns on unused items. Every order is covered by 1LV buyer protection — if it doesn't arrive
-                    as described, you're refunded.
+                    {demo
+                      ? "30-day returns on unused items. Every order is covered by 1LV buyer protection."
+                      : vendor?.returnPolicy ??
+                        "Return eligibility follows the seller policy and 1LV buyer-protection terms shown at checkout."}
                   </Accordion>
                 </div>
               </div>
@@ -165,89 +341,229 @@ function ProductPage() {
             <div className="mb-3 lg:hidden">
               <h1 className="font-display text-xl font-extrabold tracking-tight text-navy">{product.title}</h1>
               <div className="mt-1.5 flex flex-wrap items-center gap-3">
-                <RatingStars rating={product.rating} reviews={product.reviews} />
-                <span className="text-xs text-muted-foreground">{product.sold.toLocaleString()} sold</span>
+                {product.rating > 0 && (
+                  <RatingStars rating={product.rating} reviews={product.reviews} />
+                )}
+                {product.sold > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {product.sold.toLocaleString()} sold
+                  </span>
+                )}
               </div>
             </div>
 
             <div className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-merch">
+              <div className="hidden border-b border-border pb-4 lg:block">
+                <h1 className="font-display text-2xl font-extrabold leading-tight tracking-tight text-navy">
+                  {product.title}
+                </h1>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                  {product.rating > 0 && (
+                    <RatingStars rating={product.rating} reviews={product.reviews} />
+                  )}
+                  {product.sold > 0 && (
+                    <span className="font-semibold text-deal">
+                      {product.sold.toLocaleString()} sold
+                    </span>
+                  )}
+                  {vendor?.country === "CA" && (
+                    <span className="rounded-md bg-success/10 px-2 py-0.5 font-bold text-success">
+                      🇨🇦 Canadian seller
+                    </span>
+                  )}
+                </div>
+                {vendor?.name && (
+                  <Link
+                    to="/store/$slug"
+                    params={{ slug: vendor.slug }}
+                    className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-electric hover:underline"
+                  >
+                    <Store size={12} /> Sold by {vendor.name}
+                  </Link>
+                )}
+              </div>
+
               <div>
                 <div className="flex flex-wrap items-baseline gap-2">
-                  <span className="font-display text-3xl font-extrabold tracking-tight text-deal">{formatCAD(product.price)}</span>
-                  {product.compareAt && product.compareAt > product.price && (
-                    <span className="text-sm text-muted-foreground line-through">{formatCAD(product.compareAt)}</span>
+                  <span className="font-display text-3xl font-extrabold tracking-tight text-deal">
+                    {formatCAD(currentPrice)}
+                  </span>
+                  {currentCompareAt && currentCompareAt > currentPrice && (
+                    <span className="text-sm text-muted-foreground line-through">
+                      {formatCAD(currentCompareAt)}
+                    </span>
                   )}
                 </div>
                 {off > 0 && (
                   <p className="mt-1 text-xs font-semibold text-deal">
-                    You save {formatCAD((product.compareAt ?? 0) - product.price)} · limited-time price
+                    You save {formatCAD((currentCompareAt ?? 0) - currentPrice)}
                   </p>
                 )}
               </div>
 
-              <Link to="/coupons" className="flex items-center gap-2 rounded-md border border-dashed border-deal/40 bg-deal/5 px-3 py-2 text-xs text-navy hover:border-deal">
-                <Ticket size={14} className="text-deal" />
-                Extra 10% off with code <span className="font-mono font-bold text-deal">WELCOME10</span>
+              <Link
+                to="/coupons"
+                className="flex items-center gap-2 rounded-md border border-electric/20 bg-electric/5 px-3 py-2 text-xs text-navy hover:border-electric"
+              >
+                <BadgePercent size={14} className="text-electric" />
+                <span>
+                  See current verified promotions
+                  <span className="block text-[11px] text-muted-foreground">
+                    Eligibility and savings are confirmed securely at checkout.
+                  </span>
+                </span>
               </Link>
 
               <div className="space-y-1.5 rounded-md bg-muted/50 px-3 py-2.5 text-xs">
                 <p className="flex items-center gap-2 text-navy">
                   <Truck size={14} className="text-electric" />
-                  {product.shipping === "free" ? "Free shipping" : product.shipping === "fast" ? "Express shipping" : "Standard shipping"} · arrives by{" "}
-                  <strong>{eta.toLocaleDateString("en-CA", { month: "short", day: "numeric" })}</strong>
+                  {demo && eta ? (
+                    <>
+                      {product.shipping === "free"
+                        ? "Free shipping"
+                        : product.shipping === "fast"
+                          ? "Express shipping"
+                          : "Standard shipping"}{" "}
+                      · arrives by{" "}
+                      <strong>
+                        {eta.toLocaleDateString("en-CA", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </strong>
+                    </>
+                  ) : (
+                    "Shipping method and delivery estimate confirmed at checkout"
+                  )}
                 </p>
                 <p className="flex items-center gap-2 text-muted-foreground">
-                  <PackageCheck size={14} className="text-success" /> Free returns within 30 days
+                  <PackageCheck size={14} className="text-success" /> Return eligibility follows seller and marketplace terms
                 </p>
               </div>
 
-              {product.variants?.map((v) => (
-                <div key={v.name}>
-                  <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-navy">
-                    {v.name}: <span className="font-normal normal-case text-muted-foreground">{variant[v.name]}</span>
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {v.options.map((opt) => (
-                      <button
-                        key={opt}
-                        onClick={() => setVariant((s) => ({ ...s, [v.name]: opt }))}
-                        className={`rounded-md border px-3 py-1.5 text-xs font-medium transition ${
-                          variant[v.name] === opt ? "border-electric bg-electric/5 text-electric" : "border-border text-navy hover:border-navy"
-                        }`}
-                      >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
+              {hasLiveVariants
+                ? variantMatrix.options.map((option) => (
+                    <div key={option.id}>
+                      <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-navy">
+                        {option.name}:{" "}
+                        <span className="font-normal normal-case text-muted-foreground">
+                          {variant[option.name] ?? "Select"}
+                        </span>
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {option.values.map((optionValue) => {
+                          const available = canSelectLiveOption(
+                            option.name,
+                            optionValue.value,
+                          );
+                          return (
+                            <button
+                              key={optionValue.id}
+                              type="button"
+                              disabled={!available}
+                              onClick={() =>
+                                setVariant((state) => ({
+                                  ...state,
+                                  [option.name]: optionValue.value,
+                                }))
+                              }
+                              className={`rounded-md border px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-35 ${
+                                variant[option.name] === optionValue.value
+                                  ? "border-electric bg-electric/5 text-electric"
+                                  : "border-border text-navy hover:border-navy"
+                              }`}
+                            >
+                              {optionValue.value}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))
+                : product.variants?.map((item) => (
+                    <div key={item.name}>
+                      <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-navy">
+                        {item.name}:{" "}
+                        <span className="font-normal normal-case text-muted-foreground">
+                          {variant[item.name]}
+                        </span>
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {item.options.map((option) => (
+                          <button
+                            key={option}
+                            type="button"
+                            onClick={() =>
+                              setVariant((state) => ({
+                                ...state,
+                                [item.name]: option,
+                              }))
+                            }
+                            className={`rounded-md border px-3 py-1.5 text-xs font-medium transition ${
+                              variant[item.name] === option
+                                ? "border-electric bg-electric/5 text-electric"
+                                : "border-border text-navy hover:border-navy"
+                            }`}
+                          >
+                            {option}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
 
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wide text-navy">Quantity</span>
-                <div className="flex items-center gap-1 rounded-md border border-border">
-                  <button onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label="Decrease quantity" className="grid h-9 w-9 place-items-center text-muted-foreground hover:text-navy">
-                    <Minus size={15} />
-                  </button>
-                  <span className="w-8 text-center text-sm font-bold text-navy">{qty}</span>
-                  <button onClick={() => setQty((q) => q + 1)} aria-label="Increase quantity" className="grid h-9 w-9 place-items-center text-muted-foreground hover:text-navy">
-                    <Plus size={15} />
-                  </button>
-                </div>
+                {soldOut ? (
+                  <span className="rounded-md bg-muted px-3 py-2 text-xs font-bold text-muted-foreground">
+                    Sold out
+                  </span>
+                ) : (
+                  <div className="flex items-center gap-1 rounded-md border border-border">
+                    <button onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label="Decrease quantity" className="grid h-9 w-9 place-items-center text-muted-foreground hover:text-navy">
+                      <Minus size={15} />
+                    </button>
+                    <span className="w-8 text-center text-sm font-bold text-navy">{qty}</span>
+                    <button
+                      onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
+                      disabled={qty >= maxQty}
+                      aria-label="Increase quantity"
+                      className="grid h-9 w-9 place-items-center text-muted-foreground hover:text-navy disabled:cursor-not-allowed disabled:opacity-35"
+                    >
+                      <Plus size={15} />
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
-                <Link
-                  to="/checkout"
-                  onClick={() => add(product, qty, variant)}
-                  className="block w-full rounded-md bg-gradient-deal px-4 py-3 text-center text-sm font-bold text-white transition hover:opacity-90"
-                >
-                  Buy now
-                </Link>
+                {soldOut ? (
+                  <button
+                    type="button"
+                    disabled
+                    className="block w-full cursor-not-allowed rounded-md bg-muted px-4 py-3 text-center text-sm font-bold text-muted-foreground"
+                  >
+                    Sold out
+                  </button>
+                ) : (
+                  <Link
+                    to="/checkout"
+                    onClick={() => add(product, qty, variant, cartVariantIdentity)}
+                    className="block w-full rounded-md bg-gradient-deal px-4 py-3 text-center text-sm font-bold text-white transition hover:opacity-90"
+                  >
+                    Buy now
+                  </Link>
+                )}
                 <button
-                  onClick={() => { add(product, qty, variant); toast.success("Added to cart"); }}
-                  className="w-full rounded-md border-2 border-electric bg-electric/5 px-4 py-2.5 text-sm font-bold text-electric transition hover:bg-electric hover:text-electric-foreground"
+                  disabled={soldOut}
+                  onClick={() => {
+                    if (soldOut) return;
+                    add(product, qty, variant, cartVariantIdentity);
+                    toast.success("Added to cart");
+                  }}
+                  className="w-full rounded-md border-2 border-electric bg-electric/5 px-4 py-2.5 text-sm font-bold text-electric transition hover:bg-electric hover:text-electric-foreground disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground"
                 >
-                  Add to cart
+                  {soldOut ? "Sold out" : "Add to cart"}
                 </button>
                 <button
                   onClick={() => toggle(product.id)}
@@ -259,9 +575,9 @@ function ProductPage() {
               </div>
 
               <div className="grid gap-1.5 border-t border-border pt-3 text-[11px] text-muted-foreground">
-                <span className="inline-flex items-center gap-2"><ShieldCheck size={13} className="text-success" /> 1LV buyer protection on every order</span>
-                <span className="inline-flex items-center gap-2"><Lock size={13} className="text-electric" /> Secure payment · Visa, Mastercard, Amex</span>
-                <span className="inline-flex items-center gap-2"><RefreshCw size={13} className="text-electric" /> 30-day returns, Canadian support</span>
+                <span className="inline-flex items-center gap-2"><ShieldCheck size={13} className="text-success" /> Order-linked buyer protection workflow</span>
+                <span className="inline-flex items-center gap-2"><Lock size={13} className="text-electric" /> Secure payment methods shown at checkout</span>
+                <span className="inline-flex items-center gap-2"><RefreshCw size={13} className="text-electric" /> Returns follow seller and marketplace terms</span>
               </div>
             </div>
 
@@ -274,8 +590,14 @@ function ProductPage() {
                 <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-gradient-electric text-white"><Store size={18} /></div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-bold text-navy">{vendor.name} {vendor.country === "CA" && "🇨🇦"}</div>
-                  <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                    <Star size={10} className="fill-warning text-warning" /> {vendor.rating} · {vendor.city} · {vendor.yearsActive}y on 1LV
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                    {vendor.country === "CA" && <span>Canadian seller</span>}
+                    {vendor.city && <span>· {vendor.city}</span>}
+                    {demo && vendor.rating > 0 && (
+                      <span className="inline-flex items-center gap-1">
+                        · <Star size={10} className="fill-warning text-warning" /> {vendor.rating}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <span className="shrink-0 text-xs font-bold text-electric">Visit store</span>
@@ -287,34 +609,34 @@ function ProductPage() {
         {/* Mobile detail accordions */}
         <div className="mt-8 rounded-xl border border-border bg-card px-4 lg:hidden">
           <Accordion title="Product details" defaultOpen>{product.description}</Accordion>
-          <Accordion title="Shipping & delivery">Ships to all Canadian provinces. Free over $49 CAD.</Accordion>
-          <Accordion title="Returns & buyer protection">30-day returns on unused items, covered by 1LV buyer protection.</Accordion>
+          <Accordion title="Shipping & delivery">
+            {demo
+              ? "Ships to all Canadian provinces."
+              : vendor?.shippingPolicy ??
+                "Shipping options and delivery estimates are confirmed at checkout."}
+          </Accordion>
+          <Accordion title="Returns & buyer protection">
+            {demo
+              ? "30-day returns on unused items, covered by 1LV buyer protection."
+              : vendor?.returnPolicy ??
+                "Return eligibility follows the seller policy and 1LV buyer-protection terms shown at checkout."}
+          </Accordion>
         </div>
 
-        {/* Review summary */}
-        <section className="mt-10 rounded-xl border border-border bg-card p-5 shadow-merch">
-          <div className="grid gap-6 sm:grid-cols-[200px_1fr]">
+        {/* Review summary is shown only when a real/demo review source exists. */}
+        {product.rating > 0 && product.reviews > 0 && (
+          <section className="mt-10 rounded-xl border border-border bg-card p-5 shadow-merch">
             <div className="text-center sm:text-left">
-              <div className="font-display text-4xl font-extrabold text-navy">{product.rating.toFixed(1)}</div>
+              <div className="font-display text-4xl font-extrabold text-navy">
+                {product.rating.toFixed(1)}
+              </div>
               <RatingStars rating={product.rating} size={16} />
-              <p className="mt-1 text-xs text-muted-foreground">{product.reviews.toLocaleString()} verified reviews</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {product.reviews.toLocaleString()} reviews
+              </p>
             </div>
-            <div className="space-y-1.5">
-              {[5, 4, 3, 2, 1].map((s) => {
-                const pct = s === 5 ? 72 : s === 4 ? 18 : s === 3 ? 6 : s === 2 ? 2 : 2;
-                return (
-                  <div key={s} className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="w-8">{s}★</span>
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                      <div className="h-full rounded-full bg-warning" style={{ width: `${pct}%` }} />
-                    </div>
-                    <span className="w-9 text-right">{pct}%</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {fromStore.length > 0 && vendor && (
           <section className="mt-10">
@@ -325,14 +647,30 @@ function ProductPage() {
 
         {related.length > 0 && (
           <section className="mt-10">
-            <SectionHead eyebrow="Similar items" title="Customers also viewed" />
+            <SectionHead eyebrow="More choices" title="Similar products" />
             <ProductGrid products={related} cols={6} />
           </section>
         )}
 
         <RecentlyViewed excludeId={product.id} />
       </div>
-      <StickyBuyBar product={product} />
+      <StickyBuyBar
+        product={product}
+        quantity={qty}
+        variant={variant}
+        variantIdentity={
+          selectedLiveVariant
+            ? {
+                id: selectedLiveVariant.id,
+                sku: selectedLiveVariant.sku,
+                price: selectedLiveVariant.price,
+                compareAt: selectedLiveVariant.compare_at_price,
+                image: selectedLiveVariant.image_url ?? undefined,
+              }
+            : undefined
+        }
+        unavailable={hasLiveVariants && !selectedLiveVariant?.available}
+      />
     </AppLayout>
   );
 }

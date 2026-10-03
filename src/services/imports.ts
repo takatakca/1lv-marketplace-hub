@@ -114,12 +114,96 @@ export async function createImportJob(input: {
   return data as unknown as ImportJob;
 }
 
+export type FinalizeImportJobResult = {
+  jobId: string;
+  status: JobStatus;
+  totalRows: number;
+  successRows: number;
+  failedRows: number;
+};
+
 export async function finalizeImportJob(
   id: string,
-  patch: { status: JobStatus; success_rows: number; failed_rows: number; errors?: unknown },
-) {
-  const { error } = await supabase.from("product_import_jobs").update(patch as never).eq("id", id);
+): Promise<FinalizeImportJobResult> {
+  const { data, error } = await supabase.rpc(
+    "finalize_product_import_job" as never,
+    { _job_id: id } as never,
+  );
   if (error) throw error;
+
+  const result = (data ?? {}) as unknown as {
+    ok?: boolean;
+    job_id?: string;
+    status?: JobStatus;
+    total_rows?: number;
+    success_rows?: number;
+    failed_rows?: number;
+  };
+
+  if (
+    result.ok !== true ||
+    result.job_id !== id ||
+    !["completed", "failed", "partial"].includes(String(result.status)) ||
+    !Number.isInteger(result.total_rows) ||
+    !Number.isInteger(result.success_rows) ||
+    !Number.isInteger(result.failed_rows)
+  ) {
+    throw new Error("Import finalization returned an invalid result.");
+  }
+
+  return {
+    jobId: result.job_id,
+    status: result.status as JobStatus,
+    totalRows: result.total_rows as number,
+    successRows: result.success_rows as number,
+    failedRows: result.failed_rows as number,
+  };
+}
+
+export async function importDraftProductRow(input: {
+  jobId: string;
+  rowIndex: number;
+  raw: Record<string, string>;
+  product: {
+    title: string;
+    short_description?: string | null;
+    description?: string | null;
+    category_slug?: string | null;
+    price: number;
+    sku?: string | null;
+    inventory_quantity: number;
+    supplier_source?: string | null;
+    supplier_url?: string | null;
+    supplier_product_id?: string | null;
+  };
+}) {
+  const { data, error } = await supabase.rpc(
+    "import_product_draft_row" as never,
+    {
+      _job_id: input.jobId,
+      _row_index: input.rowIndex,
+      _raw: input.raw,
+      _product: input.product,
+    } as never,
+  );
+  if (error) throw error;
+
+  const result = (data ?? {}) as unknown as {
+    ok?: boolean;
+    product_id?: string;
+    row_index?: number;
+  };
+  if (
+    result.ok !== true ||
+    typeof result.product_id !== "string" ||
+    result.row_index !== input.rowIndex
+  ) {
+    throw new Error("Atomic product import returned an invalid result.");
+  }
+  return {
+    productId: result.product_id,
+    rowIndex: result.row_index,
+  };
 }
 
 export async function insertJobRow(input: {

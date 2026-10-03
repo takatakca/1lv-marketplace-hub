@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { products, formatCAD } from "@/lib/data";
 import { useAuth } from "@/hooks/use-auth";
@@ -36,7 +36,7 @@ function Page() {
   const [tracking, setTracking] = useState("");
   const [carrier, setCarrier] = useState("");
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     if (demo) return;
     try {
       const v = (await getVendorOrder(id)) as unknown as VendorOrder | null;
@@ -46,19 +46,26 @@ function Page() {
         setCarrier(v.carrier ?? "");
         const its = await listItemsForVendorOrder(v.order_id, v.vendor_id);
         setItems(its as Item[]);
+      } else {
+        setVo(null);
+        setItems([]);
       }
-    } finally { setLoading(false); }
-  };
-  useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [id, demo]);
+    } finally {
+      setLoading(false);
+    }
+  }, [demo, id]);
 
-  const useDemo = demo || !vo;
-  const demoItems: Item[] = products.slice(0, 2).map((p, i) => ({ id: "d" + i, title: p.title, quantity: 1, unit_price: p.price }));
-  const lines = useDemo ? demoItems : items;
-  const subtotal = useDemo
-    ? lines.reduce((s, p) => s + p.unit_price * p.quantity, 0)
-    : Number(vo!.subtotal);
-  const commission = useDemo ? +(subtotal * 0.1).toFixed(2) : Number(vo!.commission_amount);
-  const payout = useDemo ? +(subtotal - commission).toFixed(2) : Number(vo!.vendor_payout_amount);
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const useDemo = demo;
+  const demoItems: Item[] = products.slice(0, 2).map((p, i) => ({
+    id: "d" + i,
+    title: p.title,
+    quantity: 1,
+    unit_price: p.price,
+  }));
 
   const update = async (status?: VendorOrderStatus, withTracking = false) => {
     if (useDemo) { toast.message("Demo mode — update simulated"); return; }
@@ -73,6 +80,28 @@ function Page() {
   };
 
   if (loading) return <div className="text-sm text-muted-foreground">Loading…</div>;
+
+  if (!demo && !vo) {
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center">
+        <h1 className="text-xl font-bold text-navy">Order not found</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          This vendor order does not exist or your store does not have access to it.
+        </p>
+      </div>
+    );
+  }
+
+  const lines = useDemo ? demoItems : items;
+  const subtotal = useDemo
+    ? lines.reduce((sum, item) => sum + item.unit_price * item.quantity, 0)
+    : Number(vo!.subtotal);
+  const commission = useDemo
+    ? +(subtotal * 0.1).toFixed(2)
+    : Number(vo!.commission_amount);
+  const payout = useDemo
+    ? +(subtotal - commission).toFixed(2)
+    : Number(vo!.vendor_payout_amount);
 
   return (
     <div>
@@ -108,13 +137,49 @@ function Page() {
         </div>
         <div className="space-y-6">
           <div className="space-y-2 rounded-xl border border-border bg-card p-5">
-            <button onClick={() => update("accepted")} className="w-full rounded-md border border-electric/40 px-3 py-2 text-sm font-semibold text-electric">Accept order</button>
-            <button onClick={() => update("processing")} className="w-full rounded-md bg-electric px-3 py-2 text-sm font-semibold text-electric-foreground">Mark processing</button>
-            <input value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder="Tracking number" className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
-            <input value={carrier} onChange={(e) => setCarrier(e.target.value)} placeholder="Carrier" className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
-            <button onClick={() => update("shipped", true)} className="w-full rounded-md bg-success px-3 py-2 text-sm font-semibold text-white">Mark shipped</button>
-            <button onClick={() => update("delivered")} className="w-full rounded-md border border-border px-3 py-2 text-sm">Mark delivered</button>
-            <button onClick={() => update("cancelled")} className="w-full rounded-md border border-border px-3 py-2 text-sm text-destructive">Cancel</button>
+            {!useDemo &&
+            !["paid", "partially_refunded"].includes(vo!.orders.payment_status) ? (
+              <p className="rounded-md bg-muted px-3 py-2 text-xs font-semibold text-muted-foreground">
+                Awaiting confirmed payment before fulfillment can begin.
+              </p>
+            ) : (
+              <>
+                {vo!.status === "pending" && (
+                  <button onClick={() => update("accepted")} className="w-full rounded-md border border-electric/40 px-3 py-2 text-sm font-semibold text-electric">
+                    Accept order
+                  </button>
+                )}
+                {vo!.status === "accepted" && (
+                  <button onClick={() => update("processing")} className="w-full rounded-md bg-electric px-3 py-2 text-sm font-semibold text-electric-foreground">
+                    Mark processing
+                  </button>
+                )}
+                {(vo!.status === "processing" || vo!.status === "shipped") && (
+                  <>
+                    <input value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder="Tracking number" className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
+                    <input value={carrier} onChange={(e) => setCarrier(e.target.value)} placeholder="Carrier" className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
+                  </>
+                )}
+                {vo!.status === "processing" && (
+                  <button onClick={() => update("shipped", true)} className="w-full rounded-md bg-success px-3 py-2 text-sm font-semibold text-white">
+                    Mark shipped
+                  </button>
+                )}
+                {vo!.status === "shipped" && (
+                  <button onClick={() => update("delivered", true)} className="w-full rounded-md border border-border px-3 py-2 text-sm">
+                    Mark delivered
+                  </button>
+                )}
+                {vo!.status === "delivered" && (
+                  <p className="rounded-md bg-success/10 px-3 py-2 text-xs font-semibold text-success">
+                    Fulfillment completed.
+                  </p>
+                )}
+              </>
+            )}
+            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Order cancellation and refunds are handled through the admin dispute/refund workflow so a paid customer is never cancelled without financial reconciliation.
+            </p>
           </div>
         </div>
       </div>

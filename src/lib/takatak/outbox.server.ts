@@ -7,13 +7,16 @@
 
 import { mapCustomer, mapGuestCustomer } from "./customer-mapper";
 import { mapMerchant } from "./merchant-mapper";
-import { mapOrder } from "./order-mapper";
 import { mapRelationship } from "./relationship-mapper";
-import { sendTakatakEvent, takatakConfigured } from "./client.server";
+import {
+  normalizeTakatakMasterApiBaseUrl,
+  sendTakatakEvent,
+  takatakConfigured,
+} from "./client.server";
 import type { AggregateType, TakatakEventType } from "./types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-type Db = { from: (t: string) => any };
+type Db = { from: (t: string) => any; rpc: (fn: string, args?: Record<string, unknown>) => any };
 
 export async function db(): Promise<Db> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -24,7 +27,11 @@ const BACKOFF_MINUTES = [1, 5, 15, 60, 180, 720];
 export const MAX_ATTEMPTS = 6;
 
 function nextAttemptAt(attempt: number): string {
-  const minutes = BACKOFF_MINUTES[Math.min(attempt, BACKOFF_MINUTES.length - 1)] ?? 720;
+  const index = Math.min(
+    Math.max(attempt - 1, 0),
+    BACKOFF_MINUTES.length - 1,
+  );
+  const minutes = BACKOFF_MINUTES[index] ?? 720;
   return new Date(Date.now() + minutes * 60_000).toISOString();
 }
 
@@ -68,7 +75,7 @@ export async function queueCustomerEvent(
   const client = await db();
   const { data: profile } = await client
     .from("profiles")
-    .select("id, display_name, locale, country, created_at")
+    .select("id, display_name, locale, country, created_at, takatak_person_id")
     .eq("id", profileId)
     .maybeSingle();
   if (!profile) return;
@@ -95,6 +102,7 @@ export async function queueCustomerEvent(
         country: profile.country,
         province: addr?.["province"] ?? null,
         created_at: profile.created_at,
+        takatak_person_id: profile.takatak_person_id,
       }),
     },
     // "created" is a one-time lifecycle event; "updated" may legitimately repeat.
@@ -140,7 +148,7 @@ export async function queueMerchantEvent(vendorId: string, eventType: TakatakEve
   const { data: vendor } = await client
     .from("vendors")
     .select(
-      "id, user_id, store_name, slug, business_name, contact_email, phone, address, city, province, postal_code, country, status, subscription_status, subscription_plan, created_at",
+      "id, user_id, store_name, slug, business_name, contact_email, phone, address, city, province, postal_code, country, status, subscription_status, subscription_plan, created_at, takatak_merchant_id",
     )
     .eq("id", vendorId)
     .maybeSingle();
@@ -151,41 +159,30 @@ export async function queueMerchantEvent(vendorId: string, eventType: TakatakEve
   await enqueue(eventType, "merchant", vendorId, { ...mapMerchant(vendor) }, key);
 }
 
-export async function queueOrderEvent(orderId: string, eventType: TakatakEventType) {
+export async function queueOrderEvent(
+  orderId: string,
+  eventType: TakatakEventType,
+) {
+  // 1LV owns orders, money, refunds, payouts and accounting. TAKATAK receives
+  // only customer/relationship context needed for master CRM administration.
+  if (eventType !== "order.created") return;
+
   const client = await db();
   const { data: order } = await client
     .from("orders")
-    .select(
-      "id, order_number, customer_id, total, currency, payment_status, status, created_at, vendor_orders(vendor_id, subtotal, status)",
-    )
+    .select("id, customer_id")
     .eq("id", orderId)
     .maybeSingle();
   if (!order) return;
-  await enqueue(eventType, "order", orderId, { ...mapOrder(order) }, `${eventType}:${orderId}`);
 
-  if (eventType === "order.created") {
-    await queueRelationshipEvents(orderId);
-    if (!order.customer_id) await queueGuestCustomerEvent(orderId);
+  if (order.customer_id) {
+    await queueCustomerEvent(order.customer_id, "customer.updated");
+  } else {
+    await queueGuestCustomerEvent(orderId);
   }
-}
 
-/**
- * Queue order.fulfilled only once EVERY vendor split has been delivered.
- * Safe to call after any vendor order status change.
- */
-export async function queueOrderFulfilledIfComplete(orderId: string) {
-  const client = await db();
-  const { data: splits } = await client
-    .from("vendor_orders")
-    .select("status")
-    .eq("order_id", orderId);
-  const rows = (splits ?? []) as Array<{ status: string }>;
-  if (rows.length === 0) return;
-  const done = rows.every((r) => r.status === "delivered" || r.status === "cancelled");
-  if (!done) return;
-  await queueOrderEvent(orderId, "order.fulfilled");
+  await queueRelationshipEvents(orderId);
 }
-
 
 /**
  * One relationship edge per vendor split. Metrics are scoped to THAT vendor
@@ -195,27 +192,25 @@ export async function queueRelationshipEvents(orderId: string) {
   const client = await db();
   const { data: order } = await client
     .from("orders")
-    .select("id, order_number, customer_id, created_at, vendor_orders(vendor_id, subtotal)")
+    .select("id, order_number, customer_id, created_at, vendor_orders(vendor_id)")
     .eq("id", orderId)
     .maybeSingle();
   if (!order) return;
-  const customerRef = order.customer_id ?? `guest:${order.order_number}`;
+  const customerRef = order.customer_id ?? `order:${order.order_number}`;
   const isGuest = !order.customer_id;
 
-  for (const split of (order.vendor_orders ?? []) as Array<{ vendor_id: string; subtotal: number }>) {
+  for (const split of (order.vendor_orders ?? []) as Array<{ vendor_id: string }>) {
     let orderCount: number | null = null;
-    let ltv: number | null = null;
     let firstSeen: string | null = order.created_at;
 
     if (order.customer_id) {
       const { data: history } = await client
         .from("vendor_orders")
-        .select("subtotal, created_at, orders!inner(customer_id)")
+        .select("created_at, orders!inner(customer_id)")
         .eq("vendor_id", split.vendor_id)
         .eq("orders.customer_id", order.customer_id);
-      const rows = (history ?? []) as Array<{ subtotal: number; created_at: string }>;
+      const rows = (history ?? []) as Array<{ created_at: string }>;
       orderCount = rows.length;
-      ltv = Math.round(rows.reduce((s, r) => s + Number(r.subtotal ?? 0), 0) * 100) / 100;
       firstSeen = rows.map((r) => r.created_at).sort()[0] ?? order.created_at;
     }
 
@@ -235,7 +230,6 @@ export async function queueRelationshipEvents(orderId: string) {
           firstSeenAt: firstSeen,
           lastSeenAt: order.created_at,
           orderCount,
-          lifetimeValue: ltv,
         }),
         local_order_id: order.id,
       },
@@ -256,7 +250,7 @@ export async function queueDisputeRelationshipEvent(disputeId: string) {
     .maybeSingle();
   if (!dispute) return;
   const orderNumber = (dispute.orders as { order_number?: string } | null)?.order_number ?? dispute.order_id;
-  const customerRef = dispute.customer_id ?? `guest:${orderNumber}`;
+  const customerRef = dispute.customer_id ?? `order:${orderNumber}`;
   await enqueue(
     "customer.vendor.dispute_opened",
     "relationship",
@@ -275,12 +269,12 @@ export async function queueDisputeRelationshipEvent(disputeId: string) {
   );
 }
 
-/** Relationship + order events for one delivered vendor split. */
+/** Queue the non-financial customer↔vendor relationship event for one delivered split. */
 export async function queueVendorOrderDelivered(vendorOrderId: string) {
   const client = await db();
   const { data: vo } = await client
     .from("vendor_orders")
-    .select("id, order_id, vendor_id, subtotal, status")
+    .select("id, order_id, vendor_id, status")
     .eq("id", vendorOrderId)
     .maybeSingle();
   if (!vo || vo.status !== "delivered") return;
@@ -290,7 +284,7 @@ export async function queueVendorOrderDelivered(vendorOrderId: string) {
     .eq("id", vo.order_id)
     .maybeSingle();
   if (!order) return;
-  const customerRef = order.customer_id ?? `guest:${order.order_number}`;
+  const customerRef = order.customer_id ?? `order:${order.order_number}`;
   await enqueue(
     "customer.vendor.order_completed",
     "relationship",
@@ -307,7 +301,6 @@ export async function queueVendorOrderDelivered(vendorOrderId: string) {
     },
     `customer.vendor.order_completed:delivered:${vo.id}`,
   );
-  await queueOrderFulfilledIfComplete(vo.order_id);
 }
 
 
@@ -318,24 +311,69 @@ export async function queueVendorOrderDelivered(vendorOrderId: string) {
 export type DrainResult = {
   ok: boolean;
   setupRequired?: boolean;
+  reason?: string;
   processed: number;
   delivered: number;
   failed: number;
 };
 
 /** Process pending/retryable events with exponential backoff. */
+async function transitionClaim(
+  client: Db,
+  id: string,
+  claimToken: string,
+  patch: Record<string, unknown>,
+): Promise<"updated" | "superseded"> {
+  const { data, error } = await client
+    .from("takatak_outbox")
+    .update({ ...patch, claim_token: null })
+    .eq("id", id)
+    .eq("status", "processing")
+    .eq("claim_token", claimToken)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Could not persist TAKATAK claim state: ${error.message}`);
+  }
+  return data ? "updated" : "superseded";
+}
+
+/** Process pending/retryable events with exponential backoff. */
 export async function drainTakatakOutbox(limit = 25): Promise<DrainResult> {
   if (!takatakConfigured()) {
-    return { ok: false, setupRequired: true, processed: 0, delivered: 0, failed: 0 };
+    return {
+      ok: false,
+      setupRequired: true,
+      processed: 0,
+      delivered: 0,
+      failed: 0,
+    };
   }
+
   const client = await db();
-  const { data: rows } = await client
-    .from("takatak_outbox")
-    .select("*")
-    .in("status", ["pending", "failed"])
-    .lte("next_attempt_at", new Date().toISOString())
-    .order("created_at", { ascending: true })
-    .limit(limit);
+  const claimLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
+  const { data: rows, error: claimError } = await client.rpc(
+    "claim_takatak_outbox",
+    {
+      _limit: claimLimit,
+      _max_attempts: MAX_ATTEMPTS,
+    },
+  );
+
+  if (claimError) {
+    console.error(
+      "[1lv.ca] Could not claim TAKATAK outbox events:",
+      (claimError as { message?: string }).message ?? "Unknown database error",
+    );
+    return {
+      ok: false,
+      reason: "Could not claim TAKATAK outbox events.",
+      processed: 0,
+      delivered: 0,
+      failed: 0,
+    };
+  }
 
   let delivered = 0;
   let failed = 0;
@@ -346,10 +384,19 @@ export async function drainTakatakOutbox(limit = 25): Promise<DrainResult> {
     aggregate_id: string;
     payload: Record<string, unknown>;
     attempt_count: number;
+    claim_token: string;
   }>;
 
   for (const row of list) {
-    await client.from("takatak_outbox").update({ status: "processing" }).eq("id", row.id);
+    if (!row.claim_token) {
+      console.error(
+        "[1lv.ca] TAKATAK claim RPC returned a row without a claim token:",
+        row.id,
+      );
+      failed++;
+      continue;
+    }
+
     const result = await sendTakatakEvent({
       eventId: row.id,
       eventType: row.event_type,
@@ -357,58 +404,90 @@ export async function drainTakatakOutbox(limit = 25): Promise<DrainResult> {
       aggregateId: row.aggregate_id,
       payload: row.payload ?? {},
     });
-    const attempt = row.attempt_count + 1;
+
+    // attempt_count is incremented atomically when PostgreSQL grants the lease.
+    const attempt = row.attempt_count;
+
     if (result.ok) {
-      delivered++;
-      await client
-        .from("takatak_outbox")
-        .update({
-          status: "delivered",
-          attempt_count: attempt,
-          last_error: null,
-          remote_id: result.remoteId,
-          delivered_at: new Date().toISOString(),
-        })
-        .eq("id", row.id);
-      await recordRemoteId(client, row.aggregate_type, row.aggregate_id, result.remoteId);
-    } else {
-      failed++;
-      await client
-        .from("takatak_outbox")
-        .update({
+      try {
+        const { data: completed, error: completionError } = await client.rpc(
+          "complete_takatak_outbox_delivery" as never,
+          {
+            _id: row.id,
+            _claim_token: row.claim_token,
+            _remote_id: result.remoteId,
+          } as never,
+        );
+
+        if (completionError) {
+          throw new Error(
+            `Could not atomically complete TAKATAK delivery: ${completionError.message}`,
+          );
+        }
+
+        if ((completed as unknown as boolean) === true) {
+          delivered++;
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message.slice(0, 500)
+            : "Failed to persist TAKATAK aggregate link.";
+
+        try {
+          const state = await transitionClaim(
+            client,
+            row.id,
+            row.claim_token,
+            {
+              status: attempt >= MAX_ATTEMPTS ? "failed" : "pending",
+              attempt_count: attempt,
+              last_error: message,
+              next_attempt_at: nextAttemptAt(attempt),
+            },
+          );
+          if (state === "updated") failed++;
+        } catch (persistError) {
+          failed++;
+          console.error(
+            "[1lv.ca] Could not persist TAKATAK post-delivery retry state:",
+            persistError instanceof Error
+              ? persistError.message
+              : "Unknown database error",
+          );
+        }
+      }
+      continue;
+    }
+
+    try {
+      const state = await transitionClaim(
+        client,
+        row.id,
+        row.claim_token,
+        {
           status: attempt >= MAX_ATTEMPTS ? "failed" : "pending",
           attempt_count: attempt,
           last_error: result.error,
           next_attempt_at: nextAttemptAt(attempt),
-        })
-        .eq("id", row.id);
+        },
+      );
+
+      // If the lease was superseded, the newer worker owns the row and this
+      // worker must not count or mutate its outcome.
+      if (state === "updated") failed++;
+    } catch (persistError) {
+      failed++;
+      console.error(
+        "[1lv.ca] Could not persist TAKATAK retry state:",
+        persistError instanceof Error
+          ? persistError.message
+          : "Unknown database error",
+      );
     }
   }
 
   return { ok: true, processed: list.length, delivered, failed };
-}
-
-async function recordRemoteId(
-  client: Db,
-  aggregateType: string,
-  aggregateId: string,
-  remoteId: string | null,
-) {
-  if (!remoteId) return;
-  if (aggregateType === "customer" && !aggregateId.startsWith("guest:")) {
-    await client.from("profiles").update({ takatak_person_id: remoteId }).eq("id", aggregateId);
-  } else if (aggregateType === "merchant") {
-    await client
-      .from("vendors")
-      .update({
-        takatak_merchant_id: remoteId,
-        takatak_sync_status: "synced",
-        takatak_last_synced_at: new Date().toISOString(),
-      })
-      .eq("id", aggregateId);
-  } else if (aggregateType === "order") {
-    await client.from("orders").update({ takatak_order_event_id: remoteId }).eq("id", aggregateId);
-  }
 }
 
 /** Requeue failed events for immediate retry. */
@@ -416,7 +495,12 @@ export async function retryFailedOutbox(): Promise<number> {
   const client = await db();
   const { data } = await client
     .from("takatak_outbox")
-    .update({ status: "pending", next_attempt_at: new Date().toISOString() })
+    .update({
+      status: "pending",
+      attempt_count: 0,
+      last_error: null,
+      next_attempt_at: new Date().toISOString(),
+    })
     .eq("status", "failed")
     .select("id");
   return (data ?? []).length;
@@ -479,8 +563,13 @@ async function countBy(client: Db, filter: (q: any) => any): Promise<number> {
 
 export async function takatakStatus(): Promise<TakatakStatus> {
   const client = await db();
-  const url = Boolean(process.env["TAKATAK_MASTER_API_URL"]);
-  const key = Boolean(process.env["TAKATAK_MASTER_API_KEY"]);
+  const url = Boolean(
+    normalizeTakatakMasterApiBaseUrl(
+      process.env["TAKATAK_MASTER_API_URL"],
+    ),
+  );
+  const key =
+    (process.env["TAKATAK_1LV_API_KEY"]?.trim().length ?? 0) >= 32;
 
   const [pending, processing, delivered, failed] = await Promise.all([
     countBy(client, (q) => q.eq("status", "pending")),
@@ -551,16 +640,33 @@ export async function takatakStatus(): Promise<TakatakStatus> {
 /** Sanitized single-event inspector for admins. Secrets never reach the payload. */
 const SECRET_HINT = /(key|secret|token|password|otp|card|cvc|authorization|apikey)/i;
 
-export function sanitizePayload(input: unknown, depth = 0): unknown {
-  if (depth > 4 || input === null || typeof input !== "object") return input;
-  if (Array.isArray(input)) return input.slice(0, 25).map((v) => sanitizePayload(v, depth + 1));
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
-    if (SECRET_HINT.test(k)) {
-      out[k] = "[redacted]";
+export type SerializableJson =
+  | string
+  | number
+  | boolean
+  | null
+  | SerializableJson[]
+  | { [key: string]: SerializableJson };
+
+export function sanitizePayload(input: unknown, depth = 0): SerializableJson {
+  if (depth > 4) return "[truncated]";
+  if (input === null) return null;
+
+  if (typeof input === "string" || typeof input === "boolean") return input;
+  if (typeof input === "number") return Number.isFinite(input) ? input : null;
+  if (typeof input !== "object") return null;
+
+  if (Array.isArray(input)) {
+    return input.slice(0, 25).map((value) => sanitizePayload(value, depth + 1));
+  }
+
+  const out: { [key: string]: SerializableJson } = {};
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (SECRET_HINT.test(key)) {
+      out[key] = "[redacted]";
       continue;
     }
-    out[k] = sanitizePayload(v, depth + 1);
+    out[key] = sanitizePayload(value, depth + 1);
   }
   return out;
 }
@@ -584,6 +690,6 @@ export async function takatakEventDetail(id: string) {
     attempt_count: Number(row["attempt_count"] ?? 0),
     delivered_at: (row["delivered_at"] as string | null) ?? null,
     error_summary: safeError((row["last_error"] as string | null) ?? null),
-    payload: sanitizePayload(row["payload"] ?? {}) as Record<string, unknown>,
+    payload: sanitizePayload(row["payload"] ?? {}),
   };
 }

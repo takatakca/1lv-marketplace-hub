@@ -6,6 +6,7 @@ import { getMyVendor, setVendorAssetUrl, upsertMyVendor, type VendorRecord } fro
 import { isDemoMode } from "@/lib/demo-mode";
 import { DemoBanner, PreviewModeNotice } from "@/components/DemoBanner";
 import { VendorAssetUpload } from "@/components/VendorAssetUpload";
+import { deleteVendorAsset } from "@/services/vendor-assets";
 
 type FormState = {
   store_name: string; business_name: string; contact_email: string; phone: string;
@@ -63,11 +64,31 @@ function Page() {
       .finally(() => setLoading(false));
   }, [demo, user]);
 
-  const handleAsset = async (field: "logo_url" | "banner_url", path: string | null) => {
-    if (field === "logo_url") setLogo(path); else setBanner(path);
-    if (demo || !vendor) return;
-    try { await setVendorAssetUrl(vendor.id, field, path); }
-    catch (e) { toast.error((e as Error).message); }
+  const handleAsset = async (
+    field: "logo_url" | "banner_url",
+    path: string | null,
+  ) => {
+    const previous = field === "logo_url" ? logo : banner;
+
+    if (demo || !vendor) {
+      if (field === "logo_url") setLogo(path);
+      else setBanner(path);
+      return;
+    }
+
+    await setVendorAssetUrl(vendor.id, field, path);
+
+    if (field === "logo_url") setLogo(path);
+    else setBanner(path);
+
+    if (previous && previous !== path) {
+      await deleteVendorAsset(previous).catch((cleanupError) => {
+        console.warn(
+          "[1lv.ca] Could not clean up replaced vendor asset:",
+          cleanupError,
+        );
+      });
+    }
   };
 
   const validate = () => {

@@ -37,47 +37,47 @@ export type AdminOverview = {
   unpaidVendors: number;
   commissionRevenue: number;
   payoutLiability: number;
+  openDisputes: number;
   hasData: boolean;
+  recentOrders: Array<{
+    order: string;
+    customer: string;
+    total: number;
+    status: string;
+    createdAt: string;
+    vendor: string;
+  }>;
 };
 
 export async function getAdminOverview(): Promise<AdminOverview> {
-  const [orders, vendors, products, splits] = await Promise.all([
-    supabase.from("orders").select("total, payment_status").limit(1000),
-    supabase.from("vendors").select("status, subscription_status").limit(1000),
-    supabase.from("products").select("status").limit(2000),
-    supabase
-      .from("vendor_orders" as never)
-      .select("commission_amount, vendor_payout_amount, status")
-      .limit(2000),
-  ]);
+  const { data, error } = await supabase.rpc("get_admin_marketplace_overview" as never);
+  if (error) throw error;
 
-  const oRows = (orders.data ?? []) as Array<{ total: number; payment_status: string }>;
-  const vRows = (vendors.data ?? []) as Array<{ status: string; subscription_status: string }>;
-  const pRows = (products.data ?? []) as Array<{ status: string }>;
-  const sRows = (splits.data ?? []) as Array<{
-    commission_amount: number;
-    vendor_payout_amount: number;
-    status: string;
-  }>;
-
-  const gmv = oRows
-    .filter((o) => o.payment_status === "paid")
-    .reduce((s, o) => s + Number(o.total ?? 0), 0);
+  const raw = (data ?? {}) as unknown as Record<string, unknown>;
+  const recentRaw = Array.isArray(raw.recentOrders) ? raw.recentOrders : [];
 
   return {
-    gmv,
-    orderCount: oRows.length,
-    pendingVendors: vRows.filter((v) => v.status === "pending").length,
-    activeVendors: vRows.filter((v) => v.status === "active").length,
-    pendingProducts: pRows.filter((p) => p.status === "pending_review").length,
-    activeProducts: pRows.filter((p) => p.status === "active").length,
-    unpaidVendors: vRows.filter(
-      (v) => v.subscription_status === "past_due" || v.subscription_status === "unpaid",
-    ).length,
-    commissionRevenue: sRows.reduce((s, r) => s + Number(r.commission_amount ?? 0), 0),
-    payoutLiability: sRows
-      .filter((r) => r.status !== "delivered" && r.status !== "cancelled")
-      .reduce((s, r) => s + Number(r.vendor_payout_amount ?? 0), 0),
-    hasData: oRows.length + vRows.length + pRows.length > 0,
+    gmv: Number(raw.gmv ?? 0),
+    orderCount: Number(raw.orderCount ?? 0),
+    pendingVendors: Number(raw.pendingVendors ?? 0),
+    activeVendors: Number(raw.activeVendors ?? 0),
+    pendingProducts: Number(raw.pendingProducts ?? 0),
+    activeProducts: Number(raw.activeProducts ?? 0),
+    unpaidVendors: Number(raw.unpaidVendors ?? 0),
+    commissionRevenue: Number(raw.commissionRevenue ?? 0),
+    payoutLiability: Number(raw.payoutLiability ?? 0),
+    openDisputes: Number(raw.openDisputes ?? 0),
+    hasData: raw.hasData === true,
+    recentOrders: recentRaw.map((value) => {
+      const order = value as Record<string, unknown>;
+      return {
+        order: String(order.order ?? ""),
+        customer: String(order.customer ?? "—"),
+        vendor: String(order.vendor ?? "Marketplace"),
+        total: Number(order.total ?? 0),
+        status: String(order.status ?? ""),
+        createdAt: String(order.createdAt ?? ""),
+      };
+    }),
   };
 }

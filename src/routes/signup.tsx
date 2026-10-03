@@ -1,10 +1,12 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { AuthShell } from "@/components/AuthShell";
-import { SocialAuthButtons } from "@/components/SocialAuthButtons";
-import { PasswordField, passwordStrength } from "@/components/PasswordField";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import {
+  requestTakatakPhoneLoginCode,
+  verifyTakatakPhoneLoginCode,
+} from "@/lib/takatak-auth.functions";
 import { formatCanadianPhone } from "./login";
 
 export const Route = createFileRoute("/signup")({
@@ -14,50 +16,104 @@ export const Route = createFileRoute("/signup")({
 
 function Signup() {
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
   const [terms, setTerms] = useState(false);
-  const [marketing, setMarketing] = useState(true);
+  const [marketing, setMarketing] = useState(false);
+  const [stage, setStage] = useState<"details" | "code">("details");
   const [loading, setLoading] = useState(false);
   const nav = useNavigate();
 
-  const onSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const formatted = formatCanadianPhone(phone);
+
+  const sendCode = async (event: FormEvent) => {
+    event.preventDefault();
     if (loading) return;
-    if (!terms) { toast.error("Please accept the terms to continue."); return; }
-    if (passwordStrength(password).score < 2) {
-      toast.error("Choose a stronger password (8+ chars, with a number).");
+
+    const cleanName = name.trim();
+
+    if (!cleanName) {
+      toast.error("Enter your full name.");
       return;
     }
-    const fmtPhone = phone ? formatCanadianPhone(phone) : null;
-    if (phone && !fmtPhone) {
-      toast.error("Invalid Canadian phone number.");
+    if (!formatted) {
+      toast.error("Enter a valid Canadian mobile number.");
       return;
     }
+    if (!terms) {
+      toast.error("Please accept the terms and privacy policy.");
+      return;
+    }
+
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/role-select`,
-        data: {
-          display_name: name,
-          phone: fmtPhone ?? undefined,
-          marketing_opt_in: marketing,
-        },
+    const result = await requestTakatakPhoneLoginCode({
+      data: {
+        phone: formatted,
+        intent: "signup",
+        fullName: cleanName,
       },
     });
     setLoading(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Account created — check your email to confirm.");
+
+    if (!result.ok) {
+      toast.error(
+        result.setupRequired
+          ? "Secure account verification is temporarily unavailable."
+          : result.error,
+      );
+      return;
+    }
+
+    setStage("code");
+    toast.success("Verification code sent.");
+  };
+
+  const verifyCode = async (event: FormEvent) => {
+    event.preventDefault();
+    if (loading || !formatted || code.length !== 6) return;
+
+    setLoading(true);
+    const result = await verifyTakatakPhoneLoginCode({
+      data: {
+        phone: formatted,
+        code,
+        intent: "signup",
+        termsAccepted: terms,
+        marketingOptIn: marketing,
+      },
+    });
+
+    if (!result.ok) {
+      setLoading(false);
+      toast.error(
+        result.setupRequired
+          ? "Secure account verification is temporarily unavailable."
+          : result.error,
+      );
+      return;
+    }
+
+    const { error } = await supabase.auth.setSession({
+      access_token: result.accessToken,
+      refresh_token: result.refreshToken,
+    });
+    setLoading(false);
+
+    if (error) {
+      toast.error(
+        "Your identity was verified, but the local 1LV session could not start.",
+      );
+      return;
+    }
+
+    toast.success("Account verified securely");
     nav({ to: "/role-select" });
   };
 
   return (
     <AuthShell
       title="Create your 1LV.CA account"
-      subtitle="Shop, save, and (optionally) sell — all in one place."
+      subtitle="One verified GROUPE TAKATAK identity, one private 1LV marketplace profile."
       footer={
         <>
           Already a member?{" "}
@@ -67,87 +123,133 @@ function Signup() {
         </>
       }
     >
-      <SocialAuthButtons next="/role-select" />
-      <div className="my-5 flex items-center gap-3 text-[11px] uppercase tracking-wider text-muted-foreground">
-        <span className="h-px flex-1 bg-border" /> or with email <span className="h-px flex-1 bg-border" />
-      </div>
+      {stage === "details" ? (
+        <form onSubmit={sendCode} className="space-y-3">
+          <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+            GROUPE TAKATAK verifies your master identity. 1LV receives only the
+            identity information authorized for this marketplace and keeps its
+            business data separate from every other company.
+          </div>
 
-      <form onSubmit={onSubmit} className="space-y-3">
-        <label className="block">
-          <span className="mb-1 block text-xs font-semibold text-navy">Full name</span>
-          <input
-            required
-            autoComplete="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-md border border-border px-3 py-2 text-sm outline-none focus:border-electric"
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs font-semibold text-navy">Email</span>
-          <input
-            type="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-md border border-border px-3 py-2 text-sm outline-none focus:border-electric"
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs font-semibold text-navy">
-            Phone <span className="font-normal text-muted-foreground">(optional, for SMS sign-in)</span>
-          </span>
-          <input
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            placeholder="(555) 123-4567"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="w-full rounded-md border border-border px-3 py-2 text-sm outline-none focus:border-electric"
-          />
-        </label>
-        <PasswordField
-          value={password}
-          onChange={setPassword}
-          autoComplete="new-password"
-          showStrength
-        />
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-navy">
+              Full name
+            </span>
+            <input
+              required
+              autoComplete="name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              className="w-full rounded-md border border-border px-3 py-2 text-sm outline-none focus:border-electric"
+            />
+          </label>
 
-        <label className="flex items-start gap-2 text-xs">
-          <input
-            type="checkbox"
-            required
-            checked={terms}
-            onChange={(e) => setTerms(e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-border accent-electric"
-          />
-          <span className="text-muted-foreground">
-            I agree to the{" "}
-            <Link to="/terms" className="font-semibold text-electric hover:underline">Terms</Link> and{" "}
-            <Link to="/privacy" className="font-semibold text-electric hover:underline">Privacy Policy</Link>.
-          </span>
-        </label>
-        <label className="flex items-start gap-2 text-xs">
-          <input
-            type="checkbox"
-            checked={marketing}
-            onChange={(e) => setMarketing(e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-border accent-electric"
-          />
-          <span className="text-muted-foreground">
-            Send me deals, coupons, and new arrivals from 1LV.CA (you can opt out anytime).
-          </span>
-        </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-navy">
+              Mobile number
+            </span>
+            <input
+              required
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="(555) 123-4567"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              className="w-full rounded-md border border-border px-3 py-2 text-sm outline-none focus:border-electric"
+            />
+            {phone && !formatted && (
+              <p className="mt-1 text-[11px] text-destructive">
+                Enter a valid Canadian number (10 digits, or starting with +1).
+              </p>
+            )}
+          </label>
 
-        <button
-          disabled={loading}
-          className="w-full rounded-md bg-electric px-4 py-2.5 text-sm font-bold text-electric-foreground hover:opacity-90 disabled:opacity-60"
-        >
-          {loading ? "Creating account…" : "Create account"}
-        </button>
-      </form>
+          <label className="flex items-start gap-2 text-xs">
+            <input
+              type="checkbox"
+              required
+              checked={terms}
+              onChange={(event) => setTerms(event.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-border accent-electric"
+            />
+            <span className="text-muted-foreground">
+              I agree to the{" "}
+              <Link to="/terms" className="font-semibold text-electric hover:underline">
+                Terms
+              </Link>{" "}
+              and{" "}
+              <Link to="/privacy" className="font-semibold text-electric hover:underline">
+                Privacy Policy
+              </Link>
+              .
+            </span>
+          </label>
+
+          <label className="flex items-start gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={marketing}
+              onChange={(event) => setMarketing(event.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-border accent-electric"
+            />
+            <span className="text-muted-foreground">
+              I agree to receive promotional emails or texts from 1LV.CA about deals, coupons, and new arrivals. I can unsubscribe at any time. Questions: support@1lv.ca.
+            </span>
+          </label>
+
+          <button
+            disabled={loading || !formatted || !terms}
+            className="w-full rounded-md bg-electric px-4 py-2.5 text-sm font-bold text-electric-foreground hover:opacity-90 disabled:opacity-60"
+          >
+            {loading ? "Sending…" : "Verify phone & create account"}
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={verifyCode} className="space-y-3">
+          <div className="rounded-md border border-border bg-muted/40 p-3 text-sm">
+            A GROUPE TAKATAK verification code was sent to{" "}
+            <strong>{formatted}</strong>.
+          </div>
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-navy">
+              6-digit code
+            </span>
+            <input
+              required
+              inputMode="numeric"
+              pattern="[0-9]{6}"
+              maxLength={6}
+              autoComplete="one-time-code"
+              value={code}
+              onChange={(event) =>
+                setCode(event.target.value.replace(/\D/g, ""))
+              }
+              className="w-full rounded-md border border-border px-3 py-2 text-center text-lg font-bold tracking-[0.4em] outline-none focus:border-electric"
+            />
+          </label>
+
+          <button
+            disabled={loading || code.length !== 6}
+            className="w-full rounded-md bg-electric px-4 py-2.5 text-sm font-bold text-electric-foreground hover:opacity-90 disabled:opacity-60"
+          >
+            {loading ? "Verifying…" : "Verify & continue"}
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => {
+              setStage("details");
+              setCode("");
+            }}
+            className="w-full text-xs font-semibold text-muted-foreground hover:text-navy"
+          >
+            ← Change account details
+          </button>
+        </form>
+      )}
     </AuthShell>
   );
 }

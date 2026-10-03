@@ -16,7 +16,7 @@ function BecomeVendor() {
       <section className="bg-gradient-hero text-white">
         <div className="mx-auto max-w-5xl px-4 py-16 text-center">
           <span className="inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-semibold backdrop-blur">For vendors</span>
-          <h1 className="mt-4 font-display text-4xl font-extrabold md:text-5xl">Sell on Canada's fastest-growing marketplace.</h1>
+          <h1 className="mt-4 font-display text-4xl font-extrabold md:text-5xl">Build your storefront on 1LV.CA.</h1>
           <p className="mx-auto mt-3 max-w-xl text-white/80">List your products, manage orders from one dashboard, and get paid in CAD with low commissions.</p>
           <div className="mt-6 flex justify-center gap-3">
             <Link to="/signup" className="rounded-md bg-electric px-6 py-3 text-sm font-bold text-electric-foreground shadow-glow hover:opacity-90">Apply now</Link>
@@ -26,10 +26,10 @@ function BecomeVendor() {
       </section>
       <section className="mx-auto grid max-w-5xl gap-6 px-4 py-16 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { icon: Globe2, title: "Reach all of Canada", body: "Get in front of millions of Canadian shoppers from day one." },
-          { icon: Wallet, title: "Get paid in CAD", body: "Weekly payouts, transparent commissions, no hidden fees." },
-          { icon: ShieldCheck, title: "Buyer protection", body: "We handle disputes and fraud — you focus on selling." },
-          { icon: CheckCircle2, title: "Easy onboarding", body: "List your first product in under 10 minutes." },
+          { icon: Globe2, title: "Sell across Canada", body: "Offer approved marketplace products to shoppers across Canada." },
+          { icon: Wallet, title: "Get paid in CAD", body: "Track eligible earnings, commissions and payout status through Stripe Connect." },
+          { icon: ShieldCheck, title: "Marketplace protection", body: "Orders, refunds and disputes stay linked to the marketplace transaction record." },
+          { icon: CheckCircle2, title: "Guided onboarding", body: "Create your store profile, complete verification and publish approved products from one dashboard." },
         ].map((f) => (
           <div key={f.title} className="rounded-xl border border-border bg-card p-5">
             <f.icon className="text-electric" />

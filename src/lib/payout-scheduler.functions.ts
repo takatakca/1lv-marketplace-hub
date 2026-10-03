@@ -36,6 +36,7 @@ export type ReconcileOneResult = {
     | "amount_mismatch"
     | "currency_mismatch"
     | "destination_mismatch"
+    | "metadata_mismatch"
     | "failed"
     | "unknown";
   note: string;
@@ -147,7 +148,7 @@ export const runWeeklyPayoutScheduler = createServerFn({ method: "POST" })
           })
           .eq("id", runId);
       }
-      await s.releaseLock(db, s.PAYOUT_LOCK);
+      await s.releaseLock(db, s.PAYOUT_LOCK, context.userId);
     }
 
     return {
@@ -163,7 +164,7 @@ export const runWeeklyPayoutScheduler = createServerFn({ method: "POST" })
     };
   });
 
-/** Retry a failed transfer. Admin only, capped by payout_settings.max_transfer_attempts. */
+/** Retry a failed or stale-processing transfer. Admin only, capped by payout_settings.max_transfer_attempts. */
 export const retryFailedPayout = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { payoutId: string }) => data)
@@ -186,12 +187,21 @@ export const retryFailedPayout = createServerFn({ method: "POST" })
     } | null;
 
     if (!payout) return { ok: false, status: "draft", reason: "Payout not found" };
-    if (payout.status !== "failed") return { ok: false, status: payout.status, reason: "Only failed payouts can be retried." };
+    if (!["failed", "processing"].includes(payout.status)) {
+      return {
+        ok: false,
+        status: payout.status,
+        reason: "Only failed or stale-processing payouts can be retried.",
+      };
+    }
     if (payout.stripe_transfer_id) {
       return { ok: false, status: payout.status, reason: "A transfer already exists for this payout." };
     }
     const attempts = Number(payout.transfer_attempt_count ?? 0);
-    if (attempts >= settings.maxTransferAttempts) {
+    if (
+      payout.status === "failed" &&
+      attempts >= settings.maxTransferAttempts
+    ) {
       return {
         ok: false,
         status: payout.status,
@@ -200,8 +210,14 @@ export const retryFailedPayout = createServerFn({ method: "POST" })
       };
     }
 
+    // A stale processing payout is allowed through even at the normal retry
+    // ceiling. executeTransfer() replays the SAME Stripe idempotency key and
+    // does not increment the logical attempt count for that recovery.
     const out = await s.executeTransfer(db, data.payoutId);
-    return { ...out, attempt: attempts + 1 };
+    return {
+      ...out,
+      attempt: payout.status === "processing" ? attempts : attempts + 1,
+    };
   });
 
 /** Compare one payout against its Stripe transfer. Admin only. */

@@ -1,61 +1,41 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Trash2, ShoppingBag, ShieldCheck, Truck, RefreshCw, Ticket } from "lucide-react";
-import { useState } from "react";
+import { Trash2, ShoppingBag, ShieldCheck, Lock, PackageCheck, Ticket } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { EmptyState } from "@/components/EmptyState";
 import { FreeShippingBar } from "@/components/FreeShippingBar";
 import { useCart } from "@/hooks/use-cart";
+import { usePublicMarketplaceSettings } from "@/hooks/use-marketplace-settings";
 import { formatCAD } from "@/lib/data";
-import { toast } from "sonner";
+import { calculateShipping } from "@/lib/canada-commerce";
 
 export const Route = createFileRoute("/cart")({
   component: CartPage,
   head: () => ({ meta: [{ title: "Your cart — 1LV.CA" }] }),
 });
 
-const COUPONS: Record<string, { kind: "pct" | "fixed" | "ship"; value: number; label: string }> = {
-  WELCOME10: { kind: "pct", value: 10, label: "10% off" },
-  SAVE20: { kind: "fixed", value: 20, label: "$20 off" },
-  FREESHIP: { kind: "ship", value: 0, label: "Free shipping" },
-  FLASH5: { kind: "pct", value: 5, label: "5% off deals" },
-};
-
 function CartPage() {
   const { items, remove, setQty, subtotal, count } = useCart();
-  const [couponInput, setCouponInput] = useState("");
-  const [coupon, setCoupon] = useState<{ code: string; kind: "pct" | "fixed" | "ship"; value: number; label: string } | null>(null);
+  const { settings: marketplaceSettings } = usePublicMarketplaceSettings();
+  const shipping = marketplaceSettings
+    ? calculateShipping(subtotal, {
+        freeShippingThresholdCad: marketplaceSettings.free_shipping_threshold,
+        standardShippingFeeCad: marketplaceSettings.standard_shipping_fee,
+      })
+    : null;
+  const beforeTaxTotal = shipping == null ? subtotal : +(subtotal + shipping).toFixed(2);
 
-  let discount = 0;
-  let freeShip = false;
-  if (coupon) {
-    if (coupon.kind === "pct") discount = subtotal * (coupon.value / 100);
-    else if (coupon.kind === "fixed") discount = Math.min(coupon.value, subtotal);
-    else if (coupon.kind === "ship") freeShip = true;
-  }
-  const shipping = subtotal === 0 || subtotal >= 49 || freeShip ? 0 : 7.99;
-  const taxableBase = Math.max(0, subtotal - discount);
-  const taxes = +(taxableBase * 0.14975).toFixed(2);
-  const total = +(taxableBase + shipping + taxes).toFixed(2);
-
-  // Vendor grouping
-  const byVendor = items.reduce<Record<string, typeof items>>((acc, it) => {
-    (acc[it.vendorSlug] ??= []).push(it);
+  const byVendor = items.reduce<Record<string, typeof items>>((acc, item) => {
+    (acc[item.vendorSlug] ??= []).push(item);
     return acc;
   }, {});
-
-  const applyCoupon = () => {
-    const code = couponInput.trim().toUpperCase();
-    const c = COUPONS[code];
-    if (!c) { toast.error("Invalid coupon code"); return; }
-    setCoupon({ code, ...c });
-    toast.success(`Applied ${c.label}`);
-  };
 
   return (
     <AppLayout>
       <div className="mx-auto max-w-7xl px-4 py-8">
         <h1 className="font-display text-3xl font-extrabold text-navy">Your cart</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{count} {count === 1 ? "item" : "items"}</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {count} {count === 1 ? "item" : "items"}
+        </p>
 
         {items.length === 0 ? (
           <div className="mt-8">
@@ -70,93 +50,140 @@ function CartPage() {
         ) : (
           <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_360px]">
             <div className="space-y-4">
-              <FreeShippingBar subtotal={subtotal} />
+              {marketplaceSettings ? (
+                <FreeShippingBar
+                  subtotal={subtotal}
+                  threshold={marketplaceSettings.free_shipping_threshold}
+                />
+              ) : null}
+
               {Object.entries(byVendor).map(([vendorSlug, group]) => (
-                <div key={vendorSlug} className="rounded-xl border border-border bg-card">
+                <div key={vendorSlug} className="overflow-hidden rounded-xl border border-border bg-card">
                   <div className="flex items-center justify-between border-b border-border px-4 py-2">
                     <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Sold by</span>
-                    <Link to="/store/$slug" params={{ slug: vendorSlug }} className="text-sm font-semibold text-electric hover:underline">
+                    <Link
+                      to="/store/$slug"
+                      params={{ slug: vendorSlug }}
+                      className="text-sm font-semibold capitalize text-electric hover:underline"
+                    >
                       {vendorSlug.replace(/-/g, " ")}
                     </Link>
                   </div>
+
                   <ul className="divide-y divide-border">
-                    {group.map((it) => (
-                <li key={it.productId} className="flex gap-4 rounded-xl border border-border bg-card p-4">
-                  <Link to="/product/$slug" params={{ slug: it.slug }}>
-                    <img src={it.image} alt={it.title} className="h-24 w-24 rounded-lg object-cover" />
-                  </Link>
-                  <div className="flex flex-1 flex-col">
-                    <Link to="/product/$slug" params={{ slug: it.slug }} className="font-semibold text-navy hover:text-electric">
-                      {it.title}
-                    </Link>
-                    {it.variant && (
-                      <p className="text-xs text-muted-foreground">
-                        {Object.entries(it.variant).map(([k, v]) => `${k}: ${v}`).join(" · ")}
-                      </p>
-                    )}
-                    <div className="mt-auto flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min={1}
-                          value={it.qty}
-                          onChange={(e) => setQty(it.productId, Number(e.target.value) || 1)}
-                          className="w-16 rounded-md border border-border px-2 py-1 text-sm"
-                        />
-                        <button onClick={() => remove(it.productId)} className="text-muted-foreground hover:text-destructive" aria-label="Remove">
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                      <span className="text-base font-bold text-navy">{formatCAD(it.price * it.qty)}</span>
-                    </div>
-                  </div>
+                    {group.map((item) => (
+                      <li key={item.lineId} className="flex gap-4 p-4">
+                        <Link to="/product/$slug" params={{ slug: item.slug }}>
+                          <img
+                            src={item.image}
+                            alt={item.title}
+                            className="h-24 w-24 rounded-lg bg-muted object-cover"
+                            loading="lazy"
+                          />
+                        </Link>
+
+                        <div className="flex min-w-0 flex-1 flex-col">
+                          <Link
+                            to="/product/$slug"
+                            params={{ slug: item.slug }}
+                            className="line-clamp-2 font-semibold text-navy hover:text-electric"
+                          >
+                            {item.title}
+                          </Link>
+
+                          {item.variant && (
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {Object.entries(item.variant)
+                                .map(([key, value]) => `${key}: ${value}`)
+                                .join(" · ")}
+                            </p>
+                          )}
+
+                          <div className="mt-auto flex items-center justify-between gap-3 pt-3">
+                            <div className="flex items-center gap-2">
+                              <label className="sr-only" htmlFor={`qty-${item.lineId}`}>
+                                Quantity for {item.title}
+                              </label>
+                              <input
+                                id={`qty-${item.lineId}`}
+                                type="number"
+                                min={1}
+                                value={item.qty}
+                                onChange={(event) => setQty(item.lineId, Number(event.target.value) || 1)}
+                                className="w-16 rounded-md border border-border px-2 py-1 text-sm"
+                              />
+                              <button
+                                onClick={() => remove(item.lineId)}
+                                className="rounded-md p-1 text-muted-foreground transition hover:bg-destructive/5 hover:text-destructive"
+                                aria-label={`Remove ${item.title}`}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                            <span className="text-base font-bold text-navy">{formatCAD(item.price * item.qty)}</span>
+                          </div>
+                        </div>
                       </li>
                     ))}
                   </ul>
                 </div>
               ))}
             </div>
+
             <aside className="space-y-3 rounded-xl border border-border bg-card p-5 shadow-card lg:sticky lg:top-28 lg:self-start">
               <h3 className="font-bold text-navy">Order summary</h3>
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-xs font-semibold text-navy">
-                  <Ticket size={14} className="text-deal" /> Promo code
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    value={couponInput}
-                    onChange={(e) => setCouponInput(e.target.value)}
-                    placeholder="WELCOME10"
-                    className="flex-1 rounded-md border border-border px-3 py-2 text-sm uppercase outline-none focus:border-electric"
-                  />
-                  <button onClick={applyCoupon} className="rounded-md bg-navy px-3 py-2 text-xs font-bold text-navy-foreground hover:opacity-90">
-                    Apply
-                  </button>
+
+              <div className="flex items-start gap-2 rounded-lg border border-electric/15 bg-electric/5 p-3 text-xs text-navy">
+                <Ticket size={15} className="mt-0.5 shrink-0 text-electric" />
+                <div>
+                  <p className="font-semibold">Promotions are verified before payment</p>
+                  <p className="mt-0.5 text-muted-foreground">
+                    Only server-validated promotions will reduce the final order total.
+                  </p>
                 </div>
-                {coupon && (
-                  <p className="text-xs text-success">✓ {coupon.label} applied ({coupon.code})</p>
-                )}
               </div>
+
               <dl className="space-y-1.5 border-y border-border py-3 text-sm">
-                <div className="flex justify-between"><dt>Subtotal</dt><dd className="font-medium">{formatCAD(subtotal)}</dd></div>
-                {discount > 0 && (
-                  <div className="flex justify-between text-deal"><dt>Discount</dt><dd className="font-medium">−{formatCAD(discount)}</dd></div>
-                )}
-                <div className="flex justify-between"><dt>Shipping (CA)</dt><dd className="font-medium">{shipping === 0 ? "Free" : formatCAD(shipping)}</dd></div>
-                <div className="flex justify-between"><dt>Estimated tax (QC)</dt><dd className="font-medium">{formatCAD(taxes)}</dd></div>
+                <div className="flex justify-between">
+                  <dt>Subtotal</dt>
+                  <dd className="font-medium">{formatCAD(subtotal)}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>Shipping (Canada)</dt>
+                  <dd className="font-medium">
+                    {shipping == null ? "Confirmed at checkout" : shipping === 0 ? "Free" : formatCAD(shipping)}
+                  </dd>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <dt>Sales tax</dt>
+                  <dd>Calculated from ship-to province</dd>
+                </div>
               </dl>
+
               <div className="flex items-baseline justify-between">
-                <span className="font-bold text-navy">Total</span>
-                <span className="text-xl font-extrabold text-navy">{formatCAD(total)}</span>
+                <span className="font-bold text-navy">{shipping == null ? "Subtotal" : "Before tax"}</span>
+                <span className="text-xl font-extrabold text-navy">{formatCAD(beforeTaxTotal)}</span>
               </div>
-              <Link to="/checkout" className="block w-full rounded-md bg-electric px-4 py-3 text-center text-sm font-bold text-electric-foreground shadow-glow hover:opacity-90">
+
+              <Link
+                to="/checkout"
+                className="block w-full rounded-md bg-electric px-4 py-3 text-center text-sm font-bold text-electric-foreground shadow-glow transition hover:opacity-90"
+              >
                 Proceed to checkout
               </Link>
+
               <div className="grid grid-cols-3 gap-2 pt-2 text-[10px] text-muted-foreground">
-                <div className="flex flex-col items-center gap-0.5 text-center"><ShieldCheck size={14} className="text-success" /> Buyer protection</div>
-                <div className="flex flex-col items-center gap-0.5 text-center"><Truck size={14} className="text-electric" /> Fast CA shipping</div>
-                <div className="flex flex-col items-center gap-0.5 text-center"><RefreshCw size={14} className="text-electric" /> 30-day returns</div>
+                <div className="flex flex-col items-center gap-0.5 text-center">
+                  <ShieldCheck size={14} className="text-success" /> Buyer protection
+                </div>
+                <div className="flex flex-col items-center gap-0.5 text-center">
+                  <Lock size={14} className="text-electric" /> Server-validated totals
+                </div>
+                <div className="flex flex-col items-center gap-0.5 text-center">
+                  <PackageCheck size={14} className="text-electric" /> Return terms apply
+                </div>
               </div>
+
               <p className="text-center text-[11px] text-muted-foreground">Secure checkout · CAD</p>
             </aside>
           </div>

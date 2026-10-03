@@ -116,12 +116,6 @@ export async function setVendorAssetUrl(vendorId: string, field: "logo_url" | "b
   if (error) throw error;
 }
 
-export async function getVendorBySlug(slug: string): Promise<VendorRecord | null> {
-  const { data, error } = await supabase.from("vendors").select("*").eq("slug", slug).maybeSingle();
-  if (error) throw error;
-  return data as VendorRecord | null;
-}
-
 /**
  * Public storefront vendor lookup — only returns safe, customer-facing fields.
  * Contact email, phone, address, Stripe IDs, and commission rate are intentionally
@@ -130,7 +124,6 @@ export async function getVendorBySlug(slug: string): Promise<VendorRecord | null
  */
 export type PublicVendorRecord = {
   id: string;
-  user_id: string;
   slug: string;
   store_name: string;
   description: string | null;
@@ -145,11 +138,12 @@ export type PublicVendorRecord = {
 };
 
 export async function getPublicVendorBySlug(slug: string): Promise<PublicVendorRecord | null> {
-  const { data, error } = await supabase
-    .from("public_vendors" as never)
-    .select("*")
-    .eq("slug", slug)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc(
+    "get_public_vendor_by_slug" as never,
+    { _slug: slug } as never,
+  );
   if (error) throw error;
-  return (data as unknown as PublicVendorRecord) ?? null;
+
+  const row = Array.isArray(data) ? data[0] : data;
+  return (row as unknown as PublicVendorRecord | undefined) ?? null;
 }

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DataTable } from "@/components/DataTable";
 import { vendors as demoVendors } from "@/lib/data";
@@ -31,18 +31,25 @@ function Page() {
   const [sub, setSub] = useState<(typeof SUBS)[number]>("all");
   const [payoutOnly, setPayoutOnly] = useState(false);
 
-  const refresh = async () => {
-    try { setRows(await listAllVendors()); } finally { setLoading(false); }
-  };
-  useEffect(() => { if (!demo) refresh(); }, [demo]);
+  const refresh = useCallback(async () => {
+    try {
+      setRows(await listAllVendors());
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!demo) void refresh();
+  }, [demo, refresh]);
 
   const act = async (id: string, s: VendorStatus) => {
     try { await setVendorStatus(id, s); toast.success("Vendor " + s); await refresh(); }
     catch (e) { toast.error((e as Error).message); }
   };
 
-  const useDemo = demo || (rows && rows.length === 0);
-  const source: VendorRecord[] = useDemo
+  const useDemo = demo;
+  const source: VendorRecord[] = useMemo(() => demo
     ? demoVendors.map((v, i) => ({
         id: "demo-" + i, user_id: "u-" + i, store_name: v.name, slug: v.slug,
         description: null, business_name: v.name, contact_email: v.slug + "@1lv.ca",
@@ -58,7 +65,7 @@ function Page() {
         payouts_enabled: i % 2 === 0, charges_enabled: i % 2 === 0,
         commission_rate: 0.1, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       }))
-    : rows ?? [];
+    : rows ?? [], [demo, rows]);
 
   const filtered = useMemo(() => {
     return source.filter((v) => {
@@ -126,7 +133,7 @@ function Page() {
   return (
     <>
       <div className="mb-6">
-        {useDemo ? <DemoBanner label={demo ? "Preview mode" : "No vendors yet"} /> : null}
+        {demo ? <DemoBanner label="Preview mode" /> : null}
         <h1 className="text-2xl font-bold text-navy md:text-3xl">Vendors</h1>
         <p className="text-sm text-muted-foreground">Search, filter, approve and moderate marketplace sellers.</p>
       </div>

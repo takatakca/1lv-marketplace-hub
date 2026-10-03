@@ -30,6 +30,7 @@ export type LocalProfileInput = {
   country?: string | null;
   province?: string | null;
   created_at?: string | null;
+  takatak_person_id?: string | null;
 };
 
 /**
@@ -39,6 +40,7 @@ export type LocalProfileInput = {
 export function mapCustomer(profile: LocalProfileInput): TakatakCustomerPayload {
   return {
     source_application: SOURCE_APPLICATION,
+    master_identity_id: profile.takatak_person_id ?? null,
     local_profile_id: profile.id,
     local_guest_reference: null,
     is_guest: false,
@@ -70,6 +72,7 @@ export type GuestCustomerInput = {
 export function mapGuestCustomer(input: GuestCustomerInput): TakatakCustomerPayload {
   return {
     source_application: SOURCE_APPLICATION,
+    master_identity_id: null,
     local_profile_id: null,
     local_guest_reference: `order:${input.orderNumber}`,
     is_guest: true,

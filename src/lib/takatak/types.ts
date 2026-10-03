@@ -1,10 +1,10 @@
 /**
  * TAKATAK Master Platform integration — shared types.
  *
- * 1LV.CA is ONE vertical inside TAKATAK. TAKATAK is the system of authority for
- * master identity (people, companies, merchants) and the cross-vertical
- * relationship graph. 1LV never resolves identity itself and never exposes
- * TAKATAK-wide data to vendors or customers.
+ * 1LV.CA is an independent marketplace connected to GROUPE TAKATAK.
+ * TAKATAK is the system of authority for master identity (people, companies,
+ * merchants) and the cross-application relationship graph. 1LV never resolves
+ * identity itself and never exposes TAKATAK-wide data to vendors or customers.
  */
 
 export const SOURCE_APPLICATION = "1lv" as const;
@@ -42,6 +42,7 @@ export type OutboxRow = {
   payload: Record<string, unknown>;
   status: OutboxStatus;
   attempt_count: number;
+  claim_token: string | null;
   last_error: string | null;
   remote_id: string | null;
   next_attempt_at: string;
@@ -53,6 +54,7 @@ export type OutboxRow = {
 /** Normalized customer/person payload sent to TAKATAK. Never includes secrets. */
 export type TakatakCustomerPayload = {
   source_application: typeof SOURCE_APPLICATION;
+  master_identity_id: string | null;
   local_profile_id: string | null;
   local_guest_reference: string | null;
   is_guest: boolean;
@@ -68,6 +70,7 @@ export type TakatakCustomerPayload = {
 export type TakatakMerchantPayload = {
   source_application: typeof SOURCE_APPLICATION;
   vertical: typeof SOURCE_VERTICAL;
+  master_merchant_id: string | null;
   local_vendor_id: string;
   local_owner_user_id: string;
   store_name: string;
@@ -98,9 +101,6 @@ export type TakatakRelationshipPayload = {
   first_seen_at: string | null;
   last_seen_at: string | null;
   order_count: number | null;
-  /** Lifetime value with THIS vendor only. Never cross-merchant. */
-  lifetime_value: number | null;
-  currency: string;
 };
 
 export type TakatakOrderPayload = {
@@ -113,12 +113,8 @@ export type TakatakOrderPayload = {
   merchant_local_ids: string[];
   splits: Array<{
     vendor_local_id: string;
-    subtotal: number;
     status: string;
   }>;
-  total: number;
-  currency: string;
-  payment_status: string;
   fulfillment_status: string;
   created_at: string;
 };

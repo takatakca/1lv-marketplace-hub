@@ -46,7 +46,7 @@ function Page() {
     })();
   }, [demo, user]);
 
-  const useDemo = demo || (items && items.length === 0);
+  const useDemo = demo;
 
   const baseRows = useMemo(() => {
     if (useDemo) {
@@ -98,7 +98,8 @@ function Page() {
   const nextStep = (s: VendorOrderStatus): VendorOrderStatus | null => {
     if (s === "pending") return "accepted";
     if (s === "accepted") return "processing";
-    if (s === "processing") return "shipped";
+    // Shipping requires tracking + carrier; use the order detail page for it.
+    if (s === "processing") return null;
     if (s === "shipped") return "delivered";
     return null;
   };
@@ -106,7 +107,7 @@ function Page() {
   return (
     <div>
       <div className="mb-6">
-        {useDemo ? <DemoBanner label={demo ? "Preview mode" : "No orders yet"} /> : null}
+        {useDemo ? <DemoBanner label="Preview mode" /> : null}
         <h1 className="text-2xl font-bold text-navy md:text-3xl">Orders</h1>
       </div>
       {demo && <PreviewModeNotice />}
@@ -134,15 +135,28 @@ function Page() {
             { key: "tracking", label: "Tracking", render: (r) => r.tracking || "—" },
             { key: "actions", label: "", render: (r) => {
               const n = nextStep(r.fulfillment as VendorOrderStatus);
+              const canFulfill = ["paid", "partially_refunded"].includes(
+                String(r.payment),
+              );
               return (
                 <div className="flex items-center gap-2">
-                  {n && <button onClick={() => quickUpdate(r.id as string, n)} className="text-xs font-semibold text-electric capitalize">{n}</button>}
+                  {n && canFulfill && (
+                    <button onClick={() => quickUpdate(r.id as string, n)} className="text-xs font-semibold text-electric capitalize">
+                      {n}
+                    </button>
+                  )}
+                  {n && !canFulfill && (
+                    <span className="text-[11px] font-semibold text-muted-foreground">
+                      Awaiting payment
+                    </span>
+                  )}
                   <Link to="/vendor/orders/$id" params={{ id: r.id as string }} className="text-xs font-semibold text-muted-foreground">View</Link>
                 </div>
               );
             } },
           ]}
           rows={rows}
+          empty="No vendor orders yet."
         />
       )}
     </div>

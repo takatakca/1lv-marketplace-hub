@@ -1,0 +1,203 @@
+name: Migrate 1LV Production Database
+
+on:
+  push:
+    branches:
+      - upgrade/persistent-commerce-settings
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/tests/**"
+      - ".github/workflows/migrate-production-db.yml"
+
+  workflow_dispatch:
+    inputs:
+      confirm_project_ref:
+        description: "Type the exact 1LV Supabase project ref to continue"
+        required: true
+        type: string
+      apply:
+        description: "Apply pending migrations after the dry run"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 1lv-production-database
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Validate and migrate 1LV production database
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      EXPECTED_PROJECT_REF: odoybkshqszucvoxzjyz
+      EXPECTED_SCHEMA_VERSION: "20261003060000"
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_TELEMETRY_DISABLED: "1"
+      CONFIRM_PROJECT_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_project_ref || 'odoybkshqszucvoxzjyz' }}
+      APPLY_REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.apply && 'true' || 'false' }}
+
+    steps:
+      - name: Verify explicit production target
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "$CONFIRM_PROJECT_REF" != "$EXPECTED_PROJECT_REF" ]; then
+            echo "ERROR: confirmation does not match the fixed 1LV production project."
+            exit 1
+          fi
+
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] && \
+             [ "$APPLY_REQUESTED" = "true" ]; then
+            case "${GITHUB_REF}" in
+              refs/heads/main|refs/heads/upgrade/persistent-commerce-settings)
+                ;;
+              *)
+                echo "ERROR: production migration apply is allowed only from main or the certified 1LV hardening branch."
+                exit 1
+                ;;
+            esac
+          fi
+
+          missing=()
+          [ -n "${SUPABASE_ACCESS_TOKEN:-}" ] || missing+=("SUPABASE_ACCESS_TOKEN")
+          [ -n "${SUPABASE_DB_PASSWORD:-}" ] || missing+=("SUPABASE_DB_PASSWORD")
+
+          if (( ${#missing[@]} > 0 )); then
+            if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+              printf 'ERROR: missing required 1LV production GitHub secret: %s\n' "${missing[@]}"
+              exit 1
+            fi
+
+            printf '::warning title=1LV production audit skipped::Missing required GitHub secret: %s\n' "${missing[@]}"
+            echo "AUDIT_AVAILABLE=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          echo "AUDIT_AVAILABLE=true" >> "$GITHUB_ENV"
+          echo "Confirmed exact 1LV production project: $EXPECTED_PROJECT_REF"
+          echo "Expected 1LV schema version: $EXPECTED_SCHEMA_VERSION"
+          echo "Apply requested: $APPLY_REQUESTED"
+
+      - name: Verify hosted 1LV Auth is fail-closed
+        if: env.AUDIT_AVAILABLE == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          AUTH_CONFIG="$(
+            curl --fail --silent --show-error \
+              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              "https://api.supabase.com/v1/projects/$EXPECTED_PROJECT_REF/config/auth"
+          )"
+
+          DISABLE_SIGNUP="$(printf '%s' "$AUTH_CONFIG" | jq -r '.disable_signup // false')"
+          ANONYMOUS_ENABLED="$(printf '%s' "$AUTH_CONFIG" | jq -r '.external_anonymous_users_enabled // false')"
+
+          if [ "$DISABLE_SIGNUP" != "true" ]; then
+            echo "ERROR: hosted 1LV Supabase Auth still allows public signup."
+            exit 1
+          fi
+
+          if [ "$ANONYMOUS_ENABLED" = "true" ]; then
+            echo "ERROR: hosted 1LV Supabase Auth still allows anonymous users."
+            exit 1
+          fi
+
+          echo "Hosted 1LV Auth is fail-closed: public signup disabled, anonymous users disabled."
+
+      - name: Checkout repository
+        if: env.AUDIT_AVAILABLE == 'true'
+        uses: actions/checkout@v5
+
+      - name: Setup Supabase CLI
+        if: env.AUDIT_AVAILABLE == 'true'
+        uses: supabase/setup-cli@v3.0.1
+        with:
+          version: "2.118.0"
+
+      - name: Validate local migrations before remote access
+        if: env.AUDIT_AVAILABLE == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          shopt -s nullglob
+          EXPECTED_MIGRATIONS=(supabase/migrations/"${EXPECTED_SCHEMA_VERSION}"_*.sql)
+          if [ "${#EXPECTED_MIGRATIONS[@]}" -ne 1 ]; then
+            echo "ERROR: expected exactly one migration for schema version $EXPECTED_SCHEMA_VERSION; found ${#EXPECTED_MIGRATIONS[@]}."
+            printf 'Matched: %s\n' "${EXPECTED_MIGRATIONS[@]:-none}"
+            exit 1
+          fi
+          EXPECTED_MIGRATION="${EXPECTED_MIGRATIONS[0]}"
+          echo "Validated production schema migration: $EXPECTED_MIGRATION"
+
+          cleanup() {
+            supabase stop --no-backup >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          supabase db start
+          supabase db reset --local --no-seed
+          supabase db lint --local --schema public --level warning --fail-on warning
+          supabase test db --local
+
+          cleanup
+          trap - EXIT
+
+      - name: Link exact 1LV production project
+        if: env.AUDIT_AVAILABLE == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase link --project-ref "$EXPECTED_PROJECT_REF"
+
+      - name: Show local versus production migration history
+        if: env.AUDIT_AVAILABLE == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase migration list --linked
+
+      - name: Dry-run production migration
+        if: env.AUDIT_AVAILABLE == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase db push --linked --dry-run
+
+      - name: Apply pending production migrations
+        if: ${{ env.AUDIT_AVAILABLE == 'true' && github.event_name == 'workflow_dispatch' && inputs.apply }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase db push --linked
+
+      - name: Verify production migration history
+        if: ${{ env.AUDIT_AVAILABLE == 'true' && github.event_name == 'workflow_dispatch' && inputs.apply }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          HISTORY_OUTPUT="$(supabase migration list --linked)"
+          printf '%s\n' "$HISTORY_OUTPUT"
+
+          if ! printf '%s\n' "$HISTORY_OUTPUT" | grep -q "$EXPECTED_SCHEMA_VERSION"; then
+            echo "ERROR: expected schema migration $EXPECTED_SCHEMA_VERSION is not recorded remotely."
+            exit 1
+          fi
+
+          VERIFY_OUTPUT="$(supabase db push --linked --dry-run 2>&1)"
+          printf '%s\n' "$VERIFY_OUTPUT"
+
+          if printf '%s\n' "$VERIFY_OUTPUT" | grep -Eqi 'would apply|would push|would be applied|to be pushed|pending migration|applying migration'; then
+            echo "ERROR: production still reports pending migrations after push."
+            exit 1
+          fi
+
+          echo "Production migration push completed with no pending migration signal."

@@ -13,6 +13,8 @@ Live payments, vendor subscriptions, and Connect payout preparation.
 - `STRIPE_PRICE_VENDOR_STARTER_MONTHLY` — Stripe Price ID (`price_...`)
 - `STRIPE_PRICE_VENDOR_GROWTH_MONTHLY` — Stripe Price ID
 - `STRIPE_PRICE_VENDOR_SCALE_MONTHLY` — Stripe Price ID
+- `CHECKOUT_GUEST_TOKEN_SECRET` — dedicated random secret (32+ chars) used only to sign short-lived guest payment capabilities
+- `PUBLIC_APP_ORIGIN` — optional canonical HTTPS origin for server-generated Stripe return URLs. Defaults to `https://1lv.ca`; never derive this value from browser-supplied Host or X-Forwarded-* headers.
 
 Add server-side keys through the secrets tool (Lovable Cloud → Secrets). They are injected into server functions and the webhook route at runtime; they are never bundled into the frontend.
 
@@ -50,12 +52,14 @@ The endpoint verifies the `Stripe-Signature` header (HMAC-SHA256) and is idempot
 
 ## 4. Customer checkout flow
 
-1. Frontend calls `createOrder` (Supabase insert, `payment_status = pending`).
-2. Frontend calls the `createPaymentIntent` server fn with `{ orderId }`.
-3. Server loads the order from the DB and uses `orders.total` (server truth — never client-supplied amount).
-4. Server creates a Stripe PaymentIntent in CAD cents with metadata `{ order_id, order_number, customer_email }` and returns the `client_secret`.
-5. Frontend confirms with Stripe.js Elements (using `VITE_STRIPE_PUBLISHABLE_KEY`).
-6. Webhook flips `orders.payment_status` to `paid` / `failed` / `refunded`.
+1. Frontend sends only product IDs, quantities, contact/address data and a UUID checkout key to the TanStack server function.
+2. The server resolves the authenticated customer when present, then calls the service-role-only `create_marketplace_order` database RPC.
+3. PostgreSQL validates active products/vendors, locks product rows, checks and reserves inventory, loads DB prices, calculates Canada/province totals, creates the parent order/items/vendor splits atomically, and applies the checkout idempotency key.
+4. Guest checkout receives a 24-hour signed payment capability; authenticated orders rely on the current Supabase user identity.
+5. Frontend calls `createPaymentIntent` with the order ID plus the guest capability only when needed. The server authorizes ownership/capability and always reads `orders.total`.
+6. Stripe PaymentIntent creation is order-idempotent. Before an existing PaymentIntent is reused, 1LV revalidates its amount, currency and `metadata.order_id`; a newly-created PaymentIntent is not returned until its ID is confirmed persisted on the order.
+7. Frontend confirms with Stripe.js Elements using only `VITE_STRIPE_PUBLISHABLE_KEY`.
+8. On `payment_intent.succeeded`, the webhook commits the inventory reservation before moving the order to processing. Stale signatures older than five minutes are rejected.
 
 ## 5. Vendor subscription flow
 
@@ -64,6 +68,8 @@ The endpoint verifies the `Stripe-Signature` header (HMAC-SHA256) and is idempot
 3. Server verifies vendor ownership, creates or reuses a Stripe Customer, and creates a Checkout Session (`mode=subscription`) with metadata `{ vendor_id, owner_id, plan }`.
 4. User is redirected to Stripe Checkout.
 5. On success, Stripe fires `checkout.session.completed` + `customer.subscription.created`; the webhook updates `vendors.subscription_status`, `stripe_customer_id`, `stripe_subscription_id`, `subscription_plan`.
+6. 1LV refuses to create a second Checkout Session while a non-terminal Stripe subscription already exists for the vendor. This prevents duplicate recurring billing; plan-change automation must update the existing subscription rather than silently creating another one.
+7. Subscription webhooks are bound to the currently linked subscription. Stale cancellation/update events from an older subscription are ignored and surfaced to admins instead of overwriting the active billing state.
 
 ## 6. Product publishing rule
 
@@ -71,7 +77,7 @@ A vendor may submit a product for review only if:
 - `vendors.status = 'active'` AND
 - `vendors.subscription_status IN ('active', 'trialing')`
 
-Enforced client-side in `/vendor/products/new`. Draft save always works. Admin override remains.
+Enforced server-side and in the database authority/RLS layer; the UI mirrors the same rule but is never authoritative. Draft save remains available where permitted.
 
 ## 7. Stripe Connect (payout preparation)
 
@@ -85,7 +91,7 @@ The `vendors` table already has:
 - **Connected — charges disabled** — account exists, `charges_enabled = false`
 - **Payouts enabled** — both flags true
 
-Full Connect Express onboarding (Account Links, capability polling, live transfers) is intentionally deferred — the button is a placeholder until the ops team is ready to accept regulatory obligations for Canadian payouts.
+Connect Express onboarding is implemented end to end: server-side Express account creation, hosted Account Links, capability/status refresh, and idempotent transfers. Express account creation is itself vendor-idempotent, and 1LV refuses to overwrite a different Connect account already bound to the vendor. Live operation still requires the production Stripe account, Connect settings, webhook secret, and approved operational/regulatory setup.
 
 ## 8. Test cards
 
@@ -111,8 +117,18 @@ Any future expiry, any CVC.
 ## 10. Security notes
 
 - Secret keys live only in server env; the frontend imports `VITE_STRIPE_PUBLISHABLE_KEY` only.
+- Stripe Checkout and Connect return URLs are pinned to the canonical server-side 1LV origin; request Host/X-Forwarded headers cannot select the redirect domain.
 - PaymentIntent amount is derived from `orders.total` server-side, not from any client payload.
-- Webhook verifies `Stripe-Signature` with timing-safe comparison and rejects unsigned or replayed events.
+- Stripe API calls use bounded server-side timeouts so payment/payout state cannot remain indefinitely blocked on a hung network request.
+- Vendor Stripe Customer creation is idempotent, and a non-terminal existing subscription blocks creation of a duplicate recurring subscription.
+- Browser roles cannot insert financial order, order-item or vendor-order rows after the server-authoritative checkout migration is applied.
+- Guest payment authorization uses a dedicated short-lived HMAC capability; never reuse the Stripe or Supabase service-role secret for `CHECKOUT_GUEST_TOKEN_SECRET`.
+- Inventory is reserved during checkout and committed only after Stripe payment success; expired unpaid reservations are recoverable through the service-role-only cleanup RPC.
+- Expired reservations are checked by `.github/workflows/inventory-maintenance.yml` every 15 minutes through `/api/internal/inventory/cleanup`; production requires a dedicated `INVENTORY_MAINTENANCE_CRON_SECRET` (32+ characters), and the workflow refuses to send that bearer secret unless `PRODUCTION_URL` is exactly `https://1lv.ca`.
+- Expiration cleanup is Stripe-first for orders that already have a PaymentIntent: 1LV retrieves and cancels the PaymentIntent before releasing inventory. A succeeded, mismatched, or non-cancelable/ambiguous PaymentIntent blocks inventory release and makes the maintenance job fail visibly for reconciliation.
+- A cancelled order PaymentIntent can be replaced only after its amount/currency/order metadata are revalidated; the replacement uses a stable idempotency key and a conditional old-ID → new-ID database binding.
+- Refund finalization recalculates payouts that have not transferred and forces them back through review. If a payout is already processing/paid, the original Stripe transfer amount stays immutable and an idempotent future clawback is recorded.
+- Webhook verifies `Stripe-Signature` with timing-safe comparison, rejects signatures older than five minutes, and uses `stripe_event_log` for event idempotency.
 - Vendor subscription checkout requires an authenticated session and enforces `vendor.user_id = auth.uid()` via RLS before creating the session.
 - `stripe_event_log` prevents double-processing of retried webhook deliveries.
 
@@ -152,10 +168,12 @@ public storefront views, and admin sees a readiness badge, not the account ID.
 4. Return to `/vendor/payouts?connect=success` and click **Refresh Stripe status**.
 
 ### Remaining before live transfers
-- Transfer scheduling (`transfer_data` / separate `transfers` per vendor order).
-- Refunds and dispute handling against connected accounts.
-- Payout reconciliation against `vendor_orders`.
-- Accepting Stripe's Canadian platform/regulatory obligations.
+- Production Stripe/Connect account configuration and live webhook verification.
+- Operational approval of the payout policy and manual reconciliation procedure.
+- Acceptance of Stripe's Canadian platform/regulatory obligations.
+- Keep automatic transfer processing disabled until manual production cycles reconcile cleanly.
+
+Transfer creation, refund/dispute accounting, payout reconciliation and idempotent recovery are implemented in 1LV; they remain production-gated.
 
 ## 12. Payout engine (manual release)
 
@@ -196,18 +214,15 @@ A vendor order enters a payout only when **all** are true:
    leaves the payout untouched.
 
 ### Reconciliation
-`/admin/payouts` labels each row: reconciled, awaiting review, paid but no
-transfer reference, duplicate transfer reference, transfer failed, paid but
-missing paid date, or net amount zero/negative. Labels only — nothing is mutated.
+`/admin/payouts` classifies payout reconciliation against the Stripe Transfers API. A verified transfer must match the exact amount, currency and destination. When Stripe proves the transfer succeeded and the local row is incomplete, reconciliation may repair only the local payout state to `paid`; mismatches remain blocked and are surfaced for manual review.
 
-### Refunds & disputes (prepared, not implemented)
-- A refund on a vendor order sets `vendor_orders.refund_amount`; it is deducted
-  from that vendor order's net in the next payout.
-- A dispute sets `dispute_hold_amount`, which makes the vendor order ineligible
-  until the hold is cleared.
-- If the payout was **already paid**, insert a negative row into
-  `payout_adjustments` — it is summed into the next generated payout for that
-  vendor and stamped with `applied_payout_id`.
+### Refunds & disputes
+- Customers can open disputes only on their own paid vendor split; the disputed vendor amount is held immediately.
+- Admin-approved refunds are first reserved atomically in PostgreSQL under an order lock, then processed server-side through Stripe with a stable idempotency key. Concurrent approvals cannot collectively exceed the remaining refundable order or vendor-split amount.
+- 1LV revalidates the Stripe refund id, amount, currency and metadata before accounting. Only Stripe status `succeeded` finalizes the refund locally; `pending` / `requires_action` remain processing, while `failed` / `canceled` are surfaced to admins without marking money as returned.
+- Successful refund accounting updates `refund_records`, order/vendor-order refund totals, dispute state and payout adjustments atomically through the database finalization RPC.
+- If money was already paid out to a vendor, the accounting path records the compensating adjustment for a later payout instead of silently mutating a completed transfer.
+- Stripe `charge.refunded` webhooks reconcile only successful refunds that are tied to verified 1LV `refund_records`. Untracked or mismatched refunds are blocked from automatic accounting and surfaced to admins. Financial order/refund lifecycle events are not sent to GROUPE TAKATAK.
 
 ### Security
 - Vendors can read only their own payouts, items and adjustments (RLS).
@@ -217,7 +232,10 @@ missing paid date, or net amount zero/negative. Labels only — nothing is mutat
 - Stripe secret keys and Connect account ids are never returned to the client.
 
 ### Before automatic weekly payouts
-- Refund and dispute handling implemented end to end.
+- [x] Refund and dispute handling implemented end to end.
+- [x] Connect Express onboarding, capability refresh, bounded retries and reconciliation implemented.
+- [ ] Production Stripe/Connect account configuration, live webhook and Price IDs verified.
+- [ ] Operations approves `auto_process_transfers = true`; keep it false until that cutover.
 - Scheduler (pg_cron → `/api/public/*` route) with per-run locking.
 - Transfer failure retry/alerting policy.
 - Live reconciliation against the Stripe transfers API (currently local-state only).
@@ -240,9 +258,10 @@ missing paid date, or net amount zero/negative. Labels only — nothing is mutat
 - `processApprovedRefund(refundId)` (admin only) creates the Stripe refund from the parent order's PaymentIntent/charge. Refunds are capped at the order's remaining refundable amount, and a record with a `stripe_refund_id` can never be processed twice.
 - Order payment status becomes `partially_refunded` or `refunded` once money actually moves.
 - Without `STRIPE_SECRET_KEY`, processing returns `setup-required` and the record stays safely `approved`.
+- A refund in `processing` can be rechecked and a `failed` refund can be retried from the admin UI. Retries reuse the same stable Stripe idempotency key; if Stripe already created the refund, 1LV retrieves/reconciles that same refund instead of creating a duplicate.
 
 **Negative adjustments after payout**
-- If the vendor_order was already paid out, refund approval writes a negative row into `payout_adjustments`, which the next generated payout subtracts automatically.
+- If the vendor order was already paid out, successful Stripe refund finalization writes an idempotent negative row into `payout_adjustments`; the next generated payout applies that carry-forward adjustment.
 
 **Notifications** are written to the `notifications` table (dispute opened/replied/resolved, refund approved/processed/failed). No email delivery yet.
 
@@ -282,13 +301,12 @@ the last eight runs are shown on `/admin/payouts`.
 | Function | Purpose |
 |---|---|
 | `runWeeklyPayoutScheduler` | Locks, computes the last complete week, generates payouts. Sends transfers only if `auto_process_transfers` is true, and only for already-approved payouts. |
-| `retryFailedPayout` | Retries one failed transfer. Refuses if not `failed`, if a `stripe_transfer_id` exists, or if the attempt cap is reached. Stripe idempotency key `payout_<id>_<attempt>`. |
+| `retryFailedPayout` | Retries a failed transfer or safely recovers a stale `processing` lease. A stale unknown outcome replays the same Stripe operation instead of creating a new logical transfer. Any recorded transfer reference blocks another send. |
 | `reconcileStripePayout` | Reads the Stripe transfer and classifies: `matched`, `missing_transfer`, `amount_mismatch`, `currency_mismatch`, `destination_mismatch`, `failed`, `unknown`. |
 | `reconcileRecentPayouts` | Same check across recent paid/processing/failed payouts (1–180 days, max 200). |
 
-Retry backoff placeholder: 1h → 6h → 24h → 72h, stored in `payouts.next_retry_at`;
-`transfer_attempt_count` and `last_transfer_attempt_at` track history. Retries stop
-at `max_transfer_attempts` — nothing retries forever.
+Retry backoff: 1h → 6h → 24h → 72h, stored in `payouts.next_retry_at`;
+`transfer_attempt_count` and `last_transfer_attempt_at` track history. Normal failed retries stop at `max_transfer_attempts`. A stale `processing` lease may still replay the same stable Stripe idempotency key at the retry ceiling because that is reconciliation of an unknown outcome, not authorization for an additional transfer.
 
 ### Alerting
 Admin rows are written into `notifications` for: payout generation failed,
@@ -297,27 +315,9 @@ delivery yet.
 
 ### Deployment options
 
-**A. pg_cron (if enabled)** — weekly, Monday 07:00 UTC:
+Automatic payout scheduling is intentionally **not exposed through a public cron endpoint**. The current production-safe path is an authenticated admin action from `/admin/payouts` → **Run scheduler now**.
 
-```sql
-select cron.schedule(
-  'weekly-vendor-payout-generation',
-  '0 7 * * 1',
-  $$ select net.http_post(
-       url := 'https://project--deec4249-153f-4f4a-8a40-79e457dc6c83.lovable.app/api/public/hooks/payout-scheduler',
-       headers := '{"Content-Type":"application/json","apikey":"YOUR_ANON_KEY"}'::jsonb,
-       body := '{}'::jsonb
-     ); $$
-);
-```
-
-**B. External secured cron** — any scheduler (GitHub Actions, Cloud Scheduler)
-calling the same URL on the same cadence.
-
-The HTTP scheduler endpoint is **intentionally not deployed yet**. Until a
-dedicated scheduler secret is configured, the job is triggered only by an
-authenticated admin from `/admin/payouts` → **Run scheduler now**. Do not expose
-the endpoint without header authentication.
+Do not reuse the TAKATAK drain secret, inventory-maintenance secret, Supabase keys or Stripe keys for a future payout scheduler. If an external scheduler is introduced later, add a dedicated 32+ character secret, a private/internal endpoint, exact-origin controls and CI coverage before enabling it.
 
 ### Security
 - Scheduler, retry and reconciliation all verify `has_role(admin)` before the

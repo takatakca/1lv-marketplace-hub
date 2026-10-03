@@ -1,105 +1,107 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
-type Settings = {
-  name: string;
-  supportEmail: string;
-  commissionRate: number;
-  freeShippingThreshold: number;
-  standardShippingFee: number;
-  quebecTaxRate: number;
-  productApproval: boolean;
-  vendorApproval: boolean;
-  guestCheckout: boolean;
-  demoMode: boolean;
-};
-
-const DEFAULTS: Settings = {
-  name: "1LV.CA",
-  supportEmail: "support@1lv.ca",
-  commissionRate: 10,
-  freeShippingThreshold: 50,
-  standardShippingFee: 9.99,
-  quebecTaxRate: 14.975,
-  productApproval: true,
-  vendorApproval: true,
-  guestCheckout: true,
-  demoMode: false,
-};
-
-const STORAGE_KEY = "1lv_admin_settings";
+import {
+  getMarketplaceSettings,
+  saveMarketplaceSettings,
+  type MarketplaceSettings,
+} from "@/lib/marketplace-settings.functions";
 
 function Page() {
-  const [s, setS] = useState<Settings>(DEFAULTS);
+  const [settings, setSettings] = useState<MarketplaceSettings | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    try {
-      const saved = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
-      if (saved) setS({ ...DEFAULTS, ...JSON.parse(saved) });
-    } catch { /* ignore */ }
+    void getMarketplaceSettings()
+      .then(setSettings)
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Could not load settings."));
   }, []);
 
-  const save = (e: React.FormEvent) => {
-    e.preventDefault();
+  if (!settings) {
+    return <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Loading marketplace settings…</div>;
+  }
+
+  const set = <K extends keyof MarketplaceSettings>(key: K, value: MarketplaceSettings[K]) =>
+    setSettings((current) => current ? { ...current, [key]: value } : current);
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-      toast.success("Settings saved (backend wiring next phase)");
-    } catch { toast.error("Could not save"); }
+      const saved = await saveMarketplaceSettings({ data: settings });
+      setSettings(saved);
+      toast.success("Marketplace settings saved.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save settings.");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const num = (k: keyof Settings, label: string, step = "1") => (
-    <label className="block text-sm">
-      <span className="mb-1 block font-medium text-navy">{label}</span>
-      <input type="number" step={step} value={s[k] as number}
-        onChange={(e) => setS({ ...s, [k]: Number(e.target.value) })}
-        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
-    </label>
-  );
-
-  const text = (k: keyof Settings, label: string) => (
-    <label className="block text-sm">
-      <span className="mb-1 block font-medium text-navy">{label}</span>
-      <input value={s[k] as string}
-        onChange={(e) => setS({ ...s, [k]: e.target.value })}
-        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
-    </label>
-  );
-
-  const toggle = (k: keyof Settings, label: string, desc: string) => (
-    <label className="flex items-start gap-3 rounded-md border border-border bg-background p-3">
-      <input type="checkbox" checked={s[k] as boolean} onChange={(e) => setS({ ...s, [k]: e.target.checked })} className="mt-1" />
-      <div>
-        <div className="text-sm font-medium text-navy">{label}</div>
-        <div className="text-xs text-muted-foreground">{desc}</div>
-      </div>
-    </label>
-  );
-
   return (
-    <form onSubmit={save} className="max-w-3xl space-y-6">
+    <form onSubmit={save} className="max-w-4xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-navy md:text-3xl">Marketplace settings</h1>
-        <p className="text-sm text-muted-foreground">Defaults applied across vendors, checkout and storefront.</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Persistent operational settings. Changes are versioned and audited in the marketplace database.
+        </p>
       </div>
 
       <section className="grid gap-4 rounded-xl border border-border bg-card p-5 sm:grid-cols-2">
-        {text("name", "Marketplace name")}
-        {text("supportEmail", "Support email")}
-        {num("commissionRate", "Default commission rate (%)", "0.1")}
-        {num("quebecTaxRate", "Québec tax rate (%)", "0.001")}
-        {num("freeShippingThreshold", "Free shipping threshold (CAD)", "1")}
-        {num("standardShippingFee", "Standard shipping fee (CAD)", "0.01")}
+        <label className="text-sm">
+          <span className="mb-1 block font-medium text-navy">Marketplace name</span>
+          <input value={settings.marketplace_name} onChange={(e) => set("marketplace_name", e.target.value)}
+            className="w-full rounded-md border border-border bg-background px-3 py-2" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block font-medium text-navy">Support email</span>
+          <input type="email" value={settings.support_email} onChange={(e) => set("support_email", e.target.value)}
+            className="w-full rounded-md border border-border bg-background px-3 py-2" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block font-medium text-navy">Default commission (%)</span>
+          <input type="number" min="0" max="100" step="0.1" value={settings.default_commission_rate * 100}
+            onChange={(e) => set("default_commission_rate", Number(e.target.value) / 100)}
+            className="w-full rounded-md border border-border bg-background px-3 py-2" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block font-medium text-navy">Free shipping threshold (CAD)</span>
+          <input type="number" min="0" step="0.01" value={settings.free_shipping_threshold}
+            onChange={(e) => set("free_shipping_threshold", Number(e.target.value))}
+            className="w-full rounded-md border border-border bg-background px-3 py-2" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block font-medium text-navy">Standard shipping fee (CAD)</span>
+          <input type="number" min="0" step="0.01" value={settings.standard_shipping_fee}
+            onChange={(e) => set("standard_shipping_fee", Number(e.target.value))}
+            className="w-full rounded-md border border-border bg-background px-3 py-2" />
+        </label>
+        <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+          Version <strong className="text-foreground">{settings.version}</strong><br />
+          Last database update {new Date(settings.updated_at).toLocaleString()}
+        </div>
       </section>
 
       <section className="grid gap-3 rounded-xl border border-border bg-card p-5 sm:grid-cols-2">
-        {toggle("vendorApproval", "Require vendor approval", "New vendor applications start as pending.")}
-        {toggle("productApproval", "Require product approval", "Submitted products wait for admin review.")}
-        {toggle("guestCheckout", "Allow guest checkout", "Customers can purchase without an account.")}
-        {toggle("demoMode", "Demo mode enabled", "Backed pages show demo fallbacks when DB is empty.")}
+        {([
+          ["require_vendor_approval", "Require vendor approval", "New vendor applications remain pending until reviewed."],
+          ["require_product_approval", "Require product approval", "Submitted products require marketplace moderation."],
+          ["allow_guest_checkout", "Allow guest checkout", "Customers may buy without creating an account."],
+          ["demo_mode", "Demo mode", "Allow signed-out admin/vendor preview with seed data. Keep disabled in production unless a preview is intentionally required."],
+        ] as const).map(([key, label, description]) => (
+          <label key={key} className="flex items-start gap-3 rounded-md border border-border bg-background p-3">
+            <input type="checkbox" checked={settings[key]} onChange={(e) => set(key, e.target.checked)} className="mt-1" />
+            <span>
+              <span className="block text-sm font-medium text-navy">{label}</span>
+              <span className="block text-xs text-muted-foreground">{description}</span>
+            </span>
+          </label>
+        ))}
       </section>
 
-      <button className="rounded-md bg-electric px-5 py-2 text-sm font-semibold text-electric-foreground">Save settings</button>
+      <button disabled={saving} className="rounded-md bg-electric px-5 py-2 text-sm font-semibold text-electric-foreground disabled:opacity-50">
+        {saving ? "Saving…" : "Save settings"}
+      </button>
     </form>
   );
 }

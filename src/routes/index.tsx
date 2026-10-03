@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Zap, TrendingUp, ShieldCheck, Truck, RefreshCw, Store, Star, ArrowRight } from "lucide-react";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import { Zap, TrendingUp, ShieldCheck, Truck, RefreshCw, Store, Star, ArrowRight, BadgePercent, Sparkles, MapPin, PackageCheck } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
 import { ProductRail, SectionHead } from "@/components/ProductRail";
@@ -7,7 +8,12 @@ import { ProductImage } from "@/components/ProductImage";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { CouponStrip } from "@/components/CouponStrip";
 import { RecentlyViewed } from "@/components/RecentlyViewed";
-import { categories, products, productsByTag, vendors, formatCAD } from "@/lib/data";
+import { categories as demoCategoryMeta, formatCAD } from "@/lib/data";
+import { usePublicCatalog } from "@/hooks/use-public-catalog";
+import { FREE_SHIPPING_THRESHOLD_CAD } from "@/lib/canada-commerce";
+import { usePublicMarketplaceSettings } from "@/hooks/use-marketplace-settings";
+import { usePublicCategories } from "@/hooks/use-public-categories";
+import { listPublicCatalogProductsForVendor, searchPublicCatalogProducts } from "@/services/public-catalog";
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -17,10 +23,10 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Shop flash deals, trending products and verified Canadian sellers on 1LV.CA. Free shipping over $49 CAD, 30-day returns, buyer protection.",
+          "Shop live marketplace products, active markdowns and Canadian sellers on 1LV.CA with protected checkout and returns on eligible items.",
       },
       { property: "og:title", content: "1LV.CA — Canada's deal marketplace" },
-      { property: "og:description", content: "Flash deals, Canadian sellers, free shipping over $49 CAD." },
+      { property: "og:description", content: "Live marketplace products, Canadian sellers, active markdowns and protected checkout." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -28,21 +34,182 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
-  const flash = productsByTag("flash");
-  const trending = productsByTag("trending");
-  const local = productsByTag("local");
-  const newArrivals = productsByTag("new");
-  const best = productsByTag("best");
-  const under10 = products.filter((p) => p.price < 25).slice(0, 4);
-  const heroDeal = flash[0] ?? products[0];
-  const tiles = [products[3], products[6], products[12]].filter(Boolean);
-  const featuredVendors = vendors.slice(0, 4).map((v) => ({
-    vendor: v,
-    items: products.filter((p) => p.vendorSlug === v.slug),
+  const { settings } = usePublicMarketplaceSettings();
+  const { products, vendors, demo, loading, error } = usePublicCatalog();
+  const {
+    categories: publicCategories,
+    loading: categoriesLoading,
+    error: categoriesError,
+  } = usePublicCategories();
+  const freeShippingThreshold =
+    settings?.free_shipping_threshold ?? FREE_SHIPPING_THRESHOLD_CAD;
+
+  const rootPublicCategories = publicCategories.filter(
+    (category) => category.parent_slug === null,
+  );
+  const categoryRail =
+    rootPublicCategories.length > 0
+      ? rootPublicCategories
+      : publicCategories;
+
+  const homeDealsQuery = useQuery({
+    queryKey: ["public-marketplace-home", "deals"],
+    queryFn: () =>
+      searchPublicCatalogProducts({
+        saleOnly: true,
+        sort: "relevance",
+        limit: 500,
+      }),
+    enabled: !demo && !loading,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
+  const homeTrendingQuery = useQuery({
+    queryKey: ["public-marketplace-home", "trending"],
+    queryFn: () =>
+      searchPublicCatalogProducts({
+        sort: "sold",
+        limit: 24,
+      }),
+    enabled: !demo && !loading,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
+  const homeNewestQuery = useQuery({
+    queryKey: ["public-marketplace-home", "newest"],
+    queryFn: () =>
+      searchPublicCatalogProducts({
+        sort: "newest",
+        limit: 24,
+      }),
+    enabled: !demo && !loading,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
+  const homeCanadianQuery = useQuery({
+    queryKey: ["public-marketplace-home", "canadian"],
+    queryFn: () =>
+      searchPublicCatalogProducts({
+        canadianOnly: true,
+        sort: "newest",
+        limit: 24,
+      }),
+    enabled: !demo && !loading,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
+  const homeBudgetQuery = useQuery({
+    queryKey: ["public-marketplace-home", "under-25"],
+    queryFn: () =>
+      searchPublicCatalogProducts({
+        maxPrice: 24.99,
+        sort: "price-asc",
+        limit: 12,
+      }),
+    enabled: !demo && !loading,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
+
+  const discounted = [
+    ...(demo
+      ? products.filter((p) => p.compareAt && p.compareAt > p.price)
+      : homeDealsQuery.data ?? []),
+  ].sort(
+    (a, b) =>
+      ((b.compareAt ?? b.price) - b.price) / (b.compareAt ?? b.price) -
+      (((a.compareAt ?? a.price) - a.price) / (a.compareAt ?? a.price)),
+  );
+  const maxDiscount = discounted.reduce((max, product) => {
+    const compareAt = product.compareAt ?? product.price;
+    if (compareAt <= product.price) return max;
+    return Math.max(
+      max,
+      Math.round(((compareAt - product.price) / compareAt) * 100),
+    );
+  }, 0);
+  const flash = discounted;
+  const trending = demo
+    ? [...products].sort((a, b) => b.sold - a.sold)
+    : homeTrendingQuery.data ?? [];
+  const local = demo
+    ? products.filter(
+        (p) => p.vendorCountry === "CA" || p.tags.includes("local"),
+      )
+    : homeCanadianQuery.data ?? [];
+  const newArrivals = demo
+    ? [...products].sort(
+        (a, b) =>
+          new Date(b.createdAt ?? 0).getTime() -
+          new Date(a.createdAt ?? 0).getTime(),
+      )
+    : homeNewestQuery.data ?? [];
+  const best = trending;
+  const under25 = demo
+    ? products.filter((p) => p.price < 25).slice(0, 4)
+    : (homeBudgetQuery.data ?? []).slice(0, 4);
+  const heroDeal = flash[0] ?? trending[0] ?? products[0];
+  const tiles = products.slice(0, 3);
+  const featuredVendorBase = vendors.slice(0, 4);
+  const featuredVendorProductQueries = useQueries({
+    queries: featuredVendorBase.map((vendor) => ({
+      queryKey: ["public-marketplace-home", "vendor-products", vendor.slug],
+      queryFn: () => listPublicCatalogProductsForVendor(vendor.slug, 3),
+      enabled: !demo && !loading,
+      staleTime: 60_000,
+      gcTime: 10 * 60_000,
+      retry: 1,
+    })),
+  });
+  const featuredVendors = featuredVendorBase.map((vendor, index) => ({
+    vendor,
+    items: demo
+      ? products
+          .filter((p) => p.vendorSlug === vendor.slug)
+          .slice(0, 3)
+      : featuredVendorProductQueries[index]?.data ?? [],
   }));
+  const homeScopedLoading =
+    !demo &&
+    (homeDealsQuery.isPending ||
+      homeTrendingQuery.isPending ||
+      homeNewestQuery.isPending ||
+      homeCanadianQuery.isPending ||
+      homeBudgetQuery.isPending ||
+      featuredVendorProductQueries.some((query) => query.isPending));
+  const homeScopedError =
+    !demo &&
+    [
+      homeDealsQuery.error,
+      homeTrendingQuery.error,
+      homeNewestQuery.error,
+      homeCanadianQuery.error,
+      homeBudgetQuery.error,
+      ...featuredVendorProductQueries.map((query) => query.error),
+    ].some(Boolean);
 
   return (
     <AppLayout>
+      {(loading || categoriesLoading || homeScopedLoading) && (
+        <div className="border-b border-border bg-muted/40 px-4 py-2 text-center text-xs text-muted-foreground">
+          Loading the live 1LV.CA marketplace…
+        </div>
+      )}
+      {!loading && (error || categoriesError || homeScopedError) && (
+        <div className="border-b border-destructive/20 bg-destructive/5 px-4 py-2 text-center text-xs text-destructive">
+          Live catalog unavailable. {demo ? "Showing authorized preview data." : "Please try again shortly."}
+        </div>
+      )}
+      {!loading && !demo && products.length === 0 && (
+        <div className="border-b border-border bg-muted/40 px-4 py-3 text-center text-sm text-muted-foreground">
+          No live products are published yet.
+        </div>
+      )}
       {/* ---------- HERO MERCHANDISING ---------- */}
       <section className="surface-3 border-b border-border">
         <div className="mx-auto max-w-7xl px-4 py-4 md:py-6">
@@ -54,23 +221,30 @@ function Home() {
             >
               <div className="relative z-10 max-w-md">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider backdrop-blur">
-                  <Zap size={12} className="text-deal deal-pulse" /> Flash event live
+                  <Zap size={12} className="text-deal deal-pulse" />{" "}
+                  {demo
+                    ? "Preview deal event"
+                    : discounted.length > 0
+                      ? "Live marketplace savings"
+                      : "Live marketplace"}
                 </span>
                 <h1 className="mt-3 font-display text-3xl font-extrabold leading-[1.05] tracking-tight md:text-5xl">
-                  Up to 60% off
+                  {maxDiscount > 0 ? `Up to ${maxDiscount}% off` : "Daily marketplace picks"}
                   <br />
-                  daily deals in CAD
+                  in CAD
                 </h1>
                 <p className="mt-3 text-sm text-white/80">
-                  New markdowns every morning. Free shipping over $49, 30-day returns.
+                  {discounted.length > 0
+                    ? `Active marketplace markdowns. Free shipping over ${freeShippingThreshold} where eligible.`
+                    : `Free shipping over ${freeShippingThreshold} where eligible, with protected checkout.`}
                 </p>
                 <span className="mt-5 inline-flex items-center gap-2 rounded-md bg-deal px-5 py-2.5 text-sm font-bold text-deal-foreground transition group-hover:opacity-90">
-                  Shop the event <ArrowRight size={15} />
+                  {discounted.length > 0 ? "Shop current deals" : "Browse marketplace"} <ArrowRight size={15} />
                 </span>
                 <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-[11px] text-white/70">
                   <span className="inline-flex items-center gap-1.5"><ShieldCheck size={13} className="text-electric" /> Buyer protection</span>
-                  <span className="inline-flex items-center gap-1.5"><Truck size={13} className="text-electric" /> Fast CA delivery</span>
-                  <span className="inline-flex items-center gap-1.5"><RefreshCw size={13} className="text-electric" /> 30-day returns</span>
+                  <span className="inline-flex items-center gap-1.5"><Truck size={13} className="text-electric" /> Canada-wide shipping</span>
+                  <span className="inline-flex items-center gap-1.5"><RefreshCw size={13} className="text-electric" /> Returns on eligible items</span>
                 </div>
               </div>
               {heroDeal && (
@@ -94,7 +268,13 @@ function Home() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-electric">
-                      {i === 0 ? "Editor's pick" : i === 1 ? "Best seller" : "Lowest price this week"}
+                      {p.compareAt && p.compareAt > p.price
+                        ? "Current markdown"
+                        : p.sold > 0
+                          ? "Ordered on 1LV"
+                          : i === 0
+                            ? "New marketplace item"
+                            : "Marketplace item"}
                     </p>
                     <p className="line-clamp-2 text-sm font-semibold text-navy group-hover:text-electric">{p.title}</p>
                     <p className="mt-0.5 text-sm font-extrabold text-deal">{formatCAD(p.price)}</p>
@@ -110,19 +290,86 @@ function Home() {
       <section className="border-b border-border bg-background">
         <div className="mx-auto max-w-7xl px-2 py-4">
           <div className="scrollbar-hide flex gap-1 overflow-x-auto">
-            {categories.map((c) => (
-              <Link
-                key={c.slug}
-                to="/category/$slug"
-                params={{ slug: c.slug }}
-                className="group flex min-w-[76px] flex-col items-center gap-1.5 rounded-lg px-2 py-1.5 text-center transition hover:bg-muted"
-              >
-                <div className="grid h-12 w-12 place-items-center rounded-full bg-gradient-to-br from-electric/12 to-deal/12 text-xl transition group-hover:shadow-merch">
-                  {c.emoji}
-                </div>
-                <span className="text-[11px] font-medium leading-tight text-navy group-hover:text-electric">{c.name}</span>
-              </Link>
-            ))}
+            {categoryRail.map((category) => {
+              const meta = demoCategoryMeta.find(
+                (item) => item.slug === category.slug,
+              );
+              return (
+                <Link
+                  key={category.slug}
+                  to="/category/$slug"
+                  params={{ slug: category.slug }}
+                  className="group flex min-w-[76px] flex-col items-center gap-1.5 rounded-lg px-2 py-1.5 text-center transition hover:bg-muted"
+                >
+                  <div className="grid h-12 w-12 place-items-center rounded-full bg-gradient-to-br from-electric/12 to-deal/12 text-xl transition group-hover:shadow-merch">
+                    {meta?.emoji ?? "📦"}
+                  </div>
+                  <span className="text-[11px] font-medium leading-tight text-navy group-hover:text-electric">
+                    {category.name_en}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ---------- MARKETPLACE COMMAND DECK ---------- */}
+      <section className="border-b border-border bg-white">
+        <div className="mx-auto max-w-7xl px-4 py-5">
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-electric">Live marketplace</p>
+              <h2 className="font-display text-xl font-extrabold tracking-tight text-navy md:text-2xl">Shop your way</h2>
+            </div>
+            <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+              <span className="rounded-full bg-muted px-2.5 py-1">Live product feed</span>
+              <span className="rounded-full bg-muted px-2.5 py-1">Active seller feed</span>
+              <span className="rounded-full bg-muted px-2.5 py-1">CAD checkout</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+            <Link to="/deals" className="group rounded-xl border border-border bg-card p-4 shadow-merch transition hover:-translate-y-0.5 hover:border-deal/40 hover:shadow-merch-hover">
+              <div className="flex items-center justify-between">
+                <span className="grid h-9 w-9 place-items-center rounded-lg bg-deal/10 text-deal"><BadgePercent size={18} /></span>
+                <ArrowRight size={15} className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-deal" />
+              </div>
+              <div className="mt-3 text-sm font-extrabold text-navy">Current deals</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">Active marketplace markdowns</div>
+            </Link>
+
+            <Link to="/trending" className="group rounded-xl border border-border bg-card p-4 shadow-merch transition hover:-translate-y-0.5 hover:border-electric/40 hover:shadow-merch-hover">
+              <div className="flex items-center justify-between">
+                <span className="grid h-9 w-9 place-items-center rounded-lg bg-electric/10 text-electric"><TrendingUp size={18} /></span>
+                <ArrowRight size={15} className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-electric" />
+              </div>
+              <div className="mt-3 text-sm font-extrabold text-navy">Best sellers</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">Ranked by recorded paid-unit sales</div>
+            </Link>
+
+            <Link to="/new-arrivals" className="group rounded-xl border border-border bg-card p-4 shadow-merch transition hover:-translate-y-0.5 hover:border-electric/40 hover:shadow-merch-hover">
+              <div className="flex items-center justify-between">
+                <span className="grid h-9 w-9 place-items-center rounded-lg bg-electric/10 text-electric"><Sparkles size={18} /></span>
+                <ArrowRight size={15} className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-electric" />
+              </div>
+              <div className="mt-3 text-sm font-extrabold text-navy">New arrivals</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">Recently published marketplace items</div>
+            </Link>
+
+            <Link to="/search" className="group rounded-xl border border-border bg-card p-4 shadow-merch transition hover:-translate-y-0.5 hover:border-success/40 hover:shadow-merch-hover">
+              <div className="flex items-center justify-between">
+                <span className="grid h-9 w-9 place-items-center rounded-lg bg-success/10 text-success"><MapPin size={18} /></span>
+                <ArrowRight size={15} className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-success" />
+              </div>
+              <div className="mt-3 text-sm font-extrabold text-navy">Canadian sellers</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">Products from Canadian vendors</div>
+            </Link>
+          </div>
+
+          <div className="mt-3 flex items-center gap-2 rounded-lg bg-navy px-3 py-2 text-[11px] text-white/80">
+            <PackageCheck size={14} className="shrink-0 text-electric" />
+            <span>Marketplace orders use server-validated pricing, inventory and payment totals before payment.</span>
           </div>
         </div>
       </section>
@@ -132,8 +379,13 @@ function Home() {
       {/* ---------- FLASH DEALS ---------- */}
       <section className="surface-2 border-y border-border">
         <div className="mx-auto max-w-7xl px-4 py-7">
-          <SectionHead eyebrow="Ends tonight" title="⚡ Flash deals" action="Shop all deals" actionTo="/deals">
-            <CountdownTimer />
+          <SectionHead
+            eyebrow={demo ? "Preview event" : "Active markdowns"}
+            title="⚡ Current deals"
+            action="Shop all deals"
+            actionTo="/deals"
+          >
+            {demo ? <CountdownTimer /> : null}
           </SectionHead>
           <ProductGrid products={flash.slice(0, 6)} cols={6} />
         </div>
@@ -146,9 +398,9 @@ function Home() {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
             {[
               { label: "Under $10", to: "/deals", tone: "bg-deal text-deal-foreground" },
-              { label: "Free shipping", to: "/search", tone: "bg-success text-success-foreground" },
+              { label: "Shipping terms", to: "/shipping", tone: "bg-success text-success-foreground" },
               { label: "Canadian sellers 🇨🇦", to: "/search", tone: "bg-navy text-navy-foreground" },
-              { label: "New this week", to: "/new-arrivals", tone: "bg-electric text-electric-foreground" },
+              { label: "New arrivals", to: "/new-arrivals", tone: "bg-electric text-electric-foreground" },
             ].map((t) => (
               <Link
                 key={t.label}
@@ -159,7 +411,7 @@ function Home() {
               </Link>
             ))}
           </div>
-          <ProductGrid products={under10} cols={4} />
+          <ProductGrid products={under25} cols={4} />
         </div>
       </section>
 
@@ -168,7 +420,7 @@ function Home() {
         <div className="mx-auto max-w-7xl px-4 py-7">
           <SectionHead eyebrow="Rising fast" title="Trending now" action="See ranking" actionTo="/trending">
             <span className="hidden items-center gap-1 rounded-full bg-deal/10 px-2 py-1 text-[11px] font-bold text-deal sm:inline-flex">
-              <TrendingUp size={12} /> Updated hourly
+              <TrendingUp size={12} /> Based on marketplace sales
             </span>
           </SectionHead>
           <ProductGrid products={trending.slice(0, 6)} cols={6} ranked />
@@ -177,7 +429,7 @@ function Home() {
 
       {/* ---------- FEATURED STORES ---------- */}
       <section className="mx-auto max-w-7xl px-4 py-7">
-        <SectionHead eyebrow="Verified sellers" title="Featured stores" action="All stores" actionTo="/categories" />
+        <SectionHead eyebrow="Active sellers" title="Marketplace stores" action="Browse marketplace" actionTo="/categories" />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {featuredVendors.map(({ vendor, items }) => (
             <div key={vendor.slug} className="merch-card group overflow-hidden">
@@ -190,9 +442,17 @@ function Home() {
                   </div>
                   <div className="text-white">
                     <div className="text-sm font-bold leading-tight">{vendor.name}</div>
-                    <div className="flex items-center gap-1 text-[11px] text-white/85">
-                      <Star size={10} className="fill-warning text-warning" /> {vendor.rating} · {vendor.city}
-                    </div>
+                    {(vendor.rating > 0 || vendor.city) && (
+                      <div className="flex items-center gap-1 text-[11px] text-white/85">
+                        {vendor.rating > 0 && (
+                          <>
+                            <Star size={10} className="fill-warning text-warning" /> {vendor.rating}
+                          </>
+                        )}
+                        {vendor.rating > 0 && vendor.city ? " · " : ""}
+                        {vendor.city}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -205,7 +465,7 @@ function Home() {
               </div>
               <div className="flex items-center justify-between border-t border-border px-3 py-2">
                 <span className="text-[11px] text-muted-foreground">
-                  {items.length} products · {vendor.yearsActive}y on 1LV
+                  {items.length > 0 ? "Live products available" : "Visit storefront"}
                 </span>
                 <Link
                   to="/store/$slug"
@@ -237,7 +497,7 @@ function Home() {
       {/* ---------- BEST SELLERS ---------- */}
       <section className="surface-2 border-y border-border">
         <div className="mx-auto max-w-7xl px-4 py-7">
-          <SectionHead eyebrow="Most ordered" title="Best sellers this week" action="See top products" actionTo="/trending" />
+          <SectionHead eyebrow="Recorded sales" title="Most ordered products" action="See ranking" actionTo="/trending" />
           <ProductRail products={best} />
         </div>
       </section>
@@ -246,7 +506,7 @@ function Home() {
 
       {/* ---------- RECOMMENDED FEED ---------- */}
       <section className="mx-auto max-w-7xl px-4 py-8">
-        <SectionHead eyebrow="Picked for you" title="Recommended" />
+        <SectionHead eyebrow="Keep browsing" title="Explore more products" />
         <ProductGrid products={products} cols={6} />
         <div className="mt-6 text-center">
           <Link
@@ -267,7 +527,7 @@ function Home() {
               Reach Canadian shoppers. Get paid in CAD.
             </h2>
             <p className="mt-2 max-w-lg text-sm text-white/70">
-              List products in minutes, manage every order from one dashboard, and receive weekly payouts.
+              Create listings, manage orders from one dashboard, and track eligible earnings and payout status in CAD.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row md:justify-end">

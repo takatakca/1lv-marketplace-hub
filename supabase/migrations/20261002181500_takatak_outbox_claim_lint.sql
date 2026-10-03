@@ -1,0 +1,107 @@
+-- Remove PL/pgSQL output-column ambiguity from the TAKATAK outbox claim RPC.
+-- The function RETURNS TABLE(attempt_count, ...), so unqualified attempt_count
+-- inside procedural SQL can be interpreted as either the output variable or
+-- takatak_outbox.attempt_count. Qualify all stale-lease row references.
+
+CREATE OR REPLACE FUNCTION public.claim_takatak_outbox(
+  _limit integer DEFAULT 25,
+  _max_attempts integer DEFAULT 6
+)
+RETURNS TABLE (
+  id uuid,
+  event_type text,
+  aggregate_type text,
+  aggregate_id text,
+  payload jsonb,
+  attempt_count integer,
+  claim_token uuid
+)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_limit integer := LEAST(GREATEST(COALESCE(_limit, 25), 1), 100);
+  v_max_attempts integer := LEAST(GREATEST(COALESCE(_max_attempts, 6), 1), 20);
+BEGIN
+  UPDATE public.takatak_outbox AS o
+  SET
+    status = CASE
+      WHEN o.attempt_count >= v_max_attempts THEN 'failed'
+      ELSE 'pending'
+    END,
+    claim_token = NULL,
+    last_error = CASE
+      WHEN o.attempt_count >= v_max_attempts
+        THEN 'Stale processing lease exhausted retry budget.'
+      ELSE 'Recovered stale processing lease.'
+    END,
+    next_attempt_at = now(),
+    updated_at = now()
+  WHERE o.status = 'processing'
+    AND o.updated_at < now() - interval '15 minutes';
+
+  RETURN QUERY
+  WITH candidates AS (
+    SELECT o.id
+    FROM public.takatak_outbox AS o
+    WHERE o.status = 'pending'
+      AND o.attempt_count < v_max_attempts
+      AND o.next_attempt_at <= now()
+    ORDER BY o.created_at ASC, o.id ASC
+    FOR UPDATE SKIP LOCKED
+    LIMIT v_limit
+  ),
+  claimed AS (
+    UPDATE public.takatak_outbox AS o
+    SET
+      status = 'processing',
+      attempt_count = o.attempt_count + 1,
+      claim_token = gen_random_uuid(),
+      last_error = NULL,
+      updated_at = now()
+    FROM candidates AS c
+    WHERE o.id = c.id
+      AND o.status = 'pending'
+    RETURNING
+      o.id,
+      o.event_type,
+      o.aggregate_type,
+      o.aggregate_id,
+      o.payload,
+      o.attempt_count,
+      o.claim_token
+  )
+  SELECT
+    c.id,
+    c.event_type,
+    c.aggregate_type,
+    c.aggregate_id,
+    c.payload,
+    c.attempt_count,
+    c.claim_token
+  FROM claimed AS c;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.claim_takatak_outbox(integer, integer)
+FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.claim_takatak_outbox(integer, integer)
+TO service_role;
+
+CREATE OR REPLACE FUNCTION public.get_1lv_schema_version()
+RETURNS text
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+  SELECT '20261002181500';
+$$;
+
+REVOKE ALL ON FUNCTION public.get_1lv_schema_version()
+FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_1lv_schema_version()
+TO service_role;

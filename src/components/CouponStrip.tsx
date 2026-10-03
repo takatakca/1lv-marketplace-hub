@@ -1,32 +1,64 @@
 import { Link } from "@tanstack/react-router";
-import { Ticket } from "lucide-react";
+import { ArrowRight, BadgePercent, Store, Truck, Zap } from "lucide-react";
+import { FREE_SHIPPING_THRESHOLD_CAD } from "@/lib/canada-commerce";
+import { usePublicMarketplaceSettings } from "@/hooks/use-marketplace-settings";
 
-const COUPONS = [
-  { code: "WELCOME10", label: "10% off first order", min: "No minimum" },
-  { code: "FREESHIP", label: "Free shipping", min: "Orders $35+" },
-  { code: "SAVE20", label: "$20 off", min: "Orders $100+" },
-  { code: "FLASH5", label: "Extra 5% off deals", min: "Today only" },
+const SAVINGS = [
+  {
+    label: "Free Canadian shipping",
+    detail: `Eligible orders $${FREE_SHIPPING_THRESHOLD_CAD}+`,
+    to: "/shipping" as const,
+    icon: Truck,
+  },
+  {
+    label: "Current deals",
+    detail: "Marked-down marketplace products",
+    to: "/deals" as const,
+    icon: Zap,
+  },
+  {
+    label: "Canadian sellers",
+    detail: "Shop local marketplace stores",
+    to: "/search" as const,
+    icon: Store,
+  },
+  {
+    label: "Savings center",
+    detail: "See current promotions",
+    to: "/coupons" as const,
+    icon: BadgePercent,
+  },
 ];
 
 export function CouponStrip() {
+  const { settings } = usePublicMarketplaceSettings();
+  const freeShippingThreshold =
+    settings?.free_shipping_threshold ?? FREE_SHIPPING_THRESHOLD_CAD;
+
   return (
-    <section className="mx-auto max-w-7xl px-4 py-4">
+    <section className="mx-auto max-w-7xl px-4 py-4" aria-label="Ways to save">
       <div className="scrollbar-hide flex gap-2 overflow-x-auto">
-        {COUPONS.map((c) => (
-          <Link
-            key={c.code}
-            to="/coupons"
-            className="flex min-w-[200px] items-center gap-3 rounded-lg border-2 border-dashed border-deal/40 bg-deal/5 px-3 py-2.5 hover:border-deal hover:bg-deal/10"
-          >
-            <span className="grid h-9 w-9 place-items-center rounded-md bg-deal text-deal-foreground">
-              <Ticket size={16} />
-            </span>
-            <div className="min-w-0 text-xs">
-              <div className="font-bold text-navy">{c.label}</div>
-              <div className="text-[11px] text-muted-foreground">Code <span className="font-mono font-semibold text-deal">{c.code}</span> · {c.min}</div>
-            </div>
-          </Link>
-        ))}
+        {SAVINGS.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.label}
+              to={item.to}
+              className="group flex min-w-[220px] items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 shadow-sm transition hover:-translate-y-0.5 hover:border-electric/40 hover:shadow-merch"
+            >
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-electric/10 text-electric">
+                <Icon size={16} />
+              </span>
+              <div className="min-w-0 flex-1 text-xs">
+                <div className="font-bold text-navy">{item.label}</div>
+                <div className="text-[11px] text-muted-foreground">{item.label === "Free Canadian shipping"
+                  ? `Eligible orders ${freeShippingThreshold} CAD+`
+                  : item.detail}</div>
+              </div>
+              <ArrowRight size={14} className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-electric" />
+            </Link>
+          );
+        })}
       </div>
     </section>
   );

@@ -30,15 +30,15 @@ jobs:
       # 1. Checkout source
       # ------------------------------------------------------------
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # ------------------------------------------------------------
       # 2. Use same Node major as MochaHost
       # ------------------------------------------------------------
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: ${{ vars.NODE_VERSION }}
+          node-version: "22"
           cache: npm
 
       # ------------------------------------------------------------
@@ -57,13 +57,45 @@ jobs:
           fi
 
       # ------------------------------------------------------------
-      # 4. Build website on GitHub
+      # 4. Block high/critical production dependency vulnerabilities
+      # ------------------------------------------------------------
+      - name: Audit production dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm audit --omit=dev --audit-level=high
+
+      - name: Enforce GROUPE TAKATAK architecture boundary
+        shell: bash
+        run: npm run check:architecture
+
+      - name: Verify trusted public origin handling
+        shell: bash
+        run: npm run qa:request-origin
+
+      - name: Verify CSV parser handling
+        shell: bash
+        run: npm run qa:csv-parser
+
+      # ------------------------------------------------------------
+      # 5. Re-run repository lint before any production build
+      # Protects production even if main is updated outside the normal PR path.
+      # ------------------------------------------------------------
+      - name: Lint entire repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx eslint . --max-warnings=0 --rule "prettier/prettier: off"
+
+      # ------------------------------------------------------------
+      # 6. Build website on GitHub
       # ------------------------------------------------------------
       - name: Build website on GitHub
         shell: bash
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}
         run: |
           set -euo pipefail
 
@@ -77,13 +109,29 @@ jobs:
             exit 1
           fi
 
-          echo "Supabase frontend environment variables are available."
+          if [ -z "$VITE_STRIPE_PUBLISHABLE_KEY" ]; then
+            echo "ERROR: VITE_STRIPE_PUBLISHABLE_KEY is missing"
+            exit 1
+          fi
+
+          EXPECTED_SUPABASE_URL="https://odoybkshqszucvoxzjyz.supabase.co"
+          if [ "${VITE_SUPABASE_URL%/}" != "$EXPECTED_SUPABASE_URL" ]; then
+            echo "ERROR: VITE_SUPABASE_URL must target the fixed 1LV production project."
+            exit 1
+          fi
+
+          if [[ "$VITE_STRIPE_PUBLISHABLE_KEY" != pk_* ]]; then
+            echo "ERROR: VITE_STRIPE_PUBLISHABLE_KEY is not a Stripe publishable key."
+            exit 1
+          fi
+
+          echo "Frontend production environment variables are available and target the expected services."
           echo "Building 1lv.ca..."
 
           npm run build
 
       # ------------------------------------------------------------
-      # 5. Verify build
+      # 7. Verify build
       # ------------------------------------------------------------
       - name: Verify production build
         shell: bash
@@ -92,15 +140,60 @@ jobs:
 
           node --check server.cjs
 
-          if [ ! -d "dist" ] && [ ! -d ".output" ]; then
-            echo "ERROR: Neither dist nor .output exists."
+          test -f "dist/client/index.html" || {
+            echo "ERROR: dist/client/index.html is missing."
             exit 1
-          fi
+          }
 
-          echo "Production build verified."
+          test -f "dist/server/server.js" || {
+            echo "ERROR: dist/server/server.js is missing."
+            exit 1
+          }
+
+          echo "Full-stack production build verified."
 
       # ------------------------------------------------------------
-      # 6. Remove development packages
+      # 8. TypeScript after route generation/build
+      # ------------------------------------------------------------
+      - name: TypeScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx tsc --noEmit
+
+      # ------------------------------------------------------------
+      # 9. Replay every Supabase migration locally before packaging
+      # No remote database is modified by this validation.
+      # ------------------------------------------------------------
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v3.0.1
+        with:
+          version: "2.118.0"
+
+      - name: Rebuild Supabase migrations locally
+        shell: bash
+        env:
+          SUPABASE_TELEMETRY_DISABLED: "1"
+        run: |
+          set -euo pipefail
+
+          cleanup() {
+            supabase stop --no-backup >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          supabase db start
+          supabase db reset --local --no-seed
+          supabase db lint --local --schema public --level warning --fail-on warning
+          supabase test db --local
+
+          cleanup
+          trap - EXIT
+
+          echo "All Supabase migrations replayed successfully."
+
+      # ------------------------------------------------------------
+      # 10. Remove development packages
       # ------------------------------------------------------------
       - name: Prepare production dependencies
         shell: bash
@@ -110,7 +203,85 @@ jobs:
           npm prune --omit=dev
 
       # ------------------------------------------------------------
-      # 7. Create production release directory
+      # Verify exactly the dependency tree that will be packaged.
+      # ------------------------------------------------------------
+      - name: Smoke test packaged runtime
+        shell: bash
+        env:
+          PORT: "4179"
+          SUPABASE_URL: "https://odoybkshqszucvoxzjyz.supabase.co"
+          SUPABASE_PUBLISHABLE_KEY: "ci-publishable-key"
+          SUPABASE_SERVICE_ROLE_KEY: "ci-service-role-key"
+          STRIPE_SECRET_KEY: "sk_test_ci"
+          STRIPE_WEBHOOK_SECRET: "whsec_ci"
+          CHECKOUT_GUEST_TOKEN_SECRET: "ci-checkout-guest-token-secret-0000000000000000"
+          STRIPE_PRICE_VENDOR_STARTER_MONTHLY: "price_ci_starter"
+          STRIPE_PRICE_VENDOR_GROWTH_MONTHLY: "price_ci_growth"
+          STRIPE_PRICE_VENDOR_SCALE_MONTHLY: "price_ci_scale"
+          TAKATAK_MASTER_API_URL: "https://takatak.invalid"
+          TAKATAK_1LV_API_KEY: ${{ github.sha }}
+          TAKATAK_DRAIN_CRON_SECRET: "ci-takatak-drain-secret-000000000000000000"
+          INVENTORY_MAINTENANCE_CRON_SECRET: "ci-inventory-maintenance-secret-000000000000000"
+          HEALTH_SKIP_DATABASE_CHECK: "1"
+          RELEASE_REVISION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          node server.cjs > /tmp/1lv-packaged-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if HEALTH="$(curl --fail --silent --show-error --max-time 5 "http://127.0.0.1:$PORT/api/public/health")"; then
+              node -e '
+                const payload = JSON.parse(process.argv[1]);
+                if (
+                  payload.ok !== true ||
+                  payload.runtime !== "tanstack-start" ||
+                  payload.database !== "skipped" ||
+                  payload.revision !== process.env.GITHUB_SHA
+                ) process.exit(1);
+              ' "$HEALTH"
+
+              for route in / /search /login /vendor-pricing; do
+                curl --fail --silent --show-error --max-time 5 "http://127.0.0.1:$PORT$route" > /dev/null
+              done
+
+              TAKATAK_STATUS="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 --request POST "http://127.0.0.1:$PORT/api/internal/takatak/drain")"
+              test "$TAKATAK_STATUS" = "401" || {
+                echo "Expected packaged unauthenticated TAKATAK drain to return 401, got $TAKATAK_STATUS"
+                exit 1
+              }
+
+              INVENTORY_STATUS="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 --request POST "http://127.0.0.1:$PORT/api/internal/inventory/cleanup")"
+              test "$INVENTORY_STATUS" = "401" || {
+                echo "Expected packaged unauthenticated inventory cleanup to return 401, got $INVENTORY_STATUS"
+                exit 1
+              }
+
+              STRIPE_STATUS="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 --request POST --data '{}' "http://127.0.0.1:$PORT/api/public/webhooks/stripe")"
+              test "$STRIPE_STATUS" = "401" || {
+                echo "Expected packaged unsigned Stripe webhook to return 401, got $STRIPE_STATUS"
+                exit 1
+              }
+
+              echo "Packaged runtime smoke test passed."
+              exit 0
+            fi
+
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              cat /tmp/1lv-packaged-server.log
+              exit 1
+            fi
+
+            sleep 1
+          done
+
+          cat /tmp/1lv-packaged-server.log
+          exit 1
+
+      # ------------------------------------------------------------
+      # 11. Create production release directory
       # ------------------------------------------------------------
       - name: Create release directory
         shell: bash
@@ -120,14 +291,7 @@ jobs:
           rm -rf .release
           mkdir -p .release
 
-          if [ -d "dist" ]; then
-            cp -a dist .release/
-          fi
-
-          if [ -d ".output" ]; then
-            cp -a .output .release/
-          fi
-
+          cp -a dist .release/
           cp server.cjs .release/
 
           for file in server-*.cjs; do
@@ -147,7 +311,7 @@ jobs:
           printf '%s\n' "$GITHUB_SHA" > .release/REVISION
 
       # ------------------------------------------------------------
-      # 8. Create compressed production archive
+      # 12. Create compressed production archive
       # ------------------------------------------------------------
       - name: Create deployment archive
         shell: bash
@@ -160,7 +324,7 @@ jobs:
           ls -lh "1lv-${GITHUB_SHA}.tar.gz"
 
       # ------------------------------------------------------------
-      # 9. Keep recovery artifact on GitHub
+      # 13. Keep recovery artifact on GitHub
       # ------------------------------------------------------------
       - name: Save Linux production artifact
         uses: actions/upload-artifact@v4
@@ -188,11 +352,139 @@ jobs:
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && \
              [ "${{ inputs.package_only }}" = "false" ]; then
+            if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+              echo "ERROR: manual production deployment is allowed only from refs/heads/main."
+              exit 1
+            fi
             SHOULD_DEPLOY="true"
           fi
 
           echo "enabled=$SHOULD_DEPLOY" >> "$GITHUB_OUTPUT"
           echo "Deployment enabled: $SHOULD_DEPLOY"
+
+      # ------------------------------------------------------------
+      # Block activation until the exact 1LV production database is already
+      # migrated and hosted Auth is fail-closed. Deployment never applies DB
+      # migrations; it only verifies the production prerequisite.
+      # ------------------------------------------------------------
+      - name: Verify production database and Auth prerequisite
+        if: steps.deployment.outputs.enabled == 'true'
+        shell: bash
+        env:
+          EXPECTED_PROJECT_REF: odoybkshqszucvoxzjyz
+          EXPECTED_SCHEMA_VERSION: "20261003060000"
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          test -n "${SUPABASE_ACCESS_TOKEN:-}" || {
+            echo "ERROR: SUPABASE_ACCESS_TOKEN is required before production deployment."
+            exit 1
+          }
+          test -n "${SUPABASE_DB_PASSWORD:-}" || {
+            echo "ERROR: SUPABASE_DB_PASSWORD is required before production deployment."
+            exit 1
+          }
+
+          shopt -s nullglob
+          EXPECTED_MIGRATIONS=(supabase/migrations/"${EXPECTED_SCHEMA_VERSION}"_*.sql)
+          if [ "${#EXPECTED_MIGRATIONS[@]}" -ne 1 ]; then
+            echo "ERROR: expected exactly one local migration for schema ${EXPECTED_SCHEMA_VERSION}."
+            exit 1
+          fi
+
+          AUTH_CONFIG="$(
+            curl --fail --silent --show-error               -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"               "https://api.supabase.com/v1/projects/$EXPECTED_PROJECT_REF/config/auth"
+          )"
+
+          DISABLE_SIGNUP="$(printf '%s' "$AUTH_CONFIG" | jq -r '.disable_signup // false')"
+          ANONYMOUS_ENABLED="$(printf '%s' "$AUTH_CONFIG" | jq -r '.external_anonymous_users_enabled // false')"
+
+          test "$DISABLE_SIGNUP" = "true" || {
+            echo "ERROR: hosted 1LV Supabase Auth still allows public signup."
+            exit 1
+          }
+          test "$ANONYMOUS_ENABLED" != "true" || {
+            echo "ERROR: hosted 1LV Supabase Auth still allows anonymous users."
+            exit 1
+          }
+
+          supabase link --project-ref "$EXPECTED_PROJECT_REF"
+
+          HISTORY_OUTPUT="$(supabase migration list --linked)"
+          printf '%s\n' "$HISTORY_OUTPUT"
+
+          if ! printf '%s\n' "$HISTORY_OUTPUT" | grep -q "$EXPECTED_SCHEMA_VERSION"; then
+            echo "ERROR: production database is not at required schema $EXPECTED_SCHEMA_VERSION."
+            exit 1
+          fi
+
+          DRY_RUN_OUTPUT="$(supabase db push --linked --dry-run 2>&1)"
+          printf '%s\n' "$DRY_RUN_OUTPUT"
+
+          if printf '%s\n' "$DRY_RUN_OUTPUT" | grep -Eqi 'would apply|would push|would be applied|to be pushed|pending migration|applying migration'; then
+            echo "ERROR: production database still has pending migrations; deployment is blocked."
+            exit 1
+          fi
+
+          echo "Production DB/Auth prerequisite verified before SSH activation."
+
+      # ------------------------------------------------------------
+      # Validate every deploy-time secret/variable before SSH.
+      # Values are never printed.
+      # ------------------------------------------------------------
+      - name: Validate production deployment configuration
+        if: steps.deployment.outputs.enabled == 'true'
+        shell: bash
+        env:
+          HOST: ${{ secrets.MOCHAHOST_HOST }}
+          PORT: ${{ secrets.MOCHAHOST_SSH_PORT }}
+          USER: ${{ secrets.MOCHAHOST_USER }}
+          APP_ROOT: ${{ secrets.MOCHAHOST_APP_ROOT }}
+          SSH_PRIVATE_KEY: ${{ secrets.MOCHAHOST_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.MOCHAHOST_KNOWN_HOSTS }}
+          SITE_URL: ${{ vars.PRODUCTION_URL }}
+        run: |
+          set -euo pipefail
+
+          missing=0
+          for name in HOST PORT USER APP_ROOT SSH_PRIVATE_KEY SSH_KNOWN_HOSTS SITE_URL; do
+            if [ -z "${!name:-}" ]; then
+              echo "ERROR: required deployment configuration $name is missing."
+              missing=1
+            fi
+          done
+
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+          if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+            echo "ERROR: MOCHAHOST_SSH_PORT must be a valid TCP port."
+            exit 1
+          fi
+
+          case "$APP_ROOT" in
+            /*) ;;
+            *)
+              echo "ERROR: MOCHAHOST_APP_ROOT must be an absolute path."
+              exit 1
+              ;;
+          esac
+
+          SITE_URL="${SITE_URL%/}"
+          if [ "$SITE_URL" != "https://1lv.ca" ]; then
+            echo "ERROR: PRODUCTION_URL must be exactly https://1lv.ca."
+            exit 1
+          fi
+
+          if ! printf '%s' "$SSH_PRIVATE_KEY" | grep -q "PRIVATE KEY"; then
+            echo "ERROR: MOCHAHOST_SSH_PRIVATE_KEY does not look like a private key."
+            exit 1
+          fi
+
+          echo "Production deployment configuration passed preflight."
 
       # ------------------------------------------------------------
       # 10. Configure SSH
@@ -354,28 +646,55 @@ jobs:
           test -f "$RELEASE/server.cjs"
           test -f "$RELEASE/package.json"
           test -d "$RELEASE/node_modules"
-
-          if [ ! -d "$RELEASE/dist" ] && \
-             [ ! -d "$RELEASE/.output" ]; then
-            echo "ERROR: Release has no frontend production build."
-            exit 1
-          fi
+          test -f "$RELEASE/dist/client/index.html"
+          test -f "$RELEASE/dist/server/server.js"
 
           if [ -s "$APP_ROOT/CURRENT" ]; then
             OLD="$(tr -d '\r\n' < "$APP_ROOT/CURRENT")"
 
-            if [ -n "$OLD" ] && [ -d "$APP_ROOT/releases/$OLD" ]; then
-              printf '%s\n' "$OLD" > "$APP_ROOT/PREVIOUS.new"
-              mv -f "$APP_ROOT/PREVIOUS.new" "$APP_ROOT/PREVIOUS"
-
-              echo "Previous release saved: $OLD"
+            if ! printf '%s' "$OLD" | grep -Eq '^[0-9a-f]{40}$'; then
+              echo "ERROR: CURRENT does not contain a valid full Git SHA."
+              exit 1
             fi
+
+            if [ ! -d "$APP_ROOT/releases/$OLD" ]; then
+              echo "ERROR: CURRENT points to a missing release directory:"
+              echo "$APP_ROOT/releases/$OLD"
+              exit 1
+            fi
+
+            printf '%s\n' "$OLD" > "$APP_ROOT/PREVIOUS.new"
+            mv -f "$APP_ROOT/PREVIOUS.new" "$APP_ROOT/PREVIOUS"
+
+            echo "Previous release saved: $OLD"
           fi
+
+          cp "$RELEASE/server.cjs" "$APP_ROOT/server.cjs.new"
+          mv -f "$APP_ROOT/server.cjs.new" "$APP_ROOT/server.cjs"
+
+          cp "$RELEASE/package.json" "$APP_ROOT/package.json.new"
+          mv -f "$APP_ROOT/package.json.new" "$APP_ROOT/package.json"
+
+          if [ -f "$RELEASE/package-lock.json" ]; then
+            cp "$RELEASE/package-lock.json" "$APP_ROOT/package-lock.json.new"
+            mv -f "$APP_ROOT/package-lock.json.new" "$APP_ROOT/package-lock.json"
+          fi
+
+          rm -rf "$APP_ROOT/dist.new"
+          ln -s "$RELEASE/dist" "$APP_ROOT/dist.new"
+          rm -rf "$APP_ROOT/dist"
+          mv "$APP_ROOT/dist.new" "$APP_ROOT/dist"
+
+          rm -rf "$APP_ROOT/node_modules.new"
+          ln -s "$RELEASE/node_modules" "$APP_ROOT/node_modules.new"
+          rm -rf "$APP_ROOT/node_modules"
+          mv "$APP_ROOT/node_modules.new" "$APP_ROOT/node_modules"
 
           printf '%s\n' "$SHA" > "$APP_ROOT/CURRENT.new"
           mv -f "$APP_ROOT/CURRENT.new" "$APP_ROOT/CURRENT"
 
           echo "CURRENT switched to: $SHA"
+          echo "Application root now points to: $RELEASE"
 
           mkdir -p "$APP_ROOT/tmp"
 
@@ -418,20 +737,38 @@ jobs:
             exit 1
           fi
 
-          for attempt in 1 2 3 4 5 6 7 8 9 10; do
-            echo "Health check attempt $attempt/10"
+          SITE_URL="${SITE_URL%/}"
 
-            if curl \
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            echo "Full-stack health check attempt $attempt/10"
+
+            if HEALTH="$(curl \
               --fail \
               --silent \
               --show-error \
               --location \
               --max-time 20 \
-              "$SITE_URL" > /dev/null
+              "$SITE_URL/api/public/health")"
             then
-              echo "Production is healthy:"
-              echo "$SITE_URL"
-              exit 0
+              if node -e '
+                const payload = JSON.parse(process.argv[1]);
+                if (
+                  payload.ok !== true ||
+                  payload.runtime !== "tanstack-start" ||
+                  payload.database !== "ready" ||
+                  payload.revision !== process.env.GITHUB_SHA
+                ) process.exit(1);
+              ' "$HEALTH"
+              then
+                for route in / /search /categories /deals /login /vendor-pricing /help /privacy /terms; do
+                  echo "Production route check: $route"
+                  curl --fail --silent --show-error --location --max-time 20 "$SITE_URL$route" > /dev/null
+                done
+
+                echo "Production frontend and TanStack server are healthy:"
+                echo "$SITE_URL"
+                exit 0
+              fi
             fi
 
             echo "Health check failed. Retrying..."
@@ -442,14 +779,13 @@ jobs:
           exit 1
 
       # ------------------------------------------------------------
-      # 15. Automatic rollback
-      #
-      # -tt REQUIRED for MochaHost command sessions
+      # Prune stale releases only after the new release is healthy.
+      # Always preserve CURRENT, PREVIOUS and the three newest additional releases.
       # ------------------------------------------------------------
-      - name: Roll back failed release
+      - name: Prune old MochaHost releases
         if: >
           steps.deployment.outputs.enabled == 'true' &&
-          steps.health.outcome == 'failure'
+          steps.health.outcome == 'success'
         shell: bash
         env:
           HOST: ${{ secrets.MOCHAHOST_HOST }}
@@ -475,6 +811,111 @@ jobs:
           set -Eeuo pipefail
 
           APP_ROOT="$1"
+          RELEASES="$APP_ROOT/releases"
+
+          CURRENT=""
+          PREVIOUS=""
+          [ -s "$APP_ROOT/CURRENT" ] && CURRENT="$(tr -d '\r\n' < "$APP_ROOT/CURRENT")"
+          [ -s "$APP_ROOT/PREVIOUS" ] && PREVIOUS="$(tr -d '\r\n' < "$APP_ROOT/PREVIOUS")"
+
+          extra_kept=0
+
+          while IFS= read -r name; do
+            [ -n "$name" ] || continue
+
+            if [ "$name" = "$CURRENT" ] || [ "$name" = "$PREVIOUS" ]; then
+              echo "Keeping protected release: $name"
+              continue
+            fi
+
+            extra_kept=$((extra_kept + 1))
+            if [ "$extra_kept" -le 3 ]; then
+              echo "Keeping recent recovery release: $name"
+              continue
+            fi
+
+            if [[ "$name" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Removing stale release: $name"
+              rm -rf -- "$RELEASES/$name"
+            else
+              echo "Skipping unexpected release directory name: $name"
+            fi
+          done < <(
+            find "$RELEASES" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %f\n' \
+              | sort -nr \
+              | awk '{print $2}'
+          )
+
+          find "$APP_ROOT/incoming" \
+            -maxdepth 1 \
+            -type f \
+            -name '1lv-*.tar.gz' \
+            -mtime +7 \
+            -print \
+            -delete || true
+
+          echo "Release pruning complete."
+          REMOTE
+
+      # ------------------------------------------------------------
+      # 15. Automatic rollback
+      #
+      # -tt REQUIRED for MochaHost command sessions
+      # ------------------------------------------------------------
+      - name: Roll back failed release
+        id: rollback
+        if: >
+          always() &&
+          steps.deployment.outputs.enabled == 'true' &&
+          (
+            steps.activate.outcome == 'failure' ||
+            steps.health.outcome == 'failure'
+          )
+        shell: bash
+        env:
+          HOST: ${{ secrets.MOCHAHOST_HOST }}
+          PORT: ${{ secrets.MOCHAHOST_SSH_PORT }}
+          USER: ${{ secrets.MOCHAHOST_USER }}
+          APP_ROOT: ${{ secrets.MOCHAHOST_APP_ROOT }}
+        run: |
+          set -euo pipefail
+
+          ssh -tt \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o ConnectTimeout=30 \
+            -o ConnectionAttempts=3 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=4 \
+            -o TCPKeepAlive=no \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -p "$PORT" \
+            "$USER@$HOST" \
+            "bash -s -- '$APP_ROOT' '$GITHUB_SHA'" <<'REMOTE'
+          set -Eeuo pipefail
+
+          APP_ROOT="$1"
+          FAILED_SHA="$2"
+
+          if ! printf '%s' "$FAILED_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "ERROR: Failed release SHA is invalid."
+            exit 1
+          fi
+
+          CURRENT=""
+          [ -s "$APP_ROOT/CURRENT" ] && CURRENT="$(tr -d '\r\n' < "$APP_ROOT/CURRENT")"
+
+          if [ -n "$CURRENT" ] && ! printf '%s' "$CURRENT" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "ERROR: CURRENT contains an invalid release identifier."
+            exit 1
+          fi
+
+          if [ "$CURRENT" != "$FAILED_SHA" ]; then
+            echo "Activation failed before CURRENT switched to the failed release."
+            echo "Existing production release remains active; no rollback switch is required."
+            exit 0
+          fi
 
           if [ ! -s "$APP_ROOT/PREVIOUS" ]; then
             echo "ERROR: No previous release is available."
@@ -483,8 +924,13 @@ jobs:
 
           PREVIOUS="$(tr -d '\r\n' < "$APP_ROOT/PREVIOUS")"
 
-          if [ -z "$PREVIOUS" ]; then
-            echo "ERROR: PREVIOUS is empty."
+          if ! printf '%s' "$PREVIOUS" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "ERROR: PREVIOUS does not contain a valid full Git SHA."
+            exit 1
+          fi
+
+          if [ "$PREVIOUS" = "$FAILED_SHA" ]; then
+            echo "ERROR: PREVIOUS unexpectedly points to the failed release."
             exit 1
           fi
 
@@ -494,7 +940,38 @@ jobs:
             exit 1
           fi
 
+          PREVIOUS_RELEASE="$APP_ROOT/releases/$PREVIOUS"
+
+          test -f "$PREVIOUS_RELEASE/server.cjs"
+          test -f "$PREVIOUS_RELEASE/package.json"
+          test -d "$PREVIOUS_RELEASE/node_modules"
+          test -f "$PREVIOUS_RELEASE/dist/client/index.html"
+          test -f "$PREVIOUS_RELEASE/dist/server/server.js"
+
           echo "Rolling back to: $PREVIOUS"
+
+          cp "$PREVIOUS_RELEASE/server.cjs" "$APP_ROOT/server.cjs.new"
+          mv -f "$APP_ROOT/server.cjs.new" "$APP_ROOT/server.cjs"
+
+          cp "$PREVIOUS_RELEASE/package.json" "$APP_ROOT/package.json.new"
+          mv -f "$APP_ROOT/package.json.new" "$APP_ROOT/package.json"
+
+          if [ -f "$PREVIOUS_RELEASE/package-lock.json" ]; then
+            cp "$PREVIOUS_RELEASE/package-lock.json" "$APP_ROOT/package-lock.json.new"
+            mv -f "$APP_ROOT/package-lock.json.new" "$APP_ROOT/package-lock.json"
+          else
+            rm -f "$APP_ROOT/package-lock.json"
+          fi
+
+          rm -rf "$APP_ROOT/dist.new"
+          ln -s "$PREVIOUS_RELEASE/dist" "$APP_ROOT/dist.new"
+          rm -rf "$APP_ROOT/dist"
+          mv "$APP_ROOT/dist.new" "$APP_ROOT/dist"
+
+          rm -rf "$APP_ROOT/node_modules.new"
+          ln -s "$PREVIOUS_RELEASE/node_modules" "$APP_ROOT/node_modules.new"
+          rm -rf "$APP_ROOT/node_modules"
+          mv "$APP_ROOT/node_modules.new" "$APP_ROOT/node_modules"
 
           printf '%s\n' "$PREVIOUS" > "$APP_ROOT/CURRENT.new"
           mv -f "$APP_ROOT/CURRENT.new" "$APP_ROOT/CURRENT"
@@ -508,15 +985,110 @@ jobs:
           exit 0
           REMOTE
 
+      - name: Verify rollback health
+        id: rollback_health
+        if: >
+          always() &&
+          steps.deployment.outputs.enabled == 'true' &&
+          steps.rollback.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        env:
+          HOST: ${{ secrets.MOCHAHOST_HOST }}
+          PORT: ${{ secrets.MOCHAHOST_SSH_PORT }}
+          USER: ${{ secrets.MOCHAHOST_USER }}
+          APP_ROOT: ${{ secrets.MOCHAHOST_APP_ROOT }}
+          SITE_URL: ${{ vars.PRODUCTION_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$SITE_URL" ]; then
+            echo "ERROR: PRODUCTION_URL repository variable is missing."
+            exit 1
+          fi
+
+          SITE_URL="${SITE_URL%/}"
+
+          RECOVERED_SHA="$(ssh -T \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o ConnectTimeout=30 \
+            -o ConnectionAttempts=3 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=4 \
+            -o TCPKeepAlive=no \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -p "$PORT" \
+            "$USER@$HOST" \
+            "test -s '$APP_ROOT/CURRENT' && tr -d '\\r\\n' < '$APP_ROOT/CURRENT'")"
+
+          if ! printf '%s' "$RECOVERED_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "ERROR: Restored CURRENT does not contain a full Git SHA."
+            exit 1
+          fi
+
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            echo "Rollback health check attempt $attempt/10"
+
+            if HEALTH="$(curl \
+              --fail \
+              --silent \
+              --show-error \
+              --location \
+              --max-time 20 \
+              "$SITE_URL/api/public/health")"
+            then
+              if RECOVERED_SHA="$RECOVERED_SHA" node -e '
+                const payload = JSON.parse(process.argv[1]);
+                if (
+                  payload.ok !== true ||
+                  payload.runtime !== "tanstack-start" ||
+                  payload.database !== "ready" ||
+                  payload.revision !== process.env.RECOVERED_SHA
+                ) process.exit(1);
+              ' "$HEALTH"
+              then
+                curl --fail --silent --show-error --location --max-time 20 "$SITE_URL/" > /dev/null
+                echo "Rollback health verified for revision: $RECOVERED_SHA"
+                exit 0
+              fi
+            fi
+
+            echo "Rollback health check failed. Retrying..."
+            sleep 5
+          done
+
+          echo "ERROR: Restored release did not pass production health verification."
+          exit 1
+
       # ------------------------------------------------------------
       # 16. Mark deployment failed after rollback
       # ------------------------------------------------------------
       - name: Fail workflow after rollback
         if: >
+          always() &&
           steps.deployment.outputs.enabled == 'true' &&
-          steps.health.outcome == 'failure'
+          (
+            steps.activate.outcome == 'failure' ||
+            steps.health.outcome == 'failure'
+          )
         shell: bash
+        env:
+          ROLLBACK_OUTCOME: ${{ steps.rollback.outcome }}
+          ROLLBACK_HEALTH_OUTCOME: ${{ steps.rollback_health.outcome }}
         run: |
-          echo "Deployment failed its health check."
-          echo "The previous working release was restored."
+          set -euo pipefail
+          echo "Deployment failed before production certification."
+
+          if [ "$ROLLBACK_OUTCOME" = "success" ] && [ "$ROLLBACK_HEALTH_OUTCOME" = "success" ]; then
+            echo "Automatic rollback completed and the restored release passed production health verification."
+          elif [ "$ROLLBACK_OUTCOME" = "success" ]; then
+            echo "ERROR: Rollback files were restored, but the recovered release failed production health verification."
+            echo "Manual production recovery is required."
+          else
+            echo "ERROR: Automatic rollback did not complete successfully."
+            echo "Manual production recovery is required; do not assume the previous release was restored."
+          fi
+
           exit 1

@@ -9,7 +9,10 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "check:architecture": "node scripts/check-architecture.mjs",
+    "qa:request-origin": "node scripts/request-origin-tests.mjs",
+    "qa:csv-parser": "node scripts/csv-parser-tests.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -61,7 +64,6 @@
     "input-otp": "^1.4.2",
     "lucide-react": "^0.575.0",
     "mysql2": "^3.24.4",
-    "nitro": "3.0.260603-beta",
     "nodemailer": "^10.0.12",
     "react": "^19.2.0",
     "react-day-picker": "^9.14.0",

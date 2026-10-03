@@ -6,7 +6,7 @@
  *   server-side admin check; the route guard is UX only.
  * - Payloads are ALWAYS rebuilt from the database by the mappers. A browser
  *   can never hand us a payload to forward to TAKATAK.
- * - TAKATAK_MASTER_API_URL / TAKATAK_MASTER_API_KEY never leave the server;
+ * - TAKATAK_MASTER_API_URL / TAKATAK_1LV_API_KEY never leave the server;
  *   only booleans ("configured") are returned to the console.
  * - Lifecycle calls are fire-and-forget for the caller: they never block
  *   signup, vendor onboarding, or checkout.
@@ -32,7 +32,7 @@ const MERCHANT_EVENTS = [
   "merchant.approved",
   "merchant.suspended",
 ] as const;
-const ORDER_EVENTS = ["order.created", "order.paid", "order.fulfilled", "order.refunded"] as const;
+const ORDER_EVENTS = ["order.created"] as const;
 
 type CustomerEvent = (typeof CUSTOMER_EVENTS)[number];
 type MerchantEvent = (typeof MERCHANT_EVENTS)[number];
@@ -71,7 +71,11 @@ export const drainTakatakOutboxNow = createServerFn({ method: "POST" })
       return {
         ok: false,
         setupRequired: res.setupRequired,
-        reason: "TAKATAK Master API is not configured — events stay safely queued.",
+        reason:
+          res.reason ??
+          (res.setupRequired
+            ? "TAKATAK Master API is not configured — events stay safely queued."
+            : "TAKATAK outbox drain failed safely."),
       };
     }
     return { ok: true, processed: res.processed, delivered: res.delivered, failed: res.failed };
@@ -165,30 +169,6 @@ export const syncTakatakMerchant = createServerFn({ method: "POST" })
     }
     const { queueMerchantEvent } = await import("./takatak/outbox.server");
     await queueMerchantEvent(data.vendorId, data.event);
-    return { ok: true };
-  });
-
-/**
- * Order created. Guest checkout has no session, so this is unauthenticated —
- * but it only accepts an order id, rebuilds everything from the database, and
- * refuses anything that is not a freshly created order. Duplicate calls are
- * absorbed by the outbox event_key unique index.
- */
-export const syncTakatakOrderCreated = createServerFn({ method: "POST" })
-  .inputValidator((data: { orderId: string }) => data)
-  .handler(async ({ data }): Promise<{ ok: boolean }> => {
-    if (!/^[0-9a-f-]{36}$/i.test(data.orderId ?? "")) return { ok: false };
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: order } = await supabaseAdmin
-      .from("orders")
-      .select("id, created_at")
-      .eq("id", data.orderId)
-      .maybeSingle();
-    if (!order) return { ok: false };
-    const ageMs = Date.now() - new Date(order.created_at).getTime();
-    if (ageMs > 30 * 60_000) return { ok: false };
-    const { queueOrderEvent } = await import("./takatak/outbox.server");
-    await queueOrderEvent(order.id, "order.created");
     return { ok: true };
   });
 

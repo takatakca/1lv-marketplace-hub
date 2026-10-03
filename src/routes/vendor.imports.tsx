@@ -3,13 +3,14 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { getMyVendor } from "@/services/vendors";
-import { createProduct } from "@/services/products";
 import { DataTable } from "@/components/DataTable";
 import { isDemoMode } from "@/lib/demo-mode";
+import { parseCsvRecords } from "@/lib/csv-parser";
 import { DemoBanner, PreviewModeNotice } from "@/components/DemoBanner";
 import {
   createImportJob,
   finalizeImportJob,
+  importDraftProductRow,
   insertJobRow,
   listImportJobs,
   type ImportJob,
@@ -43,26 +44,55 @@ type ParseResult = {
 function validateRow(r: Row): string[] {
   const errs: string[] = [];
   if (!r.title) errs.push("missing title");
-  if (!r.price || isNaN(Number(r.price)) || Number(r.price) < 0) errs.push("invalid price");
-  if (r.inventory_quantity && isNaN(Number(r.inventory_quantity))) errs.push("invalid inventory");
+
+  if (!/^[0-9]{1,8}(?:\.[0-9]{1,2})?$/.test(r.price ?? "")) {
+    errs.push("invalid price");
+  }
+
+  if (!/^[0-9]{1,10}$/.test(r.inventory_quantity ?? "")) {
+    errs.push("invalid inventory");
+  } else if (Number(r.inventory_quantity) > 2_147_483_647) {
+    errs.push("inventory out of range");
+  }
+
   return errs;
 }
 
 function parseCsv(text: string): ParseResult {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim());
-  if (lines.length === 0) return { rows: [], headers: [], missing: REQUIRED_COLS, rowIssues: [] };
-  const headers = lines[0].split(",").map((h) => h.trim());
+  const records = parseCsvRecords(text);
+  if (records.length === 0) {
+    return { rows: [], headers: [], missing: REQUIRED_COLS, rowIssues: [] };
+  }
+
+  const headers = (records[0] ?? []).map((h) => h.trim());
+  const duplicateHeaders = headers.filter(
+    (header, index) => header && headers.indexOf(header) !== index,
+  );
+  if (duplicateHeaders.length > 0) {
+    throw new Error(
+      `Duplicate CSV column(s): ${Array.from(new Set(duplicateHeaders)).join(", ")}`,
+    );
+  }
+
   const missing = REQUIRED_COLS.filter((c) => !headers.includes(c));
   const rowIssues: RowIssue[] = [];
   const rows: Row[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cells = lines[i].split(",").map((c) => c.trim());
+
+  for (let i = 1; i < records.length; i++) {
+    const cells = records[i] ?? [];
     const row: Row = {};
-    headers.forEach((h, j) => (row[h] = cells[j] ?? ""));
+    headers.forEach((h, j) => {
+      if (h) row[h] = (cells[j] ?? "").trim();
+    });
+
     const errs = validateRow(row);
+    if (cells.length > headers.length) {
+      errs.push("too many columns");
+    }
     if (errs.length) rowIssues.push({ index: i, errors: errs });
     rows.push(row);
   }
+
   return { rows, headers, missing, rowIssues };
 }
 
@@ -82,9 +112,20 @@ function Page() {
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    setFilename(f.name);
-    const text = await f.text();
-    setParsed(parseCsv(text));
+
+    try {
+      const text = await f.text();
+      const next = parseCsv(text);
+      setFilename(f.name);
+      setParsed(next);
+    } catch (error) {
+      setFilename(null);
+      setParsed(null);
+      e.target.value = "";
+      toast.error(
+        error instanceof Error ? error.message : "Could not parse CSV file",
+      );
+    }
   };
 
   const runImport = async () => {
@@ -107,7 +148,9 @@ function Page() {
     setImporting(true);
 
     const badIdx = new Set(parsed.rowIssues.map((r) => r.index));
-    const validRows = parsed.rows.filter((_, i) => !badIdx.has(i + 1));
+    const validRows = parsed.rows
+      .map((row, index) => ({ row, rowIndex: index + 1 }))
+      .filter(({ rowIndex }) => !badIdx.has(rowIndex));
 
     let job: ImportJob | null = null;
     try {
@@ -124,68 +167,83 @@ function Page() {
       return;
     }
 
-    let ok = 0;
-    let fail = parsed.rowIssues.length;
-
-    // Log invalid rows
+    // Log invalid rows with their original CSV row index.
     for (const issue of parsed.rowIssues) {
-      await insertJobRow({
-        job_id: job.id,
-        row_index: issue.index,
-        row_status: "failed",
-        raw: parsed.rows[issue.index - 1] ?? {},
-        errors: issue.errors,
-      }).catch(() => {});
-    }
-
-    for (let i = 0; i < validRows.length; i++) {
-      const r = validRows[i];
       try {
-        const p = await createProduct(v.id, {
-          title: r.title,
-          short_description: r.short_description || null,
-          description: r.description || null,
-          category_slug: r.category_slug || null,
-          price: Number(r.price) || 0,
-          compare_at_price: null,
-          cost: null,
-          sku: r.sku || null,
-          inventory_quantity: Number(r.inventory_quantity) || 0,
-          track_inventory: true,
-          supplier_source: r.supplier_source || null,
-          supplier_url: r.supplier_url || null,
-          supplier_product_id: r.supplier_product_id || null,
-          status: "draft",
-        });
-        ok++;
         await insertJobRow({
           job_id: job.id,
-          row_index: i + 1,
-          row_status: "imported",
-          raw: r,
-          product_id: p.id,
-        }).catch(() => {});
-      } catch (e) {
-        fail++;
-        await insertJobRow({
-          job_id: job.id,
-          row_index: i + 1,
+          row_index: issue.index,
           row_status: "failed",
-          raw: r,
-          errors: [(e as Error).message],
-        }).catch(() => {});
+          raw: parsed.rows[issue.index - 1] ?? {},
+          errors: issue.errors,
+        });
+      } catch (auditError) {
+        console.error(
+          "[1lv.ca] Could not persist invalid import-row audit:",
+          auditError instanceof Error ? auditError.message : auditError,
+        );
       }
     }
 
-    await finalizeImportJob(job.id, {
-      status: fail === 0 ? "completed" : ok === 0 ? "failed" : "partial",
-      success_rows: ok,
-      failed_rows: fail,
-    }).catch(() => {});
+    for (const { row: r, rowIndex } of validRows) {
+      try {
+        await importDraftProductRow({
+          jobId: job.id,
+          rowIndex,
+          raw: r,
+          product: {
+            title: r.title,
+            short_description: r.short_description || null,
+            description: r.description || null,
+            category_slug: r.category_slug || null,
+            price: Number(r.price),
+            sku: r.sku || null,
+            inventory_quantity: Number(r.inventory_quantity),
+            supplier_source: r.supplier_source || null,
+            supplier_url: r.supplier_url || null,
+            supplier_product_id: r.supplier_product_id || null,
+          },
+        });
+
+      } catch (e) {
+        try {
+          await insertJobRow({
+            job_id: job.id,
+            row_index: rowIndex,
+            row_status: "failed",
+            raw: r,
+            errors: [(e as Error).message],
+          });
+        } catch (auditError) {
+          console.error(
+            "[1lv.ca] Could not persist failed import-row audit:",
+            auditError instanceof Error ? auditError.message : auditError,
+          );
+        }
+      }
+    }
+
+    let finalized;
+    try {
+      finalized = await finalizeImportJob(job.id);
+    } catch (error) {
+      setImporting(false);
+      setParsed(null);
+      setFilename(null);
+      toast.error(
+        "Products were processed, but the import audit could not be finalized. " +
+          "Do not rerun this file until the import job is reviewed. " +
+          (error instanceof Error ? error.message : ""),
+      );
+      return;
+    }
 
     setImporting(false);
     setParsed(null);
     setFilename(null);
+
+    const ok = finalized.successRows;
+    const fail = finalized.failedRows;
     toast[fail ? "error" : "success"](
       `Imported ${ok} draft${ok === 1 ? "" : "s"}${fail ? `, ${fail} failed` : ""}`,
     );

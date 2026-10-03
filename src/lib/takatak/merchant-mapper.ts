@@ -18,6 +18,7 @@ export type LocalVendorInput = {
   subscription_status?: string | null;
   subscription_plan?: string | null;
   created_at?: string | null;
+  takatak_merchant_id?: string | null;
 };
 
 /**
@@ -29,6 +30,7 @@ export function mapMerchant(vendor: LocalVendorInput): TakatakMerchantPayload {
   return {
     source_application: SOURCE_APPLICATION,
     vertical: SOURCE_VERTICAL,
+    master_merchant_id: vendor.takatak_merchant_id ?? null,
     local_vendor_id: vendor.id,
     local_owner_user_id: vendor.user_id,
     store_name: vendor.store_name,

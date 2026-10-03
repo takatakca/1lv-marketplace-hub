@@ -15,41 +15,137 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+
+const MASTER_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isTakatakLocalUser(user: User | null | undefined): user is User {
+  if (!user) return false;
+
+  const appMetadata = (user.app_metadata ?? {}) as Record<string, unknown>;
+  const masterId =
+    typeof appMetadata["takatak_person_id"] === "string"
+      ? appMetadata["takatak_person_id"]
+      : "";
+  const authSource =
+    typeof appMetadata["auth_source"] === "string"
+      ? appMetadata["auth_source"]
+      : "";
+  const email = user.email?.trim().toLowerCase() ?? "";
+  const expectedEmail = masterId
+    ? `takatak.${masterId.toLowerCase()}@auth.1lv.ca`
+    : "";
+
+  return (
+    authSource === "takatak" &&
+    MASTER_ID_PATTERN.test(masterId) &&
+    email === expectedEmail
+  );
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-      if (s?.user) {
-        // defer to avoid deadlocks
-        setTimeout(() => fetchRoles(s.user.id), 0);
-        // Non-blocking master-CRM signal. Covers email, Google and phone OTP
-        // sign-ups; the queue de-duplicates so repeat sign-ins are harmless.
-        setTimeout(() => signalCustomer("customer.created"), 0);
-      } else {
+    let active = true;
+    let validationSequence = 0;
+
+    const acceptSession = async (
+      candidate: Session | null,
+      signalMaster: boolean,
+      sequence: number,
+    ) => {
+      if (!active || sequence !== validationSequence) return;
+
+      if (!candidate?.user) {
+        setSession(null);
         setRoles([]);
+        return;
+      }
+
+      if (!isTakatakLocalUser(candidate.user)) {
+        setSession(null);
+        setRoles([]);
+        await supabase.auth.signOut({ scope: "local" });
+        return;
+      }
+
+      const { data: granted, error: grantError } = await supabase.rpc(
+        "is_takatak_authorized_session" as never,
+      );
+
+      if (!active || sequence !== validationSequence) return;
+
+      if (grantError || (granted as unknown) !== true) {
+        setSession(null);
+        setRoles([]);
+        await supabase.auth.signOut({ scope: "local" });
+        return;
+      }
+
+      const nextRoles = await fetchRoles(candidate.user.id);
+
+      if (!active || sequence !== validationSequence) return;
+
+      setSession(candidate);
+      setRoles(nextRoles);
+
+      if (signalMaster) {
+        // This event updates TAKATAK's authorized 1LV projection. It is never
+        // used to establish identity or to authorize the local session.
+        void signalCustomer("customer.updated");
+      }
+    };
+
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      // Supabase recommends deferring additional Auth/Data API work outside
+      // the auth-state callback to avoid callback lock/deadlock behavior.
+      setLoading(true);
+      const sequence = ++validationSequence;
+      setTimeout(() => {
+        void acceptSession(s, event === "SIGNED_IN", sequence).finally(() => {
+          if (active && sequence === validationSequence) {
+            setLoading(false);
+          }
+        });
+      }, 0);
+    });
+
+    const initialSequence = ++validationSequence;
+    void supabase.auth.getSession().then(async ({ data }) => {
+      try {
+        await acceptSession(data.session, false, initialSequence);
+      } finally {
+        if (active && initialSequence === validationSequence) {
+          setLoading(false);
+        }
       }
     });
 
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      if (data.session?.user) fetchRoles(data.session.user.id);
-      setLoading(false);
-    });
-
-    return () => sub.subscription.unsubscribe();
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
-  const fetchRoles = async (userId: string) => {
-    const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-    setRoles((data ?? []).map((r) => r.role as Role));
+  const fetchRoles = async (userId: string): Promise<Role[]> => {
+    const { data, error } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+
+    if (error) return [];
+    return (data ?? []).map((r) => r.role as Role);
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.rpc("revoke_current_takatak_session" as never);
+    } finally {
+      await supabase.auth.signOut({ scope: "local" });
+    }
   };
 
   return (

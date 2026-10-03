@@ -1,3 +1,6 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
+
 /**
  * Payout scheduler / retry / reconciliation internals. Server-only.
  *
@@ -10,9 +13,11 @@
  * - Stripe secrets and connected-account ids never leave the server.
  */
 
-type Db = { from: (t: string) => any };
+type Db = SupabaseClient<Database>;
+type PayoutDbStatus = Database["public"]["Enums"]["payout_status"];
 
 const STRIPE_API = "https://api.stripe.com/v1";
+const STRIPE_TIMEOUT_MS = 20_000;
 
 export const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -22,7 +27,7 @@ export function stripeConfigured() {
 
 export async function adminDb(): Promise<Db> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin as unknown as Db;
+  return supabaseAdmin;
 }
 
 async function stripeGet(path: string): Promise<Record<string, unknown>> {
@@ -30,6 +35,7 @@ async function stripeGet(path: string): Promise<Record<string, unknown>> {
   if (!key) throw new Error("Stripe not configured");
   const res = await fetch(`${STRIPE_API}${path}`, {
     headers: { Authorization: `Bearer ${key}` },
+    signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
   });
   const json = (await res.json()) as Record<string, unknown>;
   if (!res.ok) {
@@ -51,18 +57,66 @@ export type SchedulerSettings = {
   maxTransferAttempts: number;
 };
 
+function boundedIntegerSetting(
+  value: unknown,
+  fallback: number,
+  label: string,
+  min: number,
+  max: number,
+): number {
+  const parsed = value == null ? fallback : Number(value);
+  if (
+    !Number.isSafeInteger(parsed) ||
+    parsed < min ||
+    parsed > max
+  ) {
+    throw new Error(
+      `Invalid payout setting ${label}; expected an integer between ${min} and ${max}.`,
+    );
+  }
+  return parsed;
+}
+
 export async function readSettings(db: Db): Promise<SchedulerSettings> {
-  const { data } = await db.from("payout_settings").select("*").eq("id", true).maybeSingle();
+  const { data, error } = await db
+    .from("payout_settings")
+    .select("*")
+    .eq("id", true)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Could not read payout settings: ${error.message}`);
+  }
+
   const r = (data ?? {}) as Record<string, unknown>;
+  const frequency = String(r.payout_frequency ?? "weekly").trim().toLowerCase();
+  if (frequency !== "weekly") {
+    throw new Error(
+      "Invalid payout setting payout_frequency; only weekly scheduling is currently supported.",
+    );
+  }
+
   return {
-    holdDays: Number(r.hold_days ?? 7),
-    frequency: String(r.payout_frequency ?? "weekly"),
-    payoutDay: Number(r.payout_day ?? 1),
-    payoutHourUtc: Number(r.payout_hour_utc ?? 7),
+    holdDays: boundedIntegerSetting(r.hold_days, 7, "hold_days", 0, 365),
+    frequency,
+    payoutDay: boundedIntegerSetting(r.payout_day, 1, "payout_day", 0, 6),
+    payoutHourUtc: boundedIntegerSetting(
+      r.payout_hour_utc,
+      7,
+      "payout_hour_utc",
+      0,
+      23,
+    ),
     autoGenerate: r.auto_generate_payouts !== false,
     autoProcessTransfers: r.auto_process_transfers === true,
     retryFailedTransfers: r.retry_failed_transfers === true,
-    maxTransferAttempts: Number(r.max_transfer_attempts ?? 3),
+    maxTransferAttempts: boundedIntegerSetting(
+      r.max_transfer_attempts,
+      3,
+      "max_transfer_attempts",
+      1,
+      10,
+    ),
   };
 }
 
@@ -90,8 +144,12 @@ export async function acquireLock(db: Db, name: string, owner: string, minutes =
   return Array.isArray(data) && data.length > 0;
 }
 
-export async function releaseLock(db: Db, name: string) {
-  await db.from("scheduler_locks").delete().eq("lock_name", name);
+export async function releaseLock(db: Db, name: string, owner: string) {
+  await db
+    .from("scheduler_locks")
+    .delete()
+    .eq("lock_name", name)
+    .eq("locked_by", owner);
 }
 
 // ---------------- period ----------------
@@ -155,138 +213,172 @@ type EligibleRow = {
   order_id: string;
 };
 
+function dateOnlyUtc(value: string, label: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error(`${label} must use YYYY-MM-DD format.`);
+  }
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.toISOString().slice(0, 10) !== value
+  ) {
+    throw new Error(`${label} is not a valid calendar date.`);
+  }
+  return date;
+}
+
+function batches<T>(values: T[], size = 200): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < values.length; i += size) {
+    out.push(values.slice(i, i + size));
+  }
+  return out;
+}
+
 export async function generatePayoutsCore(
   db: Db,
   periodStart: string,
   periodEnd: string,
 ): Promise<GenerateResult> {
+  const startDate = dateOnlyUtc(periodStart, "Payout period start");
+  const endDate = dateOnlyUtc(periodEnd, "Payout period end");
+  if (startDate.getTime() > endDate.getTime()) {
+    throw new Error("Payout period start must be on or before period end.");
+  }
+
   const settings = await readSettings(db);
-  const cutoff = new Date(Date.now() - settings.holdDays * 24 * 60 * 60 * 1000).toISOString();
-
-  const { data: vos, error } = await db
-    .from("vendor_orders")
-    .select(
-      "id, vendor_id, subtotal, commission_amount, vendor_payout_amount, refund_amount, dispute_hold_amount, delivered_at, order_id",
-    )
-    .eq("status", "delivered")
-    .not("delivered_at", "is", null)
-    .lte("delivered_at", cutoff)
-    .gte("delivered_at", `${periodStart}T00:00:00.000Z`)
-    .lte("delivered_at", `${periodEnd}T23:59:59.999Z`);
-  if (error) throw new Error(error.message);
-
-  const rows = (vos ?? []) as EligibleRow[];
-  if (rows.length === 0) return { ok: true, created: 0, skipped: 0, vendors: 0 };
-
-  const { data: taken } = await db
-    .from("payout_items")
-    .select("vendor_order_id")
-    .in("vendor_order_id", rows.map((r) => r.id));
-  const takenSet = new Set(((taken ?? []) as Array<{ vendor_order_id: string }>).map((t) => t.vendor_order_id));
-
-  const { data: orders } = await db
-    .from("orders")
-    .select("id, payment_status")
-    .in("id", Array.from(new Set(rows.map((r) => r.order_id))));
-  const paidOrders = new Set(
-    ((orders ?? []) as Array<{ id: string; payment_status: string }>)
-      .filter((o) => o.payment_status === "paid")
-      .map((o) => o.id),
+  const cutoffDate = new Date(
+    Date.now() - settings.holdDays * 24 * 60 * 60 * 1000,
   );
+  const requestedEnd = new Date(endDate);
+  requestedEnd.setUTCHours(23, 59, 59, 999);
+  const eligibleThrough = new Date(
+    Math.min(cutoffDate.getTime(), requestedEnd.getTime()),
+  ).toISOString();
 
-  const { data: vendors } = await db
-    .from("vendors")
-    .select("id, payouts_enabled")
-    .in("id", Array.from(new Set(rows.map((r) => r.vendor_id))));
-  const payable = new Set(
-    ((vendors ?? []) as Array<{ id: string; payouts_enabled: boolean }>)
-      .filter((v) => v.payouts_enabled)
-      .map((v) => v.id),
-  );
+  // Include eligible backlog from earlier cycles. A vendor that was on hold,
+  // unpaid, or not payout-ready must not lose those earnings when the calendar
+  // moves into the next payout period.
+  const rows: EligibleRow[] = [];
+  const pageSize = 500;
+  let offset = 0;
+  while (true) {
+    const { data, error } = await db
+      .from("vendor_orders")
+      .select(
+        "id, vendor_id, subtotal, commission_amount, vendor_payout_amount, refund_amount, dispute_hold_amount, delivered_at, order_id",
+      )
+      .eq("status", "delivered")
+      .not("delivered_at", "is", null)
+      .lte("delivered_at", eligibleThrough)
+      .order("delivered_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw new Error(error.message);
+
+    const page = (data ?? []) as EligibleRow[];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  if (rows.length === 0) {
+    return { ok: true, created: 0, skipped: 0, vendors: 0 };
+  }
+
+  const takenSet = new Set<string>();
+  for (const ids of batches(rows.map((row) => row.id))) {
+    const { data, error } = await db
+      .from("payout_items")
+      .select("vendor_order_id")
+      .in("vendor_order_id", ids);
+    if (error) throw new Error(error.message);
+    for (const item of data ?? []) {
+      takenSet.add(item.vendor_order_id);
+    }
+  }
+
+  const paidOrders = new Set<string>();
+  const orderIds = Array.from(new Set(rows.map((row) => row.order_id)));
+  for (const ids of batches(orderIds)) {
+    const { data, error } = await db
+      .from("orders")
+      .select("id, payment_status")
+      .in("id", ids);
+    if (error) throw new Error(error.message);
+    for (const order of data ?? []) {
+      if (["paid", "partially_refunded"].includes(order.payment_status)) {
+        paidOrders.add(order.id);
+      }
+    }
+  }
+
+  const payable = new Set<string>();
+  const vendorIds = Array.from(new Set(rows.map((row) => row.vendor_id)));
+  for (const ids of batches(vendorIds)) {
+    const { data, error } = await db
+      .from("vendors")
+      .select("id, payouts_enabled")
+      .in("id", ids);
+    if (error) throw new Error(error.message);
+    for (const vendor of data ?? []) {
+      if (vendor.payouts_enabled) payable.add(vendor.id);
+    }
+  }
 
   const groups = new Map<string, EligibleRow[]>();
   let skipped = 0;
-  for (const r of rows) {
+  for (const row of rows) {
     const eligible =
-      !takenSet.has(r.id) &&
-      paidOrders.has(r.order_id) &&
-      payable.has(r.vendor_id) &&
-      Number(r.dispute_hold_amount ?? 0) === 0;
+      !takenSet.has(row.id) &&
+      paidOrders.has(row.order_id) &&
+      payable.has(row.vendor_id) &&
+      Number(row.dispute_hold_amount ?? 0) === 0;
+
     if (!eligible) {
       skipped++;
       continue;
     }
-    const list = groups.get(r.vendor_id) ?? [];
-    list.push(r);
-    groups.set(r.vendor_id, list);
+
+    const list = groups.get(row.vendor_id) ?? [];
+    list.push(row);
+    groups.set(row.vendor_id, list);
   }
 
   let created = 0;
+
   for (const [vendorId, items] of groups) {
-    const gross = round2(items.reduce((s, i) => s + Number(i.subtotal ?? 0), 0));
-    const commission = round2(items.reduce((s, i) => s + Number(i.commission_amount ?? 0), 0));
-    const refunds = round2(items.reduce((s, i) => s + Number(i.refund_amount ?? 0), 0));
-    const holds = round2(items.reduce((s, i) => s + Number(i.dispute_hold_amount ?? 0), 0));
+    const { data, error } = await db.rpc("create_vendor_payout_atomic", {
+      _vendor_id: vendorId,
+      _period_start: periodStart,
+      _period_end: periodEnd,
+      _eligible_through: eligibleThrough,
+    });
 
-    const { data: adj } = await db
-      .from("payout_adjustments")
-      .select("id, amount")
-      .eq("vendor_id", vendorId)
-      .is("applied_payout_id", null);
-    const adjustments = round2(
-      ((adj ?? []) as Array<{ amount: number }>).reduce((s, a) => s + Number(a.amount ?? 0), 0),
-    );
-
-    const net = round2(
-      items.reduce((s, i) => s + Number(i.vendor_payout_amount ?? 0), 0) - refunds - holds + adjustments,
-    );
-
-    const { data: payout, error: pErr } = await db
-      .from("payouts")
-      .insert({
-        vendor_id: vendorId,
-        period_start: periodStart,
-        period_end: periodEnd,
-        gross_amount: gross,
-        commission_amount: commission,
-        refund_amount: refunds,
-        dispute_hold_amount: holds,
-        net_amount: net,
-        status: "pending_review",
-      })
-      .select("id")
-      .single();
-    if (pErr || !payout) {
-      skipped += items.length;
-      continue;
+    if (error) {
+      throw new Error(
+        `Atomic payout generation failed for vendor ${vendorId}: ${error.message}`,
+      );
     }
-    const payoutId = (payout as { id: string }).id;
 
-    const { error: iErr } = await db.from("payout_items").insert(
-      items.map((i) => ({
-        payout_id: payoutId,
-        vendor_order_id: i.id,
-        gross_amount: Number(i.subtotal ?? 0),
-        commission_amount: Number(i.commission_amount ?? 0),
-        refund_amount: Number(i.refund_amount ?? 0),
-        net_amount: Number(i.vendor_payout_amount ?? 0) - Number(i.refund_amount ?? 0),
-      })),
-    );
-    if (iErr) {
-      // Unique-index violation means one of these orders is already in a payout.
-      await db.from("payouts").delete().eq("id", payoutId);
-      skipped += items.length;
+    const result = (data ?? {}) as Record<string, unknown>;
+    if (result["ok"] !== true) {
+      throw new Error(
+        `Atomic payout generation was rejected for vendor ${vendorId}: ${String(
+          result["reason"] ?? "unknown",
+        )}`,
+      );
+    }
+
+    if (result["created"] === true) {
+      created++;
       continue;
     }
 
-    if (adjustments !== 0) {
-      await db
-        .from("payout_adjustments")
-        .update({ applied_payout_id: payoutId })
-        .eq("vendor_id", vendorId)
-        .is("applied_payout_id", null);
-    }
-    created++;
+    // The discovery pass is intentionally advisory. A refund, dispute, payout
+    // or vendor-setting change may make these rows ineligible before the
+    // transaction starts. The RPC re-checks everything under row locks.
+    skipped += items.length;
   }
 
   return { ok: true, created, skipped, vendors: groups.size };
@@ -311,28 +403,102 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
   const { data: row } = await db
     .from("payouts")
     .select(
-      "id, vendor_id, status, net_amount, currency, stripe_transfer_id, period_start, period_end, transfer_attempt_count",
+      "id, vendor_id, status, net_amount, currency, stripe_transfer_id, period_start, period_end, transfer_attempt_count, last_transfer_attempt_at",
     )
     .eq("id", payoutId)
     .maybeSingle();
   const payout = row as {
     id: string;
     vendor_id: string;
-    status: string;
+    status: PayoutDbStatus;
     net_amount: number;
     currency: string;
     stripe_transfer_id: string | null;
     period_start: string;
     period_end: string;
     transfer_attempt_count: number | null;
+    last_transfer_attempt_at: string | null;
   } | null;
 
-  if (!payout) return { ok: false, status: "draft", reason: "Payout not found" };
+  if (!payout) {
+    return { ok: false, status: "draft", reason: "Payout not found" };
+  }
   if (payout.stripe_transfer_id) {
-    return { ok: false, status: payout.status, reason: "A transfer already exists for this payout." };
+    return {
+      ok: false,
+      status: payout.status,
+      reason: "A transfer already exists for this payout.",
+    };
+  }
+
+  let recoveredStaleProcessing = false;
+
+  if (payout.status === "processing") {
+    const leaseCutoff = new Date(Date.now() - 10 * 60_000);
+    const attemptedAt = payout.last_transfer_attempt_at
+      ? new Date(payout.last_transfer_attempt_at)
+      : null;
+    const stale =
+      attemptedAt !== null &&
+      Number.isFinite(attemptedAt.getTime()) &&
+      attemptedAt.getTime() <= leaseCutoff.getTime();
+
+    if (!stale) {
+      return {
+        ok: false,
+        status: payout.status,
+        reason:
+          "This payout transfer is still within its processing lease. Reconcile it before retrying.",
+      };
+    }
+
+    const { data: recovered, error: recoverError } = await db
+      .from("payouts")
+      .update({
+        status: "failed",
+        failure_reason:
+          "Recovered a stale processing transfer lease for safe idempotent retry.",
+        next_retry_at: null,
+      })
+      .eq("id", payout.id)
+      .eq("status", "processing")
+      .is("stripe_transfer_id", null)
+      .lt("last_transfer_attempt_at", leaseCutoff.toISOString())
+      .select("id")
+      .maybeSingle();
+
+    if (recoverError) {
+      return {
+        ok: false,
+        status: payout.status,
+        reason: recoverError.message,
+      };
+    }
+    if (!recovered) {
+      return {
+        ok: false,
+        status: payout.status,
+        reason: "Payout processing state changed before it could be recovered.",
+      };
+    }
+
+    payout.status = "failed";
+    recoveredStaleProcessing = true;
+  }
+
+  if (!["approved", "failed"].includes(payout.status)) {
+    return {
+      ok: false,
+      status: payout.status,
+      reason: "Payout is not eligible for transfer.",
+    };
   }
   if (Number(payout.net_amount) <= 0) {
-    return { ok: false, status: payout.status, reason: "Net amount must be greater than zero." };
+    return {
+      ok: false,
+      status: payout.status,
+      reason: "Net amount must be greater than zero.",
+    };
   }
 
   const { data: vRow } = await db
@@ -340,17 +506,49 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
     .select("id, payouts_enabled, stripe_connect_account_id")
     .eq("id", payout.vendor_id)
     .maybeSingle();
-  const vendor = vRow as { payouts_enabled: boolean; stripe_connect_account_id: string | null } | null;
+  const vendor = vRow as {
+    payouts_enabled: boolean;
+    stripe_connect_account_id: string | null;
+  } | null;
   if (!vendor?.payouts_enabled || !vendor.stripe_connect_account_id) {
-    return { ok: false, status: payout.status, reason: "Vendor payout account is not ready." };
+    return {
+      ok: false,
+      status: payout.status,
+      reason: "Vendor payout account is not ready.",
+    };
   }
 
   if (!stripeConfigured()) {
-    return { ok: false, status: payout.status, setupRequired: true, reason: "Stripe setup required" };
+    return {
+      ok: false,
+      status: payout.status,
+      setupRequired: true,
+      reason: "Stripe setup required",
+    };
   }
 
-  const attempt = Number(payout.transfer_attempt_count ?? 0) + 1;
-  await db
+  const settings = await readSettings(db);
+  const previousAttempts = Number(payout.transfer_attempt_count ?? 0);
+
+  // A stale processing row represents an UNKNOWN outcome of the same logical
+  // Stripe transfer. Replaying the stable idempotency key is reconciliation,
+  // not a new payout attempt, so it must remain possible even when the normal
+  // retry budget was reached.
+  if (
+    !recoveredStaleProcessing &&
+    previousAttempts >= settings.maxTransferAttempts
+  ) {
+    return {
+      ok: false,
+      status: payout.status,
+      reason: `Transfer retry limit reached (${settings.maxTransferAttempts}).`,
+    };
+  }
+
+  const attempt = recoveredStaleProcessing
+    ? Math.max(previousAttempts, 1)
+    : previousAttempts + 1;
+  const { data: claimed, error: claimError } = await db
     .from("payouts")
     .update({
       status: "processing",
@@ -359,46 +557,189 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
       last_transfer_attempt_at: new Date().toISOString(),
       next_retry_at: null,
     })
-    .eq("id", payout.id);
+    .eq("id", payout.id)
+    .eq("status", payout.status)
+    .is("stripe_transfer_id", null)
+    .select("id")
+    .maybeSingle();
+
+  if (claimError) {
+    return { ok: false, status: payout.status, reason: claimError.message };
+  }
+  if (!claimed) {
+    return {
+      ok: false,
+      status: payout.status,
+      reason: "Payout changed before the transfer could be claimed.",
+    };
+  }
+
+  let confirmedTransferId: string | null = null;
 
   try {
     const key = process.env.STRIPE_SECRET_KEY!;
+    const expectedAmount = Math.round(Number(payout.net_amount) * 100);
+    const expectedCurrency = (payout.currency ?? "CAD").toLowerCase();
+    const destination = vendor.stripe_connect_account_id;
     const res = await fetch(`${STRIPE_API}/transfers`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${key}`,
         "Content-Type": "application/x-www-form-urlencoded",
-        // Idempotent per payout+attempt: a network retry cannot double-send.
-        "Idempotency-Key": `payout_${payout.id}_${attempt}`,
+        // Stable for the lifetime of the payout: retries after a network or DB
+        // failure resolve to the original Stripe transfer instead of sending twice.
+        "Idempotency-Key": `1lv_payout_${payout.id}_v1`,
       },
       body: new URLSearchParams({
-        amount: String(Math.round(Number(payout.net_amount) * 100)),
-        currency: (payout.currency ?? "CAD").toLowerCase(),
-        destination: vendor.stripe_connect_account_id,
+        amount: String(expectedAmount),
+        currency: expectedCurrency,
+        destination,
         "metadata[payout_id]": payout.id,
         "metadata[vendor_id]": payout.vendor_id,
         "metadata[period_start]": payout.period_start,
         "metadata[period_end]": payout.period_end,
       }).toString(),
+      signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
     });
     const json = (await res.json()) as Record<string, unknown>;
     if (!res.ok) {
-      throw new Error((json.error as { message?: string } | undefined)?.message ?? "Stripe error");
+      throw new Error(
+        (json.error as { message?: string } | undefined)?.message ?? "Stripe error",
+      );
     }
-    await db
+
+    const transferId =
+      typeof json.id === "string" && json.id.startsWith("tr_") ? json.id : null;
+    if (!transferId) {
+      throw new Error("Stripe did not return a valid transfer id.");
+    }
+
+    const actualAmount = Number(json.amount ?? NaN);
+    const actualCurrency =
+      typeof json.currency === "string" ? json.currency.toLowerCase() : "";
+    const actualDestination =
+      typeof json.destination === "string"
+        ? json.destination
+        : ((json.destination as { id?: string } | undefined)?.id ?? null);
+    const actualMetadata =
+      json.metadata &&
+      typeof json.metadata === "object" &&
+      !Array.isArray(json.metadata)
+        ? (json.metadata as Record<string, unknown>)
+        : {};
+    const actualPayoutId =
+      typeof actualMetadata["payout_id"] === "string"
+        ? actualMetadata["payout_id"]
+        : "";
+    const actualVendorId =
+      typeof actualMetadata["vendor_id"] === "string"
+        ? actualMetadata["vendor_id"]
+        : "";
+
+    if (
+      !Number.isSafeInteger(actualAmount) ||
+      actualAmount !== expectedAmount ||
+      actualCurrency !== expectedCurrency ||
+      actualDestination !== destination ||
+      actualPayoutId !== payout.id ||
+      actualVendorId !== payout.vendor_id
+    ) {
+      await db
+        .from("payouts")
+        .update({
+          status: "failed",
+          stripe_transfer_id: transferId,
+          failure_reason: "Stripe transfer response does not match the approved payout.",
+          next_retry_at: null,
+        })
+        .eq("id", payout.id)
+        .eq("status", "processing");
+      await notifyAdmins(
+        db,
+        "payout_transfer_mismatch",
+        "Payout transfer mismatch",
+        `Payout ${payout.id.slice(0, 8)} requires reconciliation before any retry.`,
+      );
+      return {
+        ok: false,
+        status: "failed",
+        reason: "Stripe transfer response does not match the approved payout.",
+      };
+    }
+
+    confirmedTransferId = transferId;
+
+    const { data: paid, error: paidError } = await db
       .from("payouts")
       .update({
         status: "paid",
-        stripe_transfer_id: json.id as string,
+        stripe_transfer_id: transferId,
         paid_at: new Date().toISOString(),
         failure_reason: null,
         next_retry_at: null,
       })
-      .eq("id", payout.id);
+      .eq("id", payout.id)
+      .eq("status", "processing")
+      .is("stripe_transfer_id", null)
+      .select("id")
+      .maybeSingle();
+
+    if (paidError) throw new Error(paidError.message);
+    if (!paid) {
+      throw new Error(
+        "Stripe transfer succeeded but the payout could not be finalized locally.",
+      );
+    }
     return { ok: true, status: "paid" };
   } catch (err) {
     const reason = err instanceof Error ? err.message : "Transfer failed";
-    const settings = await readSettings(db);
+
+    if (confirmedTransferId) {
+      // Stripe has already returned a transfer that matches this payout. Never
+      // downgrade that known transfer to a retryable "failed" state: a second
+      // logical transfer is unnecessary. Persist the transfer reference when
+      // possible and require reconciliation to repair the local paid state.
+      const { data: current } = await db
+        .from("payouts")
+        .select("status, stripe_transfer_id")
+        .eq("id", payout.id)
+        .maybeSingle();
+
+      if (
+        current?.status === "paid" &&
+        current.stripe_transfer_id === confirmedTransferId
+      ) {
+        return { ok: true, status: "paid" };
+      }
+
+      await db
+        .from("payouts")
+        .update({
+          status: "processing",
+          stripe_transfer_id: confirmedTransferId,
+          failure_reason:
+            "Stripe transfer succeeded; local finalization requires reconciliation.",
+          next_retry_at: null,
+        })
+        .eq("id", payout.id)
+        .eq("status", "processing")
+        .is("stripe_transfer_id", null);
+
+      await notifyAdmins(
+        db,
+        "payout_transfer_reconciliation_required",
+        "Payout transfer needs reconciliation",
+        `Payout ${payout.id.slice(0, 8)} has a confirmed Stripe transfer but local finalization did not complete.`,
+      );
+
+      return {
+        ok: false,
+        status: "processing",
+        reason:
+          "Stripe transfer succeeded but the payout could not be finalized locally. Reconcile before any further action.",
+      };
+    }
+
     const exhausted = attempt >= settings.maxTransferAttempts;
     await db
       .from("payouts")
@@ -407,11 +748,15 @@ export async function executeTransfer(db: Db, payoutId: string): Promise<Transfe
         failure_reason: reason,
         next_retry_at: exhausted ? null : nextRetryAt(attempt),
       })
-      .eq("id", payout.id);
+      .eq("id", payout.id)
+      .eq("status", "processing")
+      .is("stripe_transfer_id", null);
     await notifyAdmins(
       db,
       exhausted ? "payout_retry_exhausted" : "payout_transfer_failed",
-      exhausted ? "Payout transfer failed after all retries" : "Payout transfer failed",
+      exhausted
+        ? "Payout transfer failed after all retries"
+        : "Payout transfer failed",
       `Payout ${payout.id.slice(0, 8)} — ${reason}`,
     );
     return { ok: false, status: "failed", reason };
@@ -426,6 +771,7 @@ export type ReconClass =
   | "amount_mismatch"
   | "currency_mismatch"
   | "destination_mismatch"
+  | "metadata_mismatch"
   | "failed"
   | "unknown";
 
@@ -441,7 +787,7 @@ export async function reconcileOne(db: Db, payoutId: string): Promise<ReconResul
   const checkedAt = new Date().toISOString();
   const { data: row } = await db
     .from("payouts")
-    .select("id, vendor_id, status, net_amount, currency, stripe_transfer_id")
+    .select("id, vendor_id, status, net_amount, currency, stripe_transfer_id, paid_at")
     .eq("id", payoutId)
     .maybeSingle();
   const payout = row as {
@@ -451,6 +797,7 @@ export async function reconcileOne(db: Db, payoutId: string): Promise<ReconResul
     net_amount: number;
     currency: string;
     stripe_transfer_id: string | null;
+    paid_at: string | null;
   } | null;
 
   if (!payout) return { payoutId, classification: "unknown", note: "Payout not found", checkedAt };
@@ -471,10 +818,22 @@ export async function reconcileOne(db: Db, payoutId: string): Promise<ReconResul
     return { payoutId: payout.id, classification, note, checkedAt };
   };
 
-  if (payout.status === "failed") return finish("failed", "Local payout is marked failed.");
   if (!payout.stripe_transfer_id) {
-    if (payout.status === "paid") return finish("missing_transfer", "Marked paid but no transfer reference.");
-    return { payoutId: payout.id, classification: "unknown", note: "No transfer to reconcile yet.", checkedAt };
+    if (payout.status === "paid") {
+      return finish("missing_transfer", "Marked paid but no transfer reference.");
+    }
+    if (payout.status === "failed") {
+      return finish(
+        "failed",
+        "Local payout failed before a Stripe transfer reference was recorded.",
+      );
+    }
+    return {
+      payoutId: payout.id,
+      classification: "unknown",
+      note: "No transfer to reconcile yet.",
+      checkedAt,
+    };
   }
   if (!stripeConfigured()) {
     return {
@@ -494,8 +853,8 @@ export async function reconcileOne(db: Db, payoutId: string): Promise<ReconResul
   }
 
   const expectedCents = Math.round(Number(payout.net_amount) * 100);
-  const actualCents = Number(transfer.amount ?? 0);
-  if (actualCents !== expectedCents) {
+  const actualCents = Number(transfer.amount ?? NaN);
+  if (!Number.isSafeInteger(actualCents) || actualCents !== expectedCents) {
     return finish(
       "amount_mismatch",
       `Expected ${(expectedCents / 100).toFixed(2)}, Stripe reports ${(actualCents / 100).toFixed(2)}.`,
@@ -516,12 +875,50 @@ export async function reconcileOne(db: Db, payoutId: string): Promise<ReconResul
     typeof transfer.destination === "string"
       ? transfer.destination
       : ((transfer.destination as { id?: string } | undefined)?.id ?? null);
-  if (destination && transferDest && destination !== transferDest) {
+  if (!destination || transferDest !== destination) {
     // Never surface either account id.
-    return finish("destination_mismatch", "Transfer destination does not match the vendor payout account.");
+    return finish(
+      "destination_mismatch",
+      "Transfer destination does not match the vendor payout account.",
+    );
   }
+
+  const transferMetadata =
+    transfer.metadata &&
+    typeof transfer.metadata === "object" &&
+    !Array.isArray(transfer.metadata)
+      ? (transfer.metadata as Record<string, unknown>)
+      : {};
+  if (
+    transferMetadata["payout_id"] !== payout.id ||
+    transferMetadata["vendor_id"] !== payout.vendor_id
+  ) {
+    return finish(
+      "metadata_mismatch",
+      "Stripe transfer metadata does not match this 1LV payout.",
+    );
+  }
+
   if (transfer.reversed === true) {
     return finish("failed", "Stripe reports this transfer as reversed.");
+  }
+
+  const { error: repairError } = await db
+    .from("payouts")
+    .update({
+      status: "paid",
+      paid_at: payout.paid_at ?? checkedAt,
+      failure_reason: null,
+      next_retry_at: null,
+    })
+    .eq("id", payout.id)
+    .eq("stripe_transfer_id", payout.stripe_transfer_id);
+
+  if (repairError) {
+    return finish(
+      "unknown",
+      "Stripe transfer matches, but the local paid state could not be repaired.",
+    );
   }
 
   return finish("matched", "Local payout matches the Stripe transfer.");
@@ -530,7 +927,10 @@ export async function reconcileOne(db: Db, payoutId: string): Promise<ReconResul
 // ---------------- authorisation ----------------
 
 /** Throws unless the caller holds the admin role (checked through the RLS-scoped client). */
-export async function assertAdmin(context: { supabase: any; userId: string }) {
+export async function assertAdmin(context: {
+  supabase: SupabaseClient<Database>;
+  userId: string;
+}) {
   const { data, error } = await context.supabase.rpc("has_role", {
     _user_id: context.userId,
     _role: "admin",

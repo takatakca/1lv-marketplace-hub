@@ -1,5 +1,11 @@
 import { parseSearchIntent, type SearchIntent } from "@/lib/search-intent";
-import { categories, products, vendors } from "@/lib/data";
+import {
+  categories,
+  products as demoProducts,
+  vendors as demoVendors,
+  type Product,
+  type Vendor,
+} from "@/lib/data";
 
 const RECENT_KEY = "1lvca:recent-searches:v1";
 const MAX_RECENT = 8;
@@ -70,6 +76,13 @@ export type Suggestion =
   | { kind: "category"; id: string; label: string; slug: string; emoji: string }
   | { kind: "store"; id: string; label: string; slug: string; country: string };
 
+export type CategorySuggestionSource = {
+  slug: string;
+  name: string;
+  aliases?: readonly string[];
+  emoji?: string;
+};
+
 export const TRENDING_SEARCHES = [
   "wireless earbuds",
   "camping tent",
@@ -79,7 +92,38 @@ export const TRENDING_SEARCHES = [
   "gift under $25",
 ];
 
+export type SearchNavigationParams = {
+  q: string;
+  raw?: string;
+  category: string;
+  minPrice?: number;
+  maxPrice?: number;
+  freeShipping: boolean;
+  canadian: boolean;
+  rating: number;
+  sale: boolean;
+  sort: string;
+};
+
 export type QuickChip = { label: string; search: Record<string, string | number | boolean> };
+
+export function toSearchNavigation(
+  search: Record<string, string | number | boolean>,
+  raw?: string,
+): SearchNavigationParams {
+  return {
+    q: typeof search.q === "string" ? search.q : "",
+    ...(raw ? { raw } : {}),
+    category: typeof search.category === "string" ? search.category : "",
+    ...(typeof search.minPrice === "number" ? { minPrice: search.minPrice } : {}),
+    ...(typeof search.maxPrice === "number" ? { maxPrice: search.maxPrice } : {}),
+    freeShipping: search.freeShipping === true,
+    canadian: search.canadian === true,
+    rating: typeof search.rating === "number" ? search.rating : 0,
+    sale: search.sale === true,
+    sort: typeof search.sort === "string" ? search.sort : "relevance",
+  };
+}
 
 export const QUICK_CHIPS: QuickChip[] = [
   { label: "Deals under $10", search: { maxPrice: 10, sale: true } },
@@ -90,21 +134,47 @@ export const QUICK_CHIPS: QuickChip[] = [
   { label: "On sale", search: { sale: true } },
 ];
 
-export function getSuggestions(term: string, limit = 8): Suggestion[] {
+export function getSuggestions(
+  term: string,
+  limit = 8,
+  productSource: readonly Product[] = demoProducts,
+  vendorSource: readonly Vendor[] = demoVendors,
+  categorySource: readonly CategorySuggestionSource[] = categories.map(
+    (category) => ({
+      slug: category.slug,
+      name: category.name,
+      aliases: category.subcategories,
+      emoji: category.emoji,
+    }),
+  ),
+): Suggestion[] {
   const t = (term ?? "").trim().toLowerCase();
   if (!t) return [];
 
-  const cats: Suggestion[] = categories
-    .filter((c) => c.name.toLowerCase().includes(t) || c.slug.includes(t) || c.subcategories.some((s) => s.toLowerCase().includes(t)))
+  const cats: Suggestion[] = categorySource
+    .filter(
+      (category) =>
+        category.name.toLowerCase().includes(t) ||
+        category.slug.toLowerCase().includes(t) ||
+        (category.aliases ?? []).some((alias) =>
+          alias.toLowerCase().includes(t),
+        ),
+    )
     .slice(0, 3)
-    .map((c) => ({ kind: "category", id: `c-${c.slug}`, label: c.name, slug: c.slug, emoji: c.emoji }));
+    .map((category) => ({
+      kind: "category",
+      id: `c-${category.slug}`,
+      label: category.name,
+      slug: category.slug,
+      emoji: category.emoji ?? "📦",
+    }));
 
-  const stores: Suggestion[] = vendors
+  const stores: Suggestion[] = vendorSource
     .filter((v) => v.name.toLowerCase().includes(t) || v.slug.includes(t))
     .slice(0, 3)
     .map((v) => ({ kind: "store", id: `v-${v.slug}`, label: v.name, slug: v.slug, country: v.country }));
 
-  const prods: Suggestion[] = products
+  const prods: Suggestion[] = productSource
     .filter((p) => p.title.toLowerCase().includes(t))
     .slice(0, limit)
     .map((p) => ({ kind: "product", id: p.id, label: p.title, slug: p.slug, price: p.price, image: p.images[0] }));

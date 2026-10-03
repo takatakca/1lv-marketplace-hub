@@ -3,22 +3,71 @@ import { useEffect, useState } from "react";
 import { ShieldCheck, MapPin, Package } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { getPublicVendorBySlug, type PublicVendorRecord } from "@/services/vendors";
-import { listVendorProducts, type ProductRecord } from "@/services/products";
+import {
+  getVendor as getDemoVendor,
+  products as demoProducts,
+} from "@/lib/data";
+import { getPublicMarketplaceSettings } from "@/lib/public-marketplace-settings.functions";
+import { listPublicCatalogProductsForVendor } from "@/services/public-catalog";
+import type { Product } from "@/lib/data";
 import { resolveAssetUrl } from "@/services/vendor-assets";
 import { formatCAD } from "@/lib/data";
 
 export const Route = createFileRoute("/store/$slug")({
   loader: async ({ params }) => {
-    const vendor = await getPublicVendorBySlug(params.slug);
-    if (!vendor) throw notFound();
-    const products = await listVendorProducts(vendor.id);
-    return { vendor, products: products.filter((p) => p.status === "active") };
+    const settings = await getPublicMarketplaceSettings().catch(() => null);
+
+    try {
+      const vendor = await getPublicVendorBySlug(params.slug);
+      if (vendor) {
+        const products = await listPublicCatalogProductsForVendor(
+          vendor.slug,
+          500,
+        );
+        return { vendor, products };
+      }
+    } catch (error) {
+      if (!settings?.demo_mode) throw error;
+    }
+
+    if (settings?.demo_mode) {
+      const demoVendor = getDemoVendor(params.slug);
+      if (demoVendor) {
+        const createdAt = new Date(
+          Date.now() - demoVendor.yearsActive * 365.25 * 24 * 60 * 60 * 1000,
+        ).toISOString();
+
+        const vendor: PublicVendorRecord = {
+          id: `demo-${demoVendor.slug}`,
+          slug: demoVendor.slug,
+          store_name: demoVendor.name,
+          description: "Preview storefront data.",
+          logo_url: null,
+          banner_url: null,
+          return_policy: "Preview return policy.",
+          shipping_policy: "Preview shipping policy.",
+          country: demoVendor.country,
+          status: "active",
+          created_at: createdAt,
+          updated_at: createdAt,
+        };
+
+        return {
+          vendor,
+          products: demoProducts.filter(
+            (product) => product.vendorSlug === demoVendor.slug,
+          ),
+        };
+      }
+    }
+
+    throw notFound();
   },
   errorComponent: ({ error }) => (
     <AppLayout>
       <div className="mx-auto max-w-3xl px-4 py-16 text-center">
         <h1 className="font-display text-2xl font-bold text-navy">Couldn't load this store</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
+        <p className="mt-2 text-sm text-muted-foreground">{error instanceof Error ? error.message : "Please try again."}</p>
       </div>
     </AppLayout>
   ),
@@ -46,7 +95,10 @@ export const Route = createFileRoute("/store/$slug")({
 });
 
 function StorePage() {
-  const { vendor, products } = Route.useLoaderData() as { vendor: PublicVendorRecord; products: ProductRecord[] };
+  const { vendor, products } = Route.useLoaderData() as {
+    vendor: PublicVendorRecord;
+    products: Product[];
+  };
   const [logo, setLogo] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
 
@@ -103,7 +155,12 @@ function StorePage() {
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
                 {products.map((p) => (
-                  <div key={p.id} className="group overflow-hidden rounded-xl border border-border bg-card transition hover:border-electric/40 hover:shadow-elevated">
+                  <Link
+                    key={p.id}
+                    to="/product/$slug"
+                    params={{ slug: p.slug }}
+                    className="group block overflow-hidden rounded-xl border border-border bg-card transition hover:border-electric/40 hover:shadow-elevated"
+                  >
                     <div className="aspect-square overflow-hidden bg-muted">
                       {p.images?.[0] ? (
                         <img src={p.images[0]} alt={p.title} className="h-full w-full object-cover transition group-hover:scale-105" />
@@ -115,7 +172,7 @@ function StorePage() {
                       <div className="line-clamp-2 text-sm font-semibold text-navy">{p.title}</div>
                       <div className="mt-1 text-sm font-bold text-electric">{formatCAD(Number(p.price))}</div>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}

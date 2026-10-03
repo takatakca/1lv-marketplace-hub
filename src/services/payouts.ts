@@ -3,6 +3,7 @@ import {
   generateVendorPayouts as generateFn,
   setPayoutStatus as setStatusFn,
   processApprovedPayout as processFn,
+  listAdminPayouts as listAdminPayoutsFn,
   type PayoutStatus,
   type GenerateResult,
   type TransferResult,
@@ -35,6 +36,23 @@ export type PayoutRecord = {
   reconciled_at?: string | null;
 };
 
+
+export type VendorPayoutRecord = Pick<
+  PayoutRecord,
+  | "id"
+  | "vendor_id"
+  | "period_start"
+  | "period_end"
+  | "gross_amount"
+  | "commission_amount"
+  | "refund_amount"
+  | "dispute_hold_amount"
+  | "net_amount"
+  | "currency"
+  | "status"
+  | "paid_at"
+  | "created_at"
+>;
 
 export type PayoutItemRecord = {
   id: string;
@@ -97,23 +115,23 @@ export function payoutStatusClass(status: PayoutStatus): string {
 }
 
 /** Vendor-scoped list (RLS restricts to the caller's own vendor rows). */
-export async function listVendorPayouts(vendorId: string): Promise<PayoutRecord[]> {
+export async function listVendorPayouts(
+  vendorId: string,
+): Promise<VendorPayoutRecord[]> {
   const { data } = await supabase
     .from("payouts" as never)
-    .select("*")
+    .select(
+      "id, vendor_id, period_start, period_end, gross_amount, commission_amount, refund_amount, dispute_hold_amount, net_amount, currency, status, paid_at, created_at",
+    )
     .eq("vendor_id", vendorId)
     .order("period_start", { ascending: false });
-  return (data ?? []) as unknown as PayoutRecord[];
+  return (data ?? []) as unknown as VendorPayoutRecord[];
 }
 
 /** Admin list — RLS still applies; non-admins simply see only their own rows. */
 export async function listAllPayouts(): Promise<PayoutRecord[]> {
-  const { data } = await supabase
-    .from("payouts" as never)
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(500);
-  return (data ?? []) as unknown as PayoutRecord[];
+  const data = await listAdminPayoutsFn();
+  return data as unknown as PayoutRecord[];
 }
 
 export async function listPayoutItems(payoutId: string): Promise<PayoutItemRecord[]> {

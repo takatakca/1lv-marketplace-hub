@@ -16,13 +16,14 @@ type CatRow = {
   position: number;
 };
 
-const empty = { en: "", fr: "", slug: "", parent: "", position: 0, active: true, seoTitle: "", seoDesc: "", image: "" };
+const empty = { en: "", fr: "", slug: "", parent: "", position: 0, active: true };
 
 function Page() {
   const { user } = useAuth();
   const demo = isDemoMode(user);
   const [rows, setRows] = useState<CatRow[] | null>(null);
   const [form, setForm] = useState(empty);
+  const [editingSlug, setEditingSlug] = useState<string | null>(null);
 
   const refresh = async () => {
     const data = await listCategoriesAdmin();
@@ -35,12 +36,12 @@ function Page() {
   };
   useEffect(() => { if (!demo) refresh().catch(() => setRows([])); }, [demo]);
 
-  const useDemo = demo || (rows && rows.length === 0);
+  const useDemo = demo;
   const display: CatRow[] = useDemo
     ? demoCategories.map((c, i) => ({
         slug: c.slug, name_en: c.name, name_fr: null, parent_slug: null, active: true, position: i,
       }))
-    : rows!;
+    : rows ?? [];
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,29 +54,41 @@ function Page() {
       });
       toast.success("Category saved");
       setForm(empty);
+      setEditingSlug(null);
       refresh();
     } catch (err) { toast.error((err as Error).message); }
   };
 
-  const edit = (c: CatRow) => setForm({
-    en: c.name_en, fr: c.name_fr ?? "", slug: c.slug,
-    parent: c.parent_slug ?? "", position: c.position, active: c.active,
-    seoTitle: "", seoDesc: "", image: "",
-  });
+  const edit = (c: CatRow) => {
+    setEditingSlug(c.slug);
+    setForm({
+      en: c.name_en, fr: c.name_fr ?? "", slug: c.slug,
+      parent: c.parent_slug ?? "", position: c.position, active: c.active,
+    });
+  };
+
+  const resetForm = () => {
+    setEditingSlug(null);
+    setForm(empty);
+  };
 
   const remove = async (slug: string) => {
     if (demo) { toast.success("Removed (demo)"); return; }
     if (!confirm(`Delete category "${slug}"?`)) return;
-    try { await deleteCategory(slug); toast.success("Deleted"); refresh(); }
-    catch (err) { toast.error((err as Error).message); }
+    try {
+      await deleteCategory(slug);
+      toast.success("Deleted");
+      if (editingSlug === slug) resetForm();
+      refresh();
+    } catch (err) { toast.error((err as Error).message); }
   };
 
   return (
     <>
       <div className="mb-6">
-        {useDemo ? <DemoBanner label={demo ? "Preview mode" : "No categories yet"} /> : null}
+        {useDemo ? <DemoBanner label="Preview mode" /> : null}
         <h1 className="text-2xl font-bold text-navy md:text-3xl">Categories</h1>
-        <p className="text-sm text-muted-foreground">Bilingual taxonomy with SEO and ordering.</p>
+        <p className="text-sm text-muted-foreground">Bilingual marketplace taxonomy, hierarchy, visibility and ordering.</p>
       </div>
       {demo && <PreviewModeNotice />}
       <div className="grid gap-6 lg:grid-cols-3">
@@ -93,6 +106,13 @@ function Page() {
               </tr>
             </thead>
             <tbody>
+              {display.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    No categories yet. Create the first marketplace category.
+                  </td>
+                </tr>
+              )}
               {display.map((c) => (
                 <tr key={c.slug} className="border-t border-border">
                   <td className="px-4 py-3 font-medium text-navy">{c.name_en}</td>
@@ -111,21 +131,52 @@ function Page() {
           </table>
         </div>
         <form onSubmit={submit} className="space-y-3 rounded-xl border border-border bg-card p-5">
-          <h3 className="text-sm font-semibold text-navy">Add / edit category</h3>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-navy">
+              {editingSlug ? "Edit category" : "Add category"}
+            </h3>
+            {editingSlug && (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="text-xs font-semibold text-electric"
+              >
+                New category
+              </button>
+            )}
+          </div>
           <input placeholder="English name" value={form.en} onChange={(e) => setForm({ ...form, en: e.target.value })} className={inputCls} />
           <input placeholder="Nom français" value={form.fr} onChange={(e) => setForm({ ...form, fr: e.target.value })} className={inputCls} />
-          <input placeholder="slug (kebab-case)" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} className={inputCls} />
-          <input placeholder="Parent slug (optional)" value={form.parent} onChange={(e) => setForm({ ...form, parent: e.target.value })} className={inputCls} />
+          <input
+            placeholder="slug (kebab-case)"
+            value={form.slug}
+            disabled={editingSlug !== null}
+            onChange={(e) => setForm({ ...form, slug: e.target.value.toLowerCase() })}
+            className={inputCls}
+          />
+          {editingSlug && (
+            <p className="text-[11px] text-muted-foreground">
+              Slugs are stable storefront identifiers. Create a new category instead of renaming one in place.
+            </p>
+          )}
+          <select
+            value={form.parent}
+            onChange={(e) => setForm({ ...form, parent: e.target.value })}
+            className={inputCls}
+          >
+            <option value="">No parent</option>
+            {display
+              .filter((category) => category.slug !== editingSlug)
+              .map((category) => (
+                <option key={category.slug} value={category.slug}>
+                  {category.name_en} ({category.slug})
+                </option>
+              ))}
+          </select>
           <input type="number" placeholder="Sort order" value={form.position} onChange={(e) => setForm({ ...form, position: Number(e.target.value) })} className={inputCls} />
           <label className="flex items-center gap-2 text-xs text-navy">
             <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active
           </label>
-          <div className="rounded-md border border-dashed border-border bg-muted/30 p-3 text-[11px] text-muted-foreground">
-            SEO &amp; image placeholders
-          </div>
-          <input placeholder="SEO title" value={form.seoTitle} onChange={(e) => setForm({ ...form, seoTitle: e.target.value })} className={inputCls} />
-          <input placeholder="SEO meta description" value={form.seoDesc} onChange={(e) => setForm({ ...form, seoDesc: e.target.value })} className={inputCls} />
-          <input placeholder="Category image URL" value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value })} className={inputCls} />
           <button className="w-full rounded-md bg-electric px-3 py-2 text-sm font-semibold text-electric-foreground">Save category</button>
         </form>
       </div>

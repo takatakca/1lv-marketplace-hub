@@ -36,24 +36,51 @@ function Page() {
     getAdminOverview().then(setStats).catch(() => setStats(null));
   }, [demo]);
 
-  const useDemo = demo || !stats || !stats.hasData;
-  const s: AdminOverview = stats ?? {
-    gmv: 184220,
-    orderCount: 2841,
-    pendingVendors: 6,
-    activeVendors: 42,
-    pendingProducts: 18,
-    activeProducts: 312,
-    unpaidVendors: 4,
-    commissionRevenue: 16580,
-    payoutLiability: 38420,
-    hasData: false,
-  };
+  const useDemo = demo;
+  const s: AdminOverview = demo
+    ? {
+        gmv: 184220,
+        orderCount: 2841,
+        pendingVendors: 6,
+        activeVendors: 42,
+        pendingProducts: 18,
+        activeProducts: 312,
+        unpaidVendors: 4,
+        commissionRevenue: 16580,
+        payoutLiability: 38420,
+        openDisputes: 3,
+        hasData: true,
+        recentOrders: [],
+      }
+    : stats ?? {
+        gmv: 0,
+        orderCount: 0,
+        pendingVendors: 0,
+        activeVendors: 0,
+        pendingProducts: 0,
+        activeProducts: 0,
+        unpaidVendors: 0,
+        commissionRevenue: 0,
+        payoutLiability: 0,
+        openDisputes: 0,
+        hasData: false,
+        recentOrders: [],
+      };
+
+  const recentRows = useDemo
+    ? demoRecent
+    : s.recentOrders.map((order) => ({
+        order: order.order,
+        customer: order.customer,
+        vendor: order.vendor,
+        total: formatCAD(order.total),
+        status: order.status,
+      }));
 
   return (
     <div>
       <div className="mb-6">
-        {useDemo && <DemoBanner label={demo ? "Preview mode" : "No live data yet"} />}
+        {useDemo && <DemoBanner label="Preview mode" />}
         <h1 className="text-2xl font-bold text-navy md:text-3xl">Marketplace overview</h1>
         <p className="text-sm text-muted-foreground">Operational health, revenue and moderation queues.</p>
       </div>
@@ -66,7 +93,7 @@ function Page() {
         <StatCard label="Active products" value={s.activeProducts} icon={Package} accent="electric" />
         <StatCard label="Pending products" value={s.pendingProducts} icon={ShieldCheck} accent="deal" />
         <StatCard label="Unpaid / past_due" value={s.unpaidVendors} icon={CreditCard} accent="deal" />
-        <StatCard label="Open disputes" value={0} icon={AlertTriangle} accent="deal" />
+        <StatCard label="Open disputes" value={s.openDisputes} icon={AlertTriangle} accent="deal" />
         <StatCard label="Commission revenue" value={formatCAD(s.commissionRevenue)} icon={DollarSign} accent="success" />
         <StatCard label="Payout liability" value={formatCAD(s.payoutLiability)} icon={Wallet} />
       </div>
@@ -82,7 +109,8 @@ function Page() {
               { key: "total", label: "Total" },
               { key: "status", label: "Status" },
             ]}
-            rows={demoRecent}
+            rows={recentRows}
+            empty="No marketplace orders yet."
           />
         </section>
         <section>
@@ -91,7 +119,7 @@ function Page() {
             <li className="flex justify-between"><span>Vendor applications waiting</span><span className="font-semibold text-navy">{s.pendingVendors}</span></li>
             <li className="flex justify-between"><span>Product submissions waiting</span><span className="font-semibold text-navy">{s.pendingProducts}</span></li>
             <li className="flex justify-between"><span>Vendors with billing issues</span><span className="font-semibold text-deal">{s.unpaidVendors}</span></li>
-            <li className="flex justify-between text-muted-foreground"><span>Disputes open</span><span>0 (placeholder)</span></li>
+            <li className="flex justify-between"><span>Disputes open</span><span className="font-semibold text-deal">{s.openDisputes}</span></li>
           </ul>
         </section>
       </div>
