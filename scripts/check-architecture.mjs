@@ -285,6 +285,10 @@ const payoutSettingsAdminScopeMigration = readFileSync(
   join(root, "supabase/migrations/20261002174500_payout_settings_admin_scope.sql"),
   "utf8",
 );
+const takatakOutboxAtomicClaimMigration = readFileSync(
+  join(root, "supabase/migrations/20261002180000_takatak_outbox_atomic_claim.sql"),
+  "utf8",
+);
 const publicCategoryService = readFileSync(
   join(root, "src/services/public-categories.ts"),
   "utf8",
@@ -774,7 +778,22 @@ for (const [content, marker, label] of [
   [
     payoutSettingsAdminScopeMigration,
     "SELECT '20261002174500'",
-    "final production schema marker includes payout-settings admin scope",
+    "payout-settings admin scope retains its historical schema marker",
+  ],
+  [
+    takatakOutboxAtomicClaimMigration,
+    "SELECT '20261002180000'",
+    "final production schema marker includes atomic TAKATAK outbox claim",
+  ],
+  [
+    takatakOutboxAtomicClaimMigration,
+    "FOR UPDATE SKIP LOCKED",
+    "TAKATAK outbox workers claim rows without concurrent double-send races",
+  ],
+  [
+    takatakOutboxAtomicClaimMigration,
+    "updated_at < now() - interval '15 minutes'",
+    "TAKATAK outbox atomic claim recovers stale processing leases",
   ],
   [
     payoutSettingsAdminScopeMigration,
@@ -2487,17 +2506,55 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002174500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002180000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002174500"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002180000"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002174500"') ||
-  !payoutSettingsAdminScopeMigration.includes("SELECT '20261002174500'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002180000"') ||
+  !takatakOutboxAtomicClaimMigration.includes("SELECT '20261002180000'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002174500",
+    "production health/migration gates must track schema 20261002180000",
+  );
+}
+
+if (
+  !takatakOutboxAtomicClaimMigration.includes("FOR UPDATE SKIP LOCKED") ||
+  !takatakOutboxAtomicClaimMigration.includes(
+    "updated_at < now() - interval '15 minutes'",
+  ) ||
+  !takatakOutboxAtomicClaimMigration.includes(
+    "REVOKE ALL ON FUNCTION public.claim_takatak_outbox(integer, integer)",
+  ) ||
+  !takatakOutboxAtomicClaimMigration.includes(
+    "TO service_role",
+  )
+) {
+  violations.push(
+    "TAKATAK outbox claim must remain atomic, stale-recoverable and service-role only",
+  );
+}
+
+if (
+  !masterOutbox.includes('"claim_takatak_outbox"') ||
+  masterOutbox.includes('const staleBefore = new Date(') ||
+  masterOutbox.includes('.eq("status", "pending")\n    .lt("attempt_count"') ||
+  masterOutbox.includes(
+    'update({ status: "processing" }).eq("id", row.id)',
+  )
+) {
+  violations.push(
+    "TAKATAK drain must use the atomic PostgreSQL claim instead of client-side select/update claiming",
+  );
+}
+
+if (
+  !masterOutbox.includes("Math.max(attempt - 1, 0)")
+) {
+  violations.push(
+    "TAKATAK retry backoff must begin at the first configured interval",
   );
 }
 
