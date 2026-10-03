@@ -77,7 +77,7 @@ A vendor may submit a product for review only if:
 - `vendors.status = 'active'` AND
 - `vendors.subscription_status IN ('active', 'trialing')`
 
-Enforced client-side in `/vendor/products/new`. Draft save always works. Admin override remains.
+Enforced server-side and in the database authority/RLS layer; the UI mirrors the same rule but is never authoritative. Draft save remains available where permitted.
 
 ## 7. Stripe Connect (payout preparation)
 
@@ -124,7 +124,7 @@ Any future expiry, any CVC.
 - Browser roles cannot insert financial order, order-item or vendor-order rows after the server-authoritative checkout migration is applied.
 - Guest payment authorization uses a dedicated short-lived HMAC capability; never reuse the Stripe or Supabase service-role secret for `CHECKOUT_GUEST_TOKEN_SECRET`.
 - Inventory is reserved during checkout and committed only after Stripe payment success; expired unpaid reservations are recoverable through the service-role-only cleanup RPC.
-- Expired reservations are checked by `.github/workflows/inventory-maintenance.yml` every 15 minutes through `/api/internal/inventory/cleanup`; production requires a dedicated `INVENTORY_MAINTENANCE_CRON_SECRET` (32+ characters) and a clean HTTPS `PRODUCTION_URL` repository variable.
+- Expired reservations are checked by `.github/workflows/inventory-maintenance.yml` every 15 minutes through `/api/internal/inventory/cleanup`; production requires a dedicated `INVENTORY_MAINTENANCE_CRON_SECRET` (32+ characters), and the workflow refuses to send that bearer secret unless `PRODUCTION_URL` is exactly `https://1lv.ca`.
 - Expiration cleanup is Stripe-first for orders that already have a PaymentIntent: 1LV retrieves and cancels the PaymentIntent before releasing inventory. A succeeded, mismatched, or non-cancelable/ambiguous PaymentIntent blocks inventory release and makes the maintenance job fail visibly for reconciliation.
 - A cancelled order PaymentIntent can be replaced only after its amount/currency/order metadata are revalidated; the replacement uses a stable idempotency key and a conditional old-ID → new-ID database binding.
 - Refund finalization recalculates payouts that have not transferred and forces them back through review. If a payout is already processing/paid, the original Stripe transfer amount stays immutable and an idempotent future clawback is recorded.
@@ -168,10 +168,12 @@ public storefront views, and admin sees a readiness badge, not the account ID.
 4. Return to `/vendor/payouts?connect=success` and click **Refresh Stripe status**.
 
 ### Remaining before live transfers
-- Transfer scheduling (`transfer_data` / separate `transfers` per vendor order).
-- Refunds and dispute handling against connected accounts.
-- Payout reconciliation against `vendor_orders`.
-- Accepting Stripe's Canadian platform/regulatory obligations.
+- Production Stripe/Connect account configuration and live webhook verification.
+- Operational approval of the payout policy and manual reconciliation procedure.
+- Acceptance of Stripe's Canadian platform/regulatory obligations.
+- Keep automatic transfer processing disabled until manual production cycles reconcile cleanly.
+
+Transfer creation, refund/dispute accounting, payout reconciliation and idempotent recovery are implemented in 1LV; they remain production-gated.
 
 ## 12. Payout engine (manual release)
 
@@ -212,9 +214,7 @@ A vendor order enters a payout only when **all** are true:
    leaves the payout untouched.
 
 ### Reconciliation
-`/admin/payouts` labels each row: reconciled, awaiting review, paid but no
-transfer reference, duplicate transfer reference, transfer failed, paid but
-missing paid date, or net amount zero/negative. Labels only — nothing is mutated.
+`/admin/payouts` classifies payout reconciliation against the Stripe Transfers API. A verified transfer must match the exact amount, currency and destination. When Stripe proves the transfer succeeded and the local row is incomplete, reconciliation may repair only the local payout state to `paid`; mismatches remain blocked and are surfaced for manual review.
 
 ### Refunds & disputes
 - Customers can open disputes only on their own paid vendor split; the disputed vendor amount is held immediately.
@@ -222,7 +222,7 @@ missing paid date, or net amount zero/negative. Labels only — nothing is mutat
 - 1LV revalidates the Stripe refund id, amount, currency and metadata before accounting. Only Stripe status `succeeded` finalizes the refund locally; `pending` / `requires_action` remain processing, while `failed` / `canceled` are surfaced to admins without marking money as returned.
 - Successful refund accounting updates `refund_records`, order/vendor-order refund totals, dispute state and payout adjustments atomically through the database finalization RPC.
 - If money was already paid out to a vendor, the accounting path records the compensating adjustment for a later payout instead of silently mutating a completed transfer.
-- Stripe `charge.refunded` webhooks also keep the order payment state synchronized and emit the TAKATAK `order.refunded` event asynchronously.
+- Stripe `charge.refunded` webhooks reconcile only successful refunds that are tied to verified 1LV `refund_records`. Untracked or mismatched refunds are blocked from automatic accounting and surfaced to admins. Financial order/refund lifecycle events are not sent to GROUPE TAKATAK.
 
 ### Security
 - Vendors can read only their own payouts, items and adjustments (RLS).
@@ -261,7 +261,7 @@ missing paid date, or net amount zero/negative. Labels only — nothing is mutat
 - A refund in `processing` can be rechecked and a `failed` refund can be retried from the admin UI. Retries reuse the same stable Stripe idempotency key; if Stripe already created the refund, 1LV retrieves/reconciles that same refund instead of creating a duplicate.
 
 **Negative adjustments after payout**
-- If the vendor_order was already paid out, refund approval writes a negative row into `payout_adjustments`, which the next generated payout subtracts automatically.
+- If the vendor order was already paid out, successful Stripe refund finalization writes an idempotent negative row into `payout_adjustments`; the next generated payout applies that carry-forward adjustment.
 
 **Notifications** are written to the `notifications` table (dispute opened/replied/resolved, refund approved/processed/failed). No email delivery yet.
 
@@ -301,13 +301,12 @@ the last eight runs are shown on `/admin/payouts`.
 | Function | Purpose |
 |---|---|
 | `runWeeklyPayoutScheduler` | Locks, computes the last complete week, generates payouts. Sends transfers only if `auto_process_transfers` is true, and only for already-approved payouts. |
-| `retryFailedPayout` | Retries one failed transfer. Refuses if not `failed`, if a `stripe_transfer_id` exists, or if the attempt cap is reached. Stripe idempotency key `payout_<id>_<attempt>`. |
+| `retryFailedPayout` | Retries a failed transfer or safely recovers a stale `processing` lease. A stale unknown outcome replays the same Stripe operation instead of creating a new logical transfer. Any recorded transfer reference blocks another send. |
 | `reconcileStripePayout` | Reads the Stripe transfer and classifies: `matched`, `missing_transfer`, `amount_mismatch`, `currency_mismatch`, `destination_mismatch`, `failed`, `unknown`. |
 | `reconcileRecentPayouts` | Same check across recent paid/processing/failed payouts (1–180 days, max 200). |
 
 Retry backoff: 1h → 6h → 24h → 72h, stored in `payouts.next_retry_at`;
-`transfer_attempt_count` and `last_transfer_attempt_at` track history. Retries stop
-at `max_transfer_attempts` — nothing retries forever.
+`transfer_attempt_count` and `last_transfer_attempt_at` track history. Normal failed retries stop at `max_transfer_attempts`. A stale `processing` lease may still replay the same stable Stripe idempotency key at the retry ceiling because that is reconciliation of an unknown outcome, not authorization for an additional transfer.
 
 ### Alerting
 Admin rows are written into `notifications` for: payout generation failed,
@@ -316,27 +315,9 @@ delivery yet.
 
 ### Deployment options
 
-**A. pg_cron (if enabled)** — weekly, Monday 07:00 UTC:
+Automatic payout scheduling is intentionally **not exposed through a public cron endpoint**. The current production-safe path is an authenticated admin action from `/admin/payouts` → **Run scheduler now**.
 
-```sql
-select cron.schedule(
-  'weekly-vendor-payout-generation',
-  '0 7 * * 1',
-  $$ select net.http_post(
-       url := 'https://project--deec4249-153f-4f4a-8a40-79e457dc6c83.lovable.app/api/public/hooks/payout-scheduler',
-       headers := '{"Content-Type":"application/json","apikey":"YOUR_ANON_KEY"}'::jsonb,
-       body := '{}'::jsonb
-     ); $$
-);
-```
-
-**B. External secured cron** — any scheduler (GitHub Actions, Cloud Scheduler)
-calling the same URL on the same cadence.
-
-The HTTP scheduler endpoint is **intentionally not deployed yet**. Until a
-dedicated scheduler secret is configured, the job is triggered only by an
-authenticated admin from `/admin/payouts` → **Run scheduler now**. Do not expose
-the endpoint without header authentication.
+Do not reuse the TAKATAK drain secret, inventory-maintenance secret, Supabase keys or Stripe keys for a future payout scheduler. If an external scheduler is introduced later, add a dedicated 32+ character secret, a private/internal endpoint, exact-origin controls and CI coverage before enabling it.
 
 ### Security
 - Scheduler, retry and reconciliation all verify `has_role(admin)` before the
