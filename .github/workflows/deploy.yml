@@ -348,6 +348,10 @@ jobs:
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && \
              [ "${{ inputs.package_only }}" = "false" ]; then
+            if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+              echo "ERROR: manual production deployment is allowed only from refs/heads/main."
+              exit 1
+            fi
             SHOULD_DEPLOY="true"
           fi
 
