@@ -8,7 +8,7 @@ import {
   products as demoProducts,
 } from "@/lib/data";
 import { getPublicMarketplaceSettings } from "@/lib/public-marketplace-settings.functions";
-import { listPublicCatalogProducts } from "@/services/public-catalog";
+import { listPublicCatalogProductsForVendor } from "@/services/public-catalog";
 import type { Product } from "@/lib/data";
 import { resolveAssetUrl } from "@/services/vendor-assets";
 import { formatCAD } from "@/lib/data";
@@ -20,8 +20,8 @@ export const Route = createFileRoute("/store/$slug")({
     try {
       const vendor = await getPublicVendorBySlug(params.slug);
       if (vendor) {
-        const products = (await listPublicCatalogProducts()).filter(
-          (product) => product.vendorSlug === vendor.slug,
+        const products = await listPublicCatalogProductsForVendor(
+          vendor.slug,
         );
         return { vendor, products };
       }
