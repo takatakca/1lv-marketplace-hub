@@ -978,7 +978,19 @@ select ok(
     )
   ) > 0
   and position(
-    'stripe_payment_intent_id IS DISTINCT FROM _expected_payment_intent_id'
+    'IS DISTINCT FROM _expected_payment_intent_id'
+    in pg_get_functiondef(
+      'public.release_order_inventory(uuid,text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'inventory_reserved_until <= now()'
+    in pg_get_functiondef(
+      'public.release_order_inventory(uuid,text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'IS NOT DISTINCT FROM _expected_payment_intent_id'
     in pg_get_functiondef(
       'public.release_order_inventory(uuid,text)'::regprocedure
     )
