@@ -1321,6 +1321,9 @@ if (
 if (
   !productionServer.includes("requestRequiresNoStore") ||
   !productionServer.includes('res.setHeader("Cache-Control", "no-store")') ||
+  !productionServer.includes("MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024") ||
+  !productionServer.includes("boundedRequestBody(req)") ||
+  !productionServer.includes('res.end("Payload Too Large"') ||
   !productionServer.includes(
     '"Cross-Origin-Opener-Policy", "same-origin-allow-popups"',
   ) ||
@@ -1331,6 +1334,15 @@ if (
 ) {
   violations.push(
     "production server must force no-store on authenticated/private responses and retain isolation headers",
+  );
+}
+
+if (
+  !ciWorkflow.includes("Expected oversized request body to return 413") ||
+  !ciWorkflow.includes("head -c 2097153 /dev/zero")
+) {
+  violations.push(
+    "PR runtime smoke tests must prove the global request body limit returns HTTP 413",
   );
 }
 
