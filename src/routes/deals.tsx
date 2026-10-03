@@ -55,10 +55,11 @@ function DealsPage() {
     retry: 1,
   });
 
-  const discounted = (demo
-    ? products.filter((p) => p.compareAt && p.compareAt > p.price)
-    : liveDealsQuery.data ?? []
-  ).sort(
+  const discounted = [
+    ...(demo
+      ? products.filter((p) => p.compareAt && p.compareAt > p.price)
+      : liveDealsQuery.data ?? []),
+  ].sort(
     (a, b) =>
       ((b.compareAt! - b.price) / b.compareAt!) -
       ((a.compareAt! - a.price) / a.compareAt!),
