@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(164);
+select plan(166);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002140000',
+  '20261002141500',
   'production schema marker is current'
 );
 
@@ -169,6 +169,50 @@ select ok(
       and coalesce(qual, '') like '%can_read_vendor_asset%'
   ),
   'anonymous vendor asset reads are restricted to the scoped read authority'
+);
+
+select ok(
+  to_regprocedure(
+    'public.list_public_catalog_products_for_vendor(text,integer)'
+  ) is not null
+  and has_function_privilege(
+    'anon',
+    'public.list_public_catalog_products_for_vendor(text,integer)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.list_public_catalog_products_for_vendor(text,integer)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.list_public_catalog_products_for_vendor(text,integer)',
+    'EXECUTE'
+  ),
+  'vendor-scoped public catalog RPC is available to storefront and server callers'
+);
+
+select ok(
+  position(
+    'v.slug = btrim(COALESCE(_vendor_slug, ''''))'
+    in pg_get_functiondef(
+      'public.list_public_catalog_products_for_vendor(text,integer)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'v.subscription_status IN (''active'', ''trialing'')'
+    in pg_get_functiondef(
+      'public.list_public_catalog_products_for_vendor(text,integer)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'NOT p.track_inventory OR p.inventory_quantity > 0'
+    in pg_get_functiondef(
+      'public.list_public_catalog_products_for_vendor(text,integer)'::regprocedure
+    )
+  ) > 0,
+  'vendor storefront catalog is scoped, subscription-gated and stock-aware'
 );
 
 select ok(
