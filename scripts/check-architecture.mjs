@@ -253,6 +253,14 @@ const searchRoute = readFileSync(
   join(root, "src/routes/search.tsx"),
   "utf8",
 );
+const categoryRoute = readFileSync(
+  join(root, "src/routes/category.$slug.tsx"),
+  "utf8",
+);
+const dealsRoute = readFileSync(
+  join(root, "src/routes/deals.tsx"),
+  "utf8",
+);
 const publicCatalogService = readFileSync(
   join(root, "src/services/public-catalog.ts"),
   "utf8",
@@ -2351,6 +2359,26 @@ if (
 ) {
   violations.push(
     "production health/migration gates must track schema 20261002151500",
+  );
+}
+
+if (
+  !categoryRoute.includes("searchPublicCatalogProducts") ||
+  !categoryRoute.includes("liveCategoryQuery") ||
+  !categoryRoute.includes("canadianOnly: caOnly")
+) {
+  violations.push(
+    "live category pages must query category/price/vendor filters before the public catalog limit",
+  );
+}
+
+if (
+  !dealsRoute.includes("searchPublicCatalogProducts") ||
+  !dealsRoute.includes("saleOnly: true") ||
+  !dealsRoute.includes("maxPrice: 24.99")
+) {
+  violations.push(
+    "live deals pages must query markdown and budget scopes before the public catalog limit",
   );
 }
 
