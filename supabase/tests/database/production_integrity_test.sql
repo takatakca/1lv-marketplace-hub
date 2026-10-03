@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(223);
+select plan(224);
 
 select is(
   public.get_1lv_schema_version(),
@@ -140,7 +140,37 @@ select ok(
     )
   ) > 0
   and position(
-    '''^[0-9]{1,8}([.][0-9]{1,2})?select ok(
+    'outside the supported range'
+    in pg_get_functiondef(
+      'public.import_product_draft_row(uuid,integer,jsonb,jsonb)'::regprocedure
+    )
+  ) > 0,
+  'supplier import validates product numeric ranges before database casts'
+);
+
+select ok(
+  position(
+    'FROM public.vendors AS v'
+    in pg_get_functiondef(
+      'public.finalize_product_import_job(uuid)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'v.user_id = v_owner_id'
+    in pg_get_functiondef(
+      'public.finalize_product_import_job(uuid)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'public.owns_vendor(v_vendor_id, v_owner_id)'
+    in pg_get_functiondef(
+      'public.finalize_product_import_job(uuid)'::regprocedure
+    )
+  ) = 0,
+  'supplier import finalization validates durable vendor ownership without binding an admin caller to the vendor owner identity'
+);
+
+select ok(
   to_regprocedure('public.claim_takatak_outbox(integer,integer)') is not null,
   'atomic TAKATAK outbox claim RPC exists'
 );
