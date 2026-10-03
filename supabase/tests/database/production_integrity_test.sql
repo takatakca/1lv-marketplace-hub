@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(183);
+select plan(186);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002161500',
+  '20261002163000',
   'production schema marker is current'
 );
 
@@ -41,25 +41,98 @@ select ok(
 );
 
 select ok(
+  to_regprocedure('public.category_is_public(text)') is not null
+  and not has_function_privilege(
+    'anon',
+    'public.category_is_public(text)',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.category_is_public(text)',
+    'EXECUTE'
+  ),
+  'public category eligibility helper exists and is not directly exposed'
+);
+
+select ok(
   position(
-    'c.active = true'
+    'category_is_public'
     in pg_get_functiondef(
       'public.list_public_categories()'::regprocedure
     )
   ) > 0
   and position(
-    'c.active = true'
+    'category_is_public'
     in pg_get_functiondef(
       'public.get_public_category_by_slug(text)'::regprocedure
     )
   ) > 0
-  and position(
-    'c.slug = btrim(COALESCE(_slug, ''''))'
+  and not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'categories'
+      and policyname = 'Categories viewable by everyone'
+  ),
+  'public taxonomy uses the curated hierarchy and the legacy direct-read policy is gone'
+);
+
+select ok(
+  position(
+    'category_is_public'
     in pg_get_functiondef(
-      'public.get_public_category_by_slug(text)'::regprocedure
+      'public.list_public_catalog_products(integer)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'category_is_public'
+    in pg_get_functiondef(
+      'public.get_public_catalog_product_by_slug(text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'category_is_public'
+    in pg_get_functiondef(
+      'public.list_public_catalog_products_for_vendor(text,integer)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'category_is_public'
+    in pg_get_functiondef(
+      'public.list_public_catalog_products_for_category(text,integer)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'category_is_public'
+    in pg_get_functiondef(
+      'public.search_public_catalog_products(text,text,numeric,numeric,boolean,boolean,text,integer)'::regprocedure
     )
   ) > 0,
-  'public taxonomy exposes active categories only and slug lookups are scoped'
+  'every public product projection requires an active public category'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_trigger
+    where tgrelid = 'public.products'::regclass
+      and tgname = 'zz_products_public_category_authority'
+      and not tgisinternal
+  )
+  and position(
+    'category_is_public'
+    in pg_get_functiondef(
+      'public.enforce_product_public_category()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'OLD.status IS DISTINCT FROM NEW.status'
+    in pg_get_functiondef(
+      'public.enforce_product_public_category()'::regprocedure
+    )
+  ) > 0,
+  'product publication validates final category eligibility after vendor lifecycle rewrites'
 );
 
 select ok(
