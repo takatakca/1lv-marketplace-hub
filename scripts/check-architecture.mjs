@@ -2070,6 +2070,17 @@ if (
 }
 
 if (
+  !deployWorkflow.includes('"${GITHUB_REF}" != "refs/heads/main"') ||
+  !deployWorkflow.includes(
+    "manual production deployment is allowed only from refs/heads/main",
+  )
+) {
+  violations.push(
+    "manual production deployment must be impossible from non-main branches",
+  );
+}
+
+if (
   !deployWorkflow.includes("Verify production database and Auth prerequisite") ||
   !deployWorkflow.includes("SUPABASE_ACCESS_TOKEN") ||
   !deployWorkflow.includes("SUPABASE_DB_PASSWORD") ||
