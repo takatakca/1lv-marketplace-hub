@@ -273,6 +273,10 @@ const retainedSalesTruthMigration = readFileSync(
   join(root, "supabase/migrations/20261002170000_retained_sales_truth.sql"),
   "utf8",
 );
+const retainedSalesIndexesMigration = readFileSync(
+  join(root, "supabase/migrations/20261002171500_retained_sales_indexes.sql"),
+  "utf8",
+);
 const publicCategoryService = readFileSync(
   join(root, "src/services/public-categories.ts"),
   "utf8",
@@ -747,7 +751,12 @@ for (const [content, marker, label] of [
   [
     retainedSalesTruthMigration,
     "SELECT '20261002170000'",
-    "final production schema marker includes retained public sales truth",
+    "retained public sales truth retains its historical schema marker",
+  ],
+  [
+    retainedSalesIndexesMigration,
+    "SELECT '20261002171500'",
+    "final production schema marker includes retained-sales indexes",
   ],
   [
     publicCategoryCatalogScopeMigration,
@@ -2430,17 +2439,17 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002170000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002171500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002170000"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002171500"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002170000"') ||
-  !retainedSalesTruthMigration.includes("SELECT '20261002170000'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002171500"') ||
+  !retainedSalesIndexesMigration.includes("SELECT '20261002171500'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002170000",
+    "production health/migration gates must track schema 20261002171500",
   );
 }
 
@@ -2513,6 +2522,19 @@ if (
 ) {
   violations.push(
     "public category consumers must use the persistent active taxonomy projection",
+  );
+}
+
+if (
+  !retainedSalesIndexesMigration.includes(
+    "CREATE INDEX IF NOT EXISTS order_items_product_order_vendor_idx",
+  ) ||
+  !retainedSalesIndexesMigration.includes(
+    "CREATE INDEX IF NOT EXISTS refund_records_vendor_status_idx",
+  )
+) {
+  violations.push(
+    "retained sold-count aggregation paths must keep their supporting indexes",
   );
 }
 
