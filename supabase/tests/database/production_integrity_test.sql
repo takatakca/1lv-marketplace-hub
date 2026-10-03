@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(173);
+select plan(176);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002151500',
+  '20261002153000',
   'production schema marker is current'
 );
 
@@ -2535,6 +2535,71 @@ select ok(
     )
   ) = 0,
   'vendor projection excludes marketplace-wide financial and internal linkage fields'
+);
+
+
+select ok(
+  to_regprocedure('public.recalculate_new_checkout_tax(uuid)') is not null
+  and not has_function_privilege(
+    'anon',
+    'public.recalculate_new_checkout_tax(uuid)',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.recalculate_new_checkout_tax(uuid)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.recalculate_new_checkout_tax(uuid)',
+    'EXECUTE'
+  ),
+  'new checkout tax recalculation is service-role only'
+);
+
+select ok(
+  position(
+    'v_taxable_shipping'
+    in pg_get_functiondef(
+      'public.recalculate_new_checkout_tax(uuid)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'v_order.stripe_payment_intent_id IS NOT NULL'
+    in pg_get_functiondef(
+      'public.recalculate_new_checkout_tax(uuid)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'v_taxable_merchandise + v_taxable_shipping'
+    in pg_get_functiondef(
+      'public.recalculate_new_checkout_tax(uuid)'::regprocedure
+    )
+  ) > 0,
+  'checkout tax includes customer-paid delivery and fails closed after Stripe authorization'
+);
+
+select ok(
+  position(
+    'public.recalculate_new_checkout_tax(v_order_id)'
+    in pg_get_functiondef(
+      'public.create_marketplace_order(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'public.recalculate_new_checkout_tax(v_order_id)'
+    in pg_get_functiondef(
+      'public.create_marketplace_order_locked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'IF NOT v_reused THEN'
+    in pg_get_functiondef(
+      'public.create_marketplace_order_locked(uuid,text,text,jsonb,jsonb,jsonb,uuid,text)'::regprocedure
+    )
+  ) > 0,
+  'canonical checkout applies taxable delivery only to newly created orders'
 );
 
 select * from finish();
