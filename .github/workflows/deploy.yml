@@ -852,6 +852,7 @@ jobs:
       # -tt REQUIRED for MochaHost command sessions
       # ------------------------------------------------------------
       - name: Roll back failed release
+        id: rollback
         if: >
           always() &&
           steps.deployment.outputs.enabled == 'true' &&
@@ -960,7 +961,18 @@ jobs:
             steps.health.outcome == 'failure'
           )
         shell: bash
+        env:
+          ROLLBACK_OUTCOME: ${{ steps.rollback.outcome }}
         run: |
-          echo "Deployment failed its health check."
-          echo "The previous working release was restored."
+          set -euo pipefail
+          echo "Deployment failed before production certification."
+
+          if [ "$ROLLBACK_OUTCOME" = "success" ]; then
+            echo "Rollback command completed and the previous release was reactivated."
+            echo "Review production health before considering service recovery complete."
+          else
+            echo "ERROR: Automatic rollback did not complete successfully."
+            echo "Manual production recovery is required; do not assume the previous release was restored."
+          fi
+
           exit 1
