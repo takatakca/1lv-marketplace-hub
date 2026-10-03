@@ -2,12 +2,32 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(203);
+select plan(204);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002173000',
+  '20261002174500',
   'production schema marker is current'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'payout_settings'
+      and policyname = 'admins read payout settings'
+      and coalesce(qual, '') like '%has_role%'
+      and coalesce(roles::text, '') like '%authenticated%'
+  )
+  and not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'payout_settings'
+      and policyname = 'authenticated read payout settings'
+  ),
+  'payout scheduler settings are readable only through the admin policy'
 );
 
 select ok(
