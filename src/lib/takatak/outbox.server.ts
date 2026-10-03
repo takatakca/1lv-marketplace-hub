@@ -16,7 +16,7 @@ import {
 import type { AggregateType, TakatakEventType } from "./types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-type Db = { from: (t: string) => any };
+type Db = { from: (t: string) => any; rpc: (fn: string, args?: Record<string, unknown>) => any };
 
 export async function db(): Promise<Db> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -27,7 +27,11 @@ const BACKOFF_MINUTES = [1, 5, 15, 60, 180, 720];
 export const MAX_ATTEMPTS = 6;
 
 function nextAttemptAt(attempt: number): string {
-  const minutes = BACKOFF_MINUTES[Math.min(attempt, BACKOFF_MINUTES.length - 1)] ?? 720;
+  const index = Math.min(
+    Math.max(attempt - 1, 0),
+    BACKOFF_MINUTES.length - 1,
+  );
+  const minutes = BACKOFF_MINUTES[index] ?? 720;
   return new Date(Date.now() + minutes * 60_000).toISOString();
 }
 
@@ -326,6 +330,7 @@ export async function queueVendorOrderDelivered(vendorOrderId: string) {
 export type DrainResult = {
   ok: boolean;
   setupRequired?: boolean;
+  reason?: string;
   processed: number;
   delivered: number;
   failed: number;
@@ -337,28 +342,28 @@ export async function drainTakatakOutbox(limit = 25): Promise<DrainResult> {
     return { ok: false, setupRequired: true, processed: 0, delivered: 0, failed: 0 };
   }
   const client = await db();
+  const claimLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
+  const { data: rows, error: claimError } = await client.rpc(
+    "claim_takatak_outbox",
+    {
+      _limit: claimLimit,
+      _max_attempts: MAX_ATTEMPTS,
+    },
+  );
 
-  // Recover work abandoned by a crashed/terminated drain. Replaying is safe
-  // because the TAKATAK master API binds idempotency to the outbox row UUID.
-  const staleBefore = new Date(Date.now() - 15 * 60_000).toISOString();
-  await client
-    .from("takatak_outbox")
-    .update({
-      status: "pending",
-      last_error: "Recovered stale processing lease.",
-      next_attempt_at: new Date().toISOString(),
-    })
-    .eq("status", "processing")
-    .lt("updated_at", staleBefore);
-
-  const { data: rows } = await client
-    .from("takatak_outbox")
-    .select("*")
-    .eq("status", "pending")
-    .lt("attempt_count", MAX_ATTEMPTS)
-    .lte("next_attempt_at", new Date().toISOString())
-    .order("created_at", { ascending: true })
-    .limit(limit);
+  if (claimError) {
+    console.error(
+      "[1lv.ca] Could not claim TAKATAK outbox events:",
+      (claimError as { message?: string }).message ?? "Unknown database error",
+    );
+    return {
+      ok: false,
+      reason: "Could not claim TAKATAK outbox events.",
+      processed: 0,
+      delivered: 0,
+      failed: 0,
+    };
+  }
 
   let delivered = 0;
   let failed = 0;
@@ -372,7 +377,6 @@ export async function drainTakatakOutbox(limit = 25): Promise<DrainResult> {
   }>;
 
   for (const row of list) {
-    await client.from("takatak_outbox").update({ status: "processing" }).eq("id", row.id);
     const result = await sendTakatakEvent({
       eventId: row.id,
       eventType: row.event_type,
@@ -393,8 +397,7 @@ export async function drainTakatakOutbox(limit = 25): Promise<DrainResult> {
           result.remoteId,
         );
 
-        delivered++;
-        await client
+        const { error: deliveredError } = await client
           .from("takatak_outbox")
           .update({
             status: "delivered",
@@ -403,7 +406,16 @@ export async function drainTakatakOutbox(limit = 25): Promise<DrainResult> {
             remote_id: result.remoteId,
             delivered_at: new Date().toISOString(),
           })
-          .eq("id", row.id);
+          .eq("id", row.id)
+          .eq("status", "processing");
+
+        if (deliveredError) {
+          throw new Error(
+            `Could not persist TAKATAK delivery state: ${deliveredError.message}`,
+          );
+        }
+
+        delivered++;
       } catch (error) {
         failed++;
         const message =
@@ -418,11 +430,12 @@ export async function drainTakatakOutbox(limit = 25): Promise<DrainResult> {
             last_error: message,
             next_attempt_at: nextAttemptAt(attempt),
           })
-          .eq("id", row.id);
+          .eq("id", row.id)
+          .eq("status", "processing");
       }
     } else {
       failed++;
-      await client
+      const { error: failureStateError } = await client
         .from("takatak_outbox")
         .update({
           status: attempt >= MAX_ATTEMPTS ? "failed" : "pending",
@@ -430,7 +443,15 @@ export async function drainTakatakOutbox(limit = 25): Promise<DrainResult> {
           last_error: result.error,
           next_attempt_at: nextAttemptAt(attempt),
         })
-        .eq("id", row.id);
+        .eq("id", row.id)
+        .eq("status", "processing");
+
+      if (failureStateError) {
+        console.error(
+          "[1lv.ca] Could not persist TAKATAK retry state:",
+          failureStateError.message,
+        );
+      }
     }
   }
 
