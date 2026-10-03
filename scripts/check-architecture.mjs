@@ -249,6 +249,10 @@ const publicCatalogSearchMigration = readFileSync(
   join(root, "supabase/migrations/20261002151500_public_catalog_search_scope.sql"),
   "utf8",
 );
+const taxableCheckoutDeliveryMigration = readFileSync(
+  join(root, "supabase/migrations/20261002153000_taxable_checkout_delivery.sql"),
+  "utf8",
+);
 const searchRoute = readFileSync(
   join(root, "src/routes/search.tsx"),
   "utf8",
@@ -665,7 +669,12 @@ for (const [content, marker, label] of [
   [
     publicCatalogSearchMigration,
     "SELECT '20261002151500'",
-    "final production schema marker includes server-scoped public catalog search",
+    "server-scoped public catalog search retains its historical schema marker",
+  ],
+  [
+    taxableCheckoutDeliveryMigration,
+    "SELECT '20261002153000'",
+    "final production schema marker includes taxable customer-paid delivery",
   ],
   [
     publicCategoryCatalogScopeMigration,
@@ -2348,17 +2357,35 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002151500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002153000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002151500"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002153000"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002151500"') ||
-  !publicCatalogSearchMigration.includes("SELECT '20261002151500'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002153000"') ||
+  !taxableCheckoutDeliveryMigration.includes("SELECT '20261002153000'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002151500",
+    "production health/migration gates must track schema 20261002153000",
+  );
+}
+
+if (
+  !taxableCheckoutDeliveryMigration.includes(
+    "CREATE OR REPLACE FUNCTION public.recalculate_new_checkout_tax",
+  ) ||
+  !taxableCheckoutDeliveryMigration.includes("v_taxable_shipping") ||
+  !taxableCheckoutDeliveryMigration.includes(
+    "v_order.stripe_payment_intent_id IS NOT NULL",
+  ) ||
+  !taxableCheckoutDeliveryMigration.includes(
+    "public.recalculate_new_checkout_tax(v_order_id)",
+  ) ||
+  !taxableCheckoutDeliveryMigration.includes("IF NOT v_reused THEN")
+) {
+  violations.push(
+    "new checkout tax must include net delivery and must never rewrite an already-authorized or reused checkout",
   );
 }
 
