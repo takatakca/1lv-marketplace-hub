@@ -35,22 +35,22 @@ BEGIN
   -- A worker may have disappeared after making the remote request. Release
   -- the local lease, but never let the abandoned token remain authoritative.
   -- Rows that have exhausted the configured budget become terminal failures.
-  UPDATE public.takatak_outbox
+  UPDATE public.takatak_outbox AS stale
   SET
     status = CASE
-      WHEN attempt_count >= v_max_attempts THEN 'failed'
+      WHEN stale.attempt_count >= v_max_attempts THEN 'failed'
       ELSE 'pending'
     END,
     claim_token = NULL,
     last_error = CASE
-      WHEN attempt_count >= v_max_attempts
+      WHEN stale.attempt_count >= v_max_attempts
         THEN 'Stale processing lease exhausted retry budget.'
       ELSE 'Recovered stale processing lease.'
     END,
     next_attempt_at = now(),
     updated_at = now()
-  WHERE status = 'processing'
-    AND updated_at < now() - interval '15 minutes';
+  WHERE stale.status = 'processing'
+    AND stale.updated_at < now() - interval '15 minutes';
 
   RETURN QUERY
   WITH candidates AS (
