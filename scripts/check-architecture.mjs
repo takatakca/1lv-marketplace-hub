@@ -347,6 +347,13 @@ const parcelShippingSlaEventsMigration = readFileSync(
   ),
   "utf8",
 );
+const accountSavedListsMigration = readFileSync(
+  join(
+    root,
+    "supabase/migrations/20261003044500_account_saved_lists.sql",
+  ),
+  "utf8",
+);
 const payoutService = readFileSync(
   join(root, "src/services/payouts.ts"),
   "utf8",
@@ -911,7 +918,32 @@ for (const [content, marker, label] of [
   [
     parcelShippingSlaEventsMigration,
     "SELECT '20261003041000'",
-    "final production schema marker includes parcel shipping and SLA",
+    "parcel shipping and SLA retain their historical schema marker",
+  ],
+  [
+    accountSavedListsMigration,
+    "SELECT '20261003044500'",
+    "final production schema marker includes persistent account saved lists",
+  ],
+  [
+    accountSavedListsMigration,
+    "CREATE TABLE public.saved_lists",
+    "account-backed saved-list storage exists",
+  ],
+  [
+    accountSavedListsMigration,
+    "CREATE OR REPLACE FUNCTION public.merge_guest_wishlist",
+    "guest wishlist merge is database-authoritative",
+  ],
+  [
+    accountSavedListsMigration,
+    "CREATE OR REPLACE FUNCTION public.toggle_my_saved_product",
+    "saved-product mutation is account-authorized",
+  ],
+  [
+    accountSavedListsMigration,
+    "CREATE OR REPLACE FUNCTION public.list_my_saved_products",
+    "wishlist products use a scoped live-catalog projection",
   ],
   [
     parcelShippingSlaEventsMigration,
@@ -2769,19 +2801,19 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261003041000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261003044500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261003041000"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261003044500"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261003041000"') ||
-  !parcelShippingSlaEventsMigration.includes(
-    "SELECT '20261003041000'",
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261003044500"') ||
+  !accountSavedListsMigration.includes(
+    "SELECT '20261003044500'",
   )
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261003041000",
+    "production health/migration gates must track schema 20261003044500",
   );
 }
 
