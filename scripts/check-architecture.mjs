@@ -1720,7 +1720,7 @@ if (
   !inventoryMaintenanceRoute.includes("/payment_intents/") ||
   !inventoryMaintenanceRoute.includes("/cancel") ||
   !inventoryMaintenanceRoute.includes(
-    '"release_order_inventory" as never',
+    'rpc("release_order_inventory"',
   ) ||
   !inventoryMaintenanceRoute.includes(
     "_expected_payment_intent_id: paymentIntentId ?? null",
@@ -1734,6 +1734,18 @@ if (
 ) {
   violations.push(
     "expired checkout inventory cleanup must bind release to the exact Stripe PaymentIntent state it verified",
+  );
+}
+
+if (
+  !supabaseTypes.includes("release_order_inventory: {") ||
+  !supabaseTypes.includes("_expected_payment_intent_id: string | null") ||
+  !supabaseTypes.includes("_order_id: string") ||
+  inventoryMaintenanceRoute.includes('"release_order_inventory" as never') ||
+  stripeFunctions.includes('"release_order_inventory" as never')
+) {
+  violations.push(
+    "PaymentIntent-bound inventory release must remain represented in generated Supabase types and called without unsafe RPC casts",
   );
 }
 
