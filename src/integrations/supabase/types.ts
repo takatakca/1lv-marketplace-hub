@@ -1347,6 +1347,7 @@ export type Database = {
           aggregate_id: string
           aggregate_type: string
           attempt_count: number
+          claim_token: string | null
           created_at: string
           delivered_at: string | null
           event_key: string | null
@@ -1364,6 +1365,7 @@ export type Database = {
           aggregate_id: string
           aggregate_type: string
           attempt_count?: number
+          claim_token?: string | null
           created_at?: string
           delivered_at?: string | null
           event_key?: string | null
@@ -1381,6 +1383,7 @@ export type Database = {
           aggregate_id?: string
           aggregate_type?: string
           attempt_count?: number
+          claim_token?: string | null
           created_at?: string
           delivered_at?: string | null
           event_key?: string | null
@@ -1773,6 +1776,18 @@ export type Database = {
       }
     }
     Functions: {
+      claim_takatak_outbox: {
+        Args: { _limit?: number; _max_attempts?: number }
+        Returns: {
+          aggregate_id: string
+          aggregate_type: string
+          attempt_count: number
+          claim_token: string
+          event_type: string
+          id: string
+          payload: Json
+        }[]
+      }
       claim_stripe_event: {
         Args: { _id: string; _payload: Json; _type: string }
         Returns: boolean
