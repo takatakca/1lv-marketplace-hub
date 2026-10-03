@@ -188,7 +188,6 @@ SET search_path = ''
 AS $$
 DECLARE
   v_user_id uuid := auth.uid();
-  v_vendor_order public.vendor_orders%ROWTYPE;
   v_owner uuid;
   v_payment_status text;
 BEGIN
