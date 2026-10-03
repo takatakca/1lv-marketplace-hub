@@ -42,6 +42,7 @@ export type OutboxRow = {
   payload: Record<string, unknown>;
   status: OutboxStatus;
   attempt_count: number;
+  claim_token: string | null;
   last_error: string | null;
   remote_id: string | null;
   next_attempt_at: string;
