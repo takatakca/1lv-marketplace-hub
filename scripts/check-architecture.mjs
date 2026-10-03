@@ -269,6 +269,10 @@ const homeRoute = readFileSync(
   join(root, "src/routes/index.tsx"),
   "utf8",
 );
+const categoriesRoute = readFileSync(
+  join(root, "src/routes/categories.tsx"),
+  "utf8",
+);
 const searchRoute = readFileSync(
   join(root, "src/routes/search.tsx"),
   "utf8",
@@ -2422,6 +2426,25 @@ if (
 ) {
   violations.push(
     "trending and new-arrival live rankings must be computed in PostgreSQL before limits",
+  );
+}
+
+if (
+  categoriesRoute.includes("productsByCategory") ||
+  categoriesRoute.includes("sample.map((p)")
+) {
+  violations.push(
+    "live category navigation must not render demo product thumbnails",
+  );
+}
+
+if (
+  !homeRoute.includes("listPublicCatalogProductsForVendor") ||
+  !homeRoute.includes("featuredVendorProductQueries") ||
+  homeRoute.includes("{items.length} products")
+) {
+  violations.push(
+    "featured homepage stores must use vendor-scoped product projections and must not present capped snapshot counts as store totals",
   );
 }
 
