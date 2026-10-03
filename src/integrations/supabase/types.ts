@@ -1863,7 +1863,10 @@ export type Database = {
         Returns: number
       }
       release_order_inventory: {
-        Args: { _order_id: string }
+        Args: {
+          _expected_payment_intent_id: string | null
+          _order_id: string
+        }
         Returns: boolean
       }
       reserve_order_promotion: {
