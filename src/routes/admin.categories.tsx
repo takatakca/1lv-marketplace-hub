@@ -16,7 +16,7 @@ type CatRow = {
   position: number;
 };
 
-const empty = { en: "", fr: "", slug: "", parent: "", position: 0, active: true, seoTitle: "", seoDesc: "", image: "" };
+const empty = { en: "", fr: "", slug: "", parent: "", position: 0, active: true };
 
 function Page() {
   const { user } = useAuth();
@@ -60,7 +60,6 @@ function Page() {
   const edit = (c: CatRow) => setForm({
     en: c.name_en, fr: c.name_fr ?? "", slug: c.slug,
     parent: c.parent_slug ?? "", position: c.position, active: c.active,
-    seoTitle: "", seoDesc: "", image: "",
   });
 
   const remove = async (slug: string) => {
@@ -75,7 +74,7 @@ function Page() {
       <div className="mb-6">
         {useDemo ? <DemoBanner label="Preview mode" /> : null}
         <h1 className="text-2xl font-bold text-navy md:text-3xl">Categories</h1>
-        <p className="text-sm text-muted-foreground">Bilingual taxonomy with SEO and ordering.</p>
+        <p className="text-sm text-muted-foreground">Bilingual marketplace taxonomy, hierarchy, visibility and ordering.</p>
       </div>
       {demo && <PreviewModeNotice />}
       <div className="grid gap-6 lg:grid-cols-3">
@@ -127,12 +126,6 @@ function Page() {
           <label className="flex items-center gap-2 text-xs text-navy">
             <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active
           </label>
-          <div className="rounded-md border border-dashed border-border bg-muted/30 p-3 text-[11px] text-muted-foreground">
-            SEO &amp; image placeholders
-          </div>
-          <input placeholder="SEO title" value={form.seoTitle} onChange={(e) => setForm({ ...form, seoTitle: e.target.value })} className={inputCls} />
-          <input placeholder="SEO meta description" value={form.seoDesc} onChange={(e) => setForm({ ...form, seoDesc: e.target.value })} className={inputCls} />
-          <input placeholder="Category image URL" value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value })} className={inputCls} />
           <button className="w-full rounded-md bg-electric px-3 py-2 text-sm font-semibold text-electric-foreground">Save category</button>
         </form>
       </div>
