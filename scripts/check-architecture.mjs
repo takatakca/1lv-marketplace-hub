@@ -2429,6 +2429,19 @@ if (
 }
 
 if (
+  !deployWorkflow.includes(
+    'if [ "$SITE_URL" != "https://1lv.ca" ]; then',
+  ) ||
+  !deployWorkflow.includes(
+    "PRODUCTION_URL must be exactly https://1lv.ca.",
+  )
+) {
+  violations.push(
+    "production deployment health and rollback checks must target only the canonical https://1lv.ca origin",
+  );
+}
+
+if (
   !deployWorkflow.includes('test -f "$PREVIOUS_RELEASE/package.json"') ||
   !deployWorkflow.includes('test -d "$PREVIOUS_RELEASE/node_modules"') ||
   !deployWorkflow.includes(
