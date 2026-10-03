@@ -39,8 +39,10 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
-  IF _raw IS NULL OR jsonb_typeof(_raw) <> 'object'
-     OR _product IS NULL OR jsonb_typeof(_product) <> 'object' THEN
+  IF _raw IS NULL
+     OR jsonb_typeof(_raw) <> 'object'
+     OR _product IS NULL
+     OR jsonb_typeof(_product) <> 'object' THEN
     RAISE EXCEPTION 'Import row payload must be JSON objects'
       USING ERRCODE = '22023';
   END IF;
@@ -87,232 +89,26 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
-  -- products.price is numeric(10,2): validate the exact representable shape
-  -- before casting so direct RPC callers cannot trigger overflow/rounding.
-  IF COALESCE(_product->>'price', '') !~ '^[0-9]{1,8}([.][0-9]{1,2})?
-  v_slug_base := trim(
-    both '-'
-    from regexp_replace(lower(v_title), '[^a-z0-9]+', '-', 'g')
-  );
-  IF v_slug_base = '' THEN
-    v_slug_base := 'product';
-  END IF;
-  v_slug := v_slug_base || '-' ||
-    substr(replace(gen_random_uuid()::text, '-', ''), 1, 12);
-
-  INSERT INTO public.products (
-    vendor_id,
-    slug,
-    title,
-    description,
-    short_description,
-    category_slug,
-    price,
-    compare_at_price,
-    cost,
-    sku,
-    inventory_quantity,
-    track_inventory,
-    images,
-    supplier_source,
-    supplier_product_id,
-    supplier_url,
-    status
-  )
-  VALUES (
-    v_vendor_id,
-    v_slug,
-    v_title,
-    NULLIF(_product->>'description', ''),
-    NULLIF(_product->>'short_description', ''),
-    NULLIF(_product->>'category_slug', ''),
-    v_price,
-    NULL,
-    NULL,
-    NULLIF(_product->>'sku', ''),
-    v_inventory,
-    true,
-    '[]'::jsonb,
-    NULLIF(_product->>'supplier_source', ''),
-    NULLIF(_product->>'supplier_product_id', ''),
-    NULLIF(_product->>'supplier_url', ''),
-    'draft'::public.product_status
-  )
-  RETURNING id INTO v_product_id;
-
-  INSERT INTO public.product_import_job_rows(
-    job_id,
-    row_index,
-    row_status,
-    raw,
-    errors,
-    product_id
-  )
-  VALUES (
-    _job_id,
-    _row_index,
-    'imported',
-    _raw,
-    '[]'::jsonb,
-    v_product_id
-  );
-
-  RETURN jsonb_build_object(
-    'ok', true,
-    'product_id', v_product_id,
-    'row_index', _row_index
-  );
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.import_product_draft_row(
-  uuid,
-  integer,
-  jsonb,
-  jsonb
-) FROM PUBLIC, anon;
-
-GRANT EXECUTE ON FUNCTION public.import_product_draft_row(
-  uuid,
-  integer,
-  jsonb,
-  jsonb
-) TO authenticated;
-
-CREATE OR REPLACE FUNCTION public.get_1lv_schema_version()
-RETURNS text
-LANGUAGE sql
-STABLE
-SECURITY INVOKER
-SET search_path = ''
-AS $$
-  SELECT '20261002183000';
-$$;
-
-REVOKE ALL ON FUNCTION public.get_1lv_schema_version()
-FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.get_1lv_schema_version()
-TO service_role;
- THEN
+  -- products.price is numeric(10,2): reject values that would round or
+  -- overflow before casting.
+  IF COALESCE(_product->>'price', '') !~ '^[0-9]{1,8}([.][0-9]{1,2})?$' THEN
     RAISE EXCEPTION 'Imported product price is invalid'
       USING ERRCODE = '22023';
   END IF;
+
   v_price := (_product->>'price')::numeric;
-  IF v_price < 0 OR v_price > 99999999.99 THEN
+  IF v_price > 99999999.99 THEN
     RAISE EXCEPTION 'Imported product price is outside the supported range'
       USING ERRCODE = '22023';
   END IF;
 
-  -- products.inventory_quantity is int4. Parse through numeric only after a
-  -- bounded digit check, then range-check before the integer cast.
-  IF COALESCE(_product->>'inventory_quantity', '') !~ '^[0-9]{1,10}
-  v_slug_base := trim(
-    both '-'
-    from regexp_replace(lower(v_title), '[^a-z0-9]+', '-', 'g')
-  );
-  IF v_slug_base = '' THEN
-    v_slug_base := 'product';
-  END IF;
-  v_slug := v_slug_base || '-' ||
-    substr(replace(gen_random_uuid()::text, '-', ''), 1, 12);
-
-  INSERT INTO public.products (
-    vendor_id,
-    slug,
-    title,
-    description,
-    short_description,
-    category_slug,
-    price,
-    compare_at_price,
-    cost,
-    sku,
-    inventory_quantity,
-    track_inventory,
-    images,
-    supplier_source,
-    supplier_product_id,
-    supplier_url,
-    status
-  )
-  VALUES (
-    v_vendor_id,
-    v_slug,
-    v_title,
-    NULLIF(_product->>'description', ''),
-    NULLIF(_product->>'short_description', ''),
-    NULLIF(_product->>'category_slug', ''),
-    v_price,
-    NULL,
-    NULL,
-    NULLIF(_product->>'sku', ''),
-    v_inventory,
-    true,
-    '[]'::jsonb,
-    NULLIF(_product->>'supplier_source', ''),
-    NULLIF(_product->>'supplier_product_id', ''),
-    NULLIF(_product->>'supplier_url', ''),
-    'draft'::public.product_status
-  )
-  RETURNING id INTO v_product_id;
-
-  INSERT INTO public.product_import_job_rows(
-    job_id,
-    row_index,
-    row_status,
-    raw,
-    errors,
-    product_id
-  )
-  VALUES (
-    _job_id,
-    _row_index,
-    'imported',
-    _raw,
-    '[]'::jsonb,
-    v_product_id
-  );
-
-  RETURN jsonb_build_object(
-    'ok', true,
-    'product_id', v_product_id,
-    'row_index', _row_index
-  );
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.import_product_draft_row(
-  uuid,
-  integer,
-  jsonb,
-  jsonb
-) FROM PUBLIC, anon;
-
-GRANT EXECUTE ON FUNCTION public.import_product_draft_row(
-  uuid,
-  integer,
-  jsonb,
-  jsonb
-) TO authenticated;
-
-CREATE OR REPLACE FUNCTION public.get_1lv_schema_version()
-RETURNS text
-LANGUAGE sql
-STABLE
-SECURITY INVOKER
-SET search_path = ''
-AS $$
-  SELECT '20261002183000';
-$$;
-
-REVOKE ALL ON FUNCTION public.get_1lv_schema_version()
-FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.get_1lv_schema_version()
-TO service_role;
- THEN
+  -- products.inventory_quantity is int4: validate and range-check before
+  -- converting to integer.
+  IF COALESCE(_product->>'inventory_quantity', '') !~ '^[0-9]{1,10}$' THEN
     RAISE EXCEPTION 'Imported product inventory is invalid'
       USING ERRCODE = '22023';
   END IF;
+
   v_inventory_numeric := (_product->>'inventory_quantity')::numeric;
   IF v_inventory_numeric > 2147483647 THEN
     RAISE EXCEPTION 'Imported product inventory is outside the supported range'
@@ -327,6 +123,7 @@ TO service_role;
   IF v_slug_base = '' THEN
     v_slug_base := 'product';
   END IF;
+
   v_slug := v_slug_base || '-' ||
     substr(replace(gen_random_uuid()::text, '-', ''), 1, 12);
 
@@ -370,7 +167,7 @@ TO service_role;
   )
   RETURNING id INTO v_product_id;
 
-  INSERT INTO public.product_import_job_rows(
+  INSERT INTO public.product_import_job_rows (
     job_id,
     row_index,
     row_status,
