@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { getMyVendor } from "@/services/vendors";
 import { DataTable } from "@/components/DataTable";
 import { isDemoMode } from "@/lib/demo-mode";
+import { parseCsvRecords } from "@/lib/csv-parser";
 import { DemoBanner, PreviewModeNotice } from "@/components/DemoBanner";
 import {
   createImportJob,
@@ -49,20 +50,40 @@ function validateRow(r: Row): string[] {
 }
 
 function parseCsv(text: string): ParseResult {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim());
-  if (lines.length === 0) return { rows: [], headers: [], missing: REQUIRED_COLS, rowIssues: [] };
-  const headers = lines[0].split(",").map((h) => h.trim());
+  const records = parseCsvRecords(text);
+  if (records.length === 0) {
+    return { rows: [], headers: [], missing: REQUIRED_COLS, rowIssues: [] };
+  }
+
+  const headers = (records[0] ?? []).map((h) => h.trim());
+  const duplicateHeaders = headers.filter(
+    (header, index) => header && headers.indexOf(header) !== index,
+  );
+  if (duplicateHeaders.length > 0) {
+    throw new Error(
+      `Duplicate CSV column(s): ${Array.from(new Set(duplicateHeaders)).join(", ")}`,
+    );
+  }
+
   const missing = REQUIRED_COLS.filter((c) => !headers.includes(c));
   const rowIssues: RowIssue[] = [];
   const rows: Row[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cells = lines[i].split(",").map((c) => c.trim());
+
+  for (let i = 1; i < records.length; i++) {
+    const cells = records[i] ?? [];
     const row: Row = {};
-    headers.forEach((h, j) => (row[h] = cells[j] ?? ""));
+    headers.forEach((h, j) => {
+      if (h) row[h] = (cells[j] ?? "").trim();
+    });
+
     const errs = validateRow(row);
+    if (cells.length > headers.length) {
+      errs.push("too many columns");
+    }
     if (errs.length) rowIssues.push({ index: i, errors: errs });
     rows.push(row);
   }
+
   return { rows, headers, missing, rowIssues };
 }
 
@@ -82,9 +103,20 @@ function Page() {
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    setFilename(f.name);
-    const text = await f.text();
-    setParsed(parseCsv(text));
+
+    try {
+      const text = await f.text();
+      const next = parseCsv(text);
+      setFilename(f.name);
+      setParsed(next);
+    } catch (error) {
+      setFilename(null);
+      setParsed(null);
+      e.target.value = "";
+      toast.error(
+        error instanceof Error ? error.message : "Could not parse CSV file",
+      );
+    }
   };
 
   const runImport = async () => {
