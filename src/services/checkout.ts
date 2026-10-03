@@ -93,6 +93,7 @@ export async function createOrder(input: CheckoutInput): Promise<CheckoutResult>
       idempotencyKey: checkoutKey,
       items: input.items.map((item) => ({
         productId: item.productId,
+        variantId: item.variantId ?? null,
         quantity: item.qty,
       })),
       email: input.email,
