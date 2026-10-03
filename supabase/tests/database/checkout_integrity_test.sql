@@ -43,6 +43,23 @@ values (
 
 set local session_replication_role = origin;
 
+insert into public.categories (
+  slug,
+  name_en,
+  name_fr,
+  parent_slug,
+  active,
+  position
+)
+values (
+  'tests',
+  'Tests',
+  'Tests',
+  null,
+  true,
+  0
+);
+
 insert into public.products (
   id,
   vendor_id,
