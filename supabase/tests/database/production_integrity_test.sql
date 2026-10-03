@@ -2,12 +2,62 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(204);
+select plan(208);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002174500',
+  '20261002180000',
   'production schema marker is current'
+);
+
+select ok(
+  to_regprocedure('public.claim_takatak_outbox(integer,integer)') is not null,
+  'atomic TAKATAK outbox claim RPC exists'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.claim_takatak_outbox(integer,integer)',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.claim_takatak_outbox(integer,integer)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.claim_takatak_outbox(integer,integer)',
+    'EXECUTE'
+  ),
+  'TAKATAK outbox claim RPC is service-role only'
+);
+
+select ok(
+  position(
+    'FOR UPDATE SKIP LOCKED'
+    in pg_get_functiondef(
+      'public.claim_takatak_outbox(integer,integer)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'updated_at < now() - interval ''15 minutes'''
+    in pg_get_functiondef(
+      'public.claim_takatak_outbox(integer,integer)'::regprocedure
+    )
+  ) > 0,
+  'TAKATAK outbox claim is concurrent-safe and recovers stale leases'
+);
+
+select ok(
+  position(
+    'status = ''processing'''
+    in pg_get_functiondef(
+      'public.claim_takatak_outbox(integer,integer)'::regprocedure
+    )
+  ) > 0,
+  'TAKATAK outbox rows are marked processing inside the atomic claim'
 );
 
 select ok(
