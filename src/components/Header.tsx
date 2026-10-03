@@ -8,7 +8,8 @@ import { AISearchBar } from "./AISearchBar";
 import { useCart } from "@/hooks/use-cart";
 import { useAuth } from "@/hooks/use-auth";
 import { canAccessAdmin, canAccessVendor } from "@/lib/roles";
-import { categories } from "@/lib/data";
+import { categories as demoCategoryMeta } from "@/lib/data";
+import { usePublicCategories } from "@/hooks/use-public-categories";
 import { FREE_SHIPPING_THRESHOLD_CAD } from "@/lib/canada-commerce";
 import { usePublicMarketplaceSettings } from "@/hooks/use-marketplace-settings";
 
@@ -20,6 +21,12 @@ export function Header() {
   const showVendor = canAccessVendor(roles);
   const showAdmin = canAccessAdmin(roles);
   const { settings: marketplaceSettings } = usePublicMarketplaceSettings();
+  const { categories: publicCategories } = usePublicCategories();
+  const rootCategories = publicCategories.filter(
+    (category) => category.parent_slug === null,
+  );
+  const navigationCategories =
+    rootCategories.length > 0 ? rootCategories : publicCategories;
   const freeShippingThreshold =
     marketplaceSettings?.free_shipping_threshold ?? FREE_SHIPPING_THRESHOLD_CAD;
 
@@ -135,15 +142,15 @@ export function Header() {
             >
               <Menu size={16} /> All categories <ChevronDown size={14} />
             </button>
-            {categories.slice(0, 6).map((c) => (
+            {navigationCategories.slice(0, 6).map((category) => (
               <Link
-                key={c.slug}
+                key={category.slug}
                 to="/category/$slug"
-                params={{ slug: c.slug }}
+                params={{ slug: category.slug }}
                 onMouseEnter={() => setMegaOpen(false)}
                 className="px-3 py-2.5 text-sm text-navy/80 hover:text-electric"
               >
-                {c.name}
+                {category.name_en}
               </Link>
             ))}
             <Link to="/deals" onMouseEnter={() => setMegaOpen(false)} className="px-3 py-2.5 text-sm font-semibold text-deal hover:underline">⚡ Deals</Link>
@@ -178,17 +185,22 @@ export function Header() {
                 </>
               )}
               <p className="px-3 pt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Categories</p>
-              {categories.map((c) => (
-                <Link
-                  key={c.slug}
-                  to="/category/$slug"
-                  params={{ slug: c.slug }}
-                  onClick={() => setMobileOpen(false)}
-                  className="block rounded-md px-3 py-2 text-sm text-navy hover:bg-muted"
-                >
-                  {c.emoji} {c.name}
-                </Link>
-              ))}
+              {navigationCategories.map((category) => {
+                const meta = demoCategoryMeta.find(
+                  (item) => item.slug === category.slug,
+                );
+                return (
+                  <Link
+                    key={category.slug}
+                    to="/category/$slug"
+                    params={{ slug: category.slug }}
+                    onClick={() => setMobileOpen(false)}
+                    className="block rounded-md px-3 py-2 text-sm text-navy hover:bg-muted"
+                  >
+                    {meta?.emoji ?? "📦"} {category.name_en}
+                  </Link>
+                );
+              })}
               <div className="my-2 border-t border-border" />
               <p className="px-3 pt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Shop</p>
               <Link to="/deals" className="block rounded-md px-3 py-2 text-sm font-semibold text-deal hover:bg-muted">⚡ Current deals</Link>
