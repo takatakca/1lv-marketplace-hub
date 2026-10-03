@@ -76,6 +76,13 @@ export type Suggestion =
   | { kind: "category"; id: string; label: string; slug: string; emoji: string }
   | { kind: "store"; id: string; label: string; slug: string; country: string };
 
+export type CategorySuggestionSource = {
+  slug: string;
+  name: string;
+  aliases?: readonly string[];
+  emoji?: string;
+};
+
 export const TRENDING_SEARCHES = [
   "wireless earbuds",
   "camping tent",
@@ -132,14 +139,35 @@ export function getSuggestions(
   limit = 8,
   productSource: readonly Product[] = demoProducts,
   vendorSource: readonly Vendor[] = demoVendors,
+  categorySource: readonly CategorySuggestionSource[] = categories.map(
+    (category) => ({
+      slug: category.slug,
+      name: category.name,
+      aliases: category.subcategories,
+      emoji: category.emoji,
+    }),
+  ),
 ): Suggestion[] {
   const t = (term ?? "").trim().toLowerCase();
   if (!t) return [];
 
-  const cats: Suggestion[] = categories
-    .filter((c) => c.name.toLowerCase().includes(t) || c.slug.includes(t) || c.subcategories.some((s) => s.toLowerCase().includes(t)))
+  const cats: Suggestion[] = categorySource
+    .filter(
+      (category) =>
+        category.name.toLowerCase().includes(t) ||
+        category.slug.toLowerCase().includes(t) ||
+        (category.aliases ?? []).some((alias) =>
+          alias.toLowerCase().includes(t),
+        ),
+    )
     .slice(0, 3)
-    .map((c) => ({ kind: "category", id: `c-${c.slug}`, label: c.name, slug: c.slug, emoji: c.emoji }));
+    .map((category) => ({
+      kind: "category",
+      id: `c-${category.slug}`,
+      label: category.name,
+      slug: category.slug,
+      emoji: category.emoji ?? "📦",
+    }));
 
   const stores: Suggestion[] = vendorSource
     .filter((v) => v.name.toLowerCase().includes(t) || v.slug.includes(t))
