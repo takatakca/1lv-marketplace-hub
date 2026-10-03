@@ -217,6 +217,10 @@ const vendorAssetReferenceAuthorityMigration = readFileSync(
   join(root, "supabase/migrations/20261002131500_vendor_asset_reference_authority.sql"),
   "utf8",
 );
+const publicCatalogSubscriptionGateMigration = readFileSync(
+  join(root, "supabase/migrations/20261002133000_public_catalog_subscription_gate.sql"),
+  "utf8",
+);
 const vendorAssetService = readFileSync(
   join(root, "src/services/vendor-assets.ts"),
   "utf8",
@@ -569,7 +573,17 @@ for (const [content, marker, label] of [
   [
     vendorAssetReferenceAuthorityMigration,
     "SELECT '20261002131500'",
-    "final production schema marker includes vendor branding reference authority",
+    "vendor branding reference authority retains its historical schema marker",
+  ],
+  [
+    publicCatalogSubscriptionGateMigration,
+    "SELECT '20261002133000'",
+    "final production schema marker includes public catalog subscription eligibility",
+  ],
+  [
+    publicCatalogSubscriptionGateMigration,
+    "subscription_status IN ('active', 'trialing')",
+    "public catalog visibility requires an eligible vendor subscription",
   ],
   [
     vendorAssetReferenceAuthorityMigration,
@@ -2143,17 +2157,39 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002131500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002133000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002131500"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002133000"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002131500"') ||
-  !vendorAssetReferenceAuthorityMigration.includes("SELECT '20261002131500'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002133000"') ||
+  !publicCatalogSubscriptionGateMigration.includes("SELECT '20261002133000'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002131500",
+    "production health/migration gates must track schema 20261002133000",
+  );
+}
+
+if (
+  !publicCatalogSubscriptionGateMigration.includes(
+    "CREATE OR REPLACE FUNCTION public.list_public_catalog_products",
+  ) ||
+  !publicCatalogSubscriptionGateMigration.includes(
+    "CREATE OR REPLACE FUNCTION public.get_public_catalog_product_by_slug",
+  ) ||
+  !publicCatalogSubscriptionGateMigration.includes(
+    "CREATE OR REPLACE FUNCTION public.list_public_vendors",
+  ) ||
+  !publicCatalogSubscriptionGateMigration.includes(
+    "CREATE OR REPLACE FUNCTION public.get_public_vendor_by_slug",
+  ) ||
+  !publicCatalogSubscriptionGateMigration.includes(
+    "subscription_status IN ('active', 'trialing')",
+  )
+) {
+  violations.push(
+    "public storefront catalog and vendor visibility must match checkout subscription eligibility",
   );
 }
 
