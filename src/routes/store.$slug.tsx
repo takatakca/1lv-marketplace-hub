@@ -22,6 +22,7 @@ export const Route = createFileRoute("/store/$slug")({
       if (vendor) {
         const products = await listPublicCatalogProductsForVendor(
           vendor.slug,
+          500,
         );
         return { vendor, products };
       }
