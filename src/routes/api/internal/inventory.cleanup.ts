@@ -233,7 +233,10 @@ export const Route = createFileRoute("/api/internal/inventory/cleanup")({
           const { data: didRelease, error: releaseError } =
             await supabaseAdmin.rpc(
               "release_order_inventory" as never,
-              { _order_id: order.id } as never,
+              {
+                _order_id: order.id,
+                _expected_payment_intent_id: paymentIntentId ?? null,
+              } as never,
             );
 
           if (releaseError) {
@@ -246,7 +249,15 @@ export const Route = createFileRoute("/api/internal/inventory/cleanup")({
             continue;
           }
 
-          if (didRelease === true) released += 1;
+          if (didRelease === true) {
+            released += 1;
+          } else {
+            blocked += 1;
+            console.error(
+              "[1lv.ca] Inventory release compare-and-release rejected stale state:",
+              order.id,
+            );
+          }
         }
 
         const ok = blocked === 0;
