@@ -138,9 +138,12 @@ select ok(
       'public.enforce_first_order_promotion_identity()'::regprocedure
     )
   ) > 0
-  and pg_get_functiondef(
-    'public.enforce_first_order_promotion_identity()'::regprocedure
-  ) ~ 'OR[[:space:]]+lower\\(btrim\\(COALESCE\\(o\\.customer_email',
+  and position(
+    'OR lower(btrim(COALESCE(o.customer_email'
+    in pg_get_functiondef(
+      'public.enforce_first_order_promotion_identity()'::regprocedure
+    )
+  ) > 0,
   'first-order eligibility checks prior paid history by customer id or normalized email, including guest-to-account transitions'
 );
 
