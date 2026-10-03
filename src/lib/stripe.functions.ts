@@ -247,14 +247,11 @@ export const createPaymentIntent = createServerFn({ method: "POST" })
 
       if (!order.inventory_released_at && reservationExpired) {
         const { data: released, error: releaseError } =
-          await supabaseAdmin.rpc(
-            "release_order_inventory" as never,
-            {
-              _order_id: order.id,
-              _expected_payment_intent_id:
-                order.stripe_payment_intent_id ?? null,
-            } as never,
-          );
+          await supabaseAdmin.rpc("release_order_inventory", {
+            _order_id: order.id,
+            _expected_payment_intent_id:
+              order.stripe_payment_intent_id ?? null,
+          });
         if (releaseError || released !== true) {
           throw new Error(
             "Expired checkout state changed before inventory could be released safely.",
