@@ -987,35 +987,7 @@ jobs:
             "$USER@$HOST" \
             "test -s '$APP_ROOT/CURRENT' && tr -d '\\r\\n' < '$APP_ROOT/CURRENT'")"
 
-          if ! printf '%s' "$RECOVERED_SHA" | grep -Eq '^[0-9a-f]{40}      # ------------------------------------------------------------
-      - name: Fail workflow after rollback
-        if: >
-          always() &&
-          steps.deployment.outputs.enabled == 'true' &&
-          (
-            steps.activate.outcome == 'failure' ||
-            steps.health.outcome == 'failure'
-          )
-        shell: bash
-        env:
-          ROLLBACK_OUTCOME: ${{ steps.rollback.outcome }}
-          ROLLBACK_HEALTH_OUTCOME: ${{ steps.rollback_health.outcome }}
-        run: |
-          set -euo pipefail
-          echo "Deployment failed before production certification."
-
-          if [ "$ROLLBACK_OUTCOME" = "success" ] && [ "$ROLLBACK_HEALTH_OUTCOME" = "success" ]; then
-            echo "Automatic rollback completed and the restored release passed production health verification."
-          elif [ "$ROLLBACK_OUTCOME" = "success" ]; then
-            echo "ERROR: Rollback files were restored, but the recovered release failed production health verification."
-            echo "Manual production recovery is required."
-          else
-            echo "ERROR: Automatic rollback did not complete successfully."
-            echo "Manual production recovery is required; do not assume the previous release was restored."
-          fi
-
-          exit 1
-; then
+          if ! printf '%s' "$RECOVERED_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
             echo "ERROR: Restored CURRENT does not contain a full Git SHA."
             exit 1
           fi
@@ -1068,13 +1040,16 @@ jobs:
         shell: bash
         env:
           ROLLBACK_OUTCOME: ${{ steps.rollback.outcome }}
+          ROLLBACK_HEALTH_OUTCOME: ${{ steps.rollback_health.outcome }}
         run: |
           set -euo pipefail
           echo "Deployment failed before production certification."
 
-          if [ "$ROLLBACK_OUTCOME" = "success" ]; then
-            echo "Rollback command completed and the previous release was reactivated."
-            echo "Review production health before considering service recovery complete."
+          if [ "$ROLLBACK_OUTCOME" = "success" ] && [ "$ROLLBACK_HEALTH_OUTCOME" = "success" ]; then
+            echo "Automatic rollback completed and the restored release passed production health verification."
+          elif [ "$ROLLBACK_OUTCOME" = "success" ]; then
+            echo "ERROR: Rollback files were restored, but the recovered release failed production health verification."
+            echo "Manual production recovery is required."
           else
             echo "ERROR: Automatic rollback did not complete successfully."
             echo "Manual production recovery is required; do not assume the previous release was restored."
