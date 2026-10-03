@@ -241,6 +241,10 @@ const inventoryReleasePaymentBindingMigration = readFileSync(
   join(root, "supabase/migrations/20261002144500_inventory_release_payment_binding.sql"),
   "utf8",
 );
+const publicSoldCountRefundTruthMigration = readFileSync(
+  join(root, "supabase/migrations/20261002150000_public_sold_count_refund_truth.sql"),
+  "utf8",
+);
 const publicCatalogService = readFileSync(
   join(root, "src/services/public-catalog.ts"),
   "utf8",
@@ -635,7 +639,12 @@ for (const [content, marker, label] of [
   [
     inventoryReleasePaymentBindingMigration,
     "SELECT '20261002144500'",
-    "final production schema marker includes PaymentIntent-bound inventory release",
+    "PaymentIntent-bound inventory release retains its historical schema marker",
+  ],
+  [
+    publicSoldCountRefundTruthMigration,
+    "SELECT '20261002150000'",
+    "final production schema marker excludes fully refunded orders from public sold counts",
   ],
   [
     publicCategoryCatalogScopeMigration,
@@ -2318,17 +2327,30 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002144500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002150000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002144500"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002150000"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002144500"') ||
-  !inventoryReleasePaymentBindingMigration.includes("SELECT '20261002144500'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002150000"') ||
+  !publicSoldCountRefundTruthMigration.includes("SELECT '20261002150000'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002144500",
+    "production health/migration gates must track schema 20261002150000",
+  );
+}
+
+if (
+  publicSoldCountRefundTruthMigration.includes(
+    "'refunded'::public.payment_status",
+  ) ||
+  !publicSoldCountRefundTruthMigration.includes(
+    "'partially_refunded'::public.payment_status",
+  )
+) {
+  violations.push(
+    "public sold-count projections must exclude fully refunded orders while retaining partial-refund sales",
   );
 }
 
