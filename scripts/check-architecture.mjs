@@ -1746,10 +1746,17 @@ if (
   !supabaseTypes.includes("_expected_payment_intent_id: string | null") ||
   !supabaseTypes.includes("_order_id: string") ||
   inventoryMaintenanceRoute.includes('"release_order_inventory" as never') ||
-  stripeFunctions.includes('"release_order_inventory" as never')
+  stripeFunctions.includes('"release_order_inventory" as never') ||
+  stripeWebhook.includes('"release_order_inventory" as never') ||
+  !stripeWebhook.includes(
+    "_expected_payment_intent_id: paymentIntentId",
+  ) ||
+  !stripeWebhook.includes(
+    "Canceled PaymentIntent inventory release was rejected because order state changed concurrently.",
+  )
 ) {
   violations.push(
-    "PaymentIntent-bound inventory release must remain represented in generated Supabase types and called without unsafe RPC casts",
+    "PaymentIntent-bound inventory release must remain typed in maintenance, checkout and Stripe cancellation flows",
   );
 }
 
