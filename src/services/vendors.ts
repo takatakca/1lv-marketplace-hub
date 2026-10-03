@@ -116,12 +116,6 @@ export async function setVendorAssetUrl(vendorId: string, field: "logo_url" | "b
   if (error) throw error;
 }
 
-export async function getVendorBySlug(slug: string): Promise<VendorRecord | null> {
-  const { data, error } = await supabase.from("vendors").select("*").eq("slug", slug).maybeSingle();
-  if (error) throw error;
-  return data as VendorRecord | null;
-}
-
 /**
  * Public storefront vendor lookup — only returns safe, customer-facing fields.
  * Contact email, phone, address, Stripe IDs, and commission rate are intentionally
