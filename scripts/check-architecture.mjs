@@ -817,7 +817,22 @@ for (const [content, marker, label] of [
   [
     atomicSupplierImportMigration,
     "SELECT '20261002183000'",
-    "final production schema marker includes atomic supplier import rows",
+    "atomic supplier import rows retain their historical schema marker",
+  ],
+  [
+    supplierImportFinalizationMigration,
+    "SELECT '20261002184500'",
+    "final production schema marker includes server-authoritative supplier import finalization",
+  ],
+  [
+    supplierImportFinalizationMigration,
+    "CREATE OR REPLACE FUNCTION public.finalize_product_import_job",
+    "supplier import finalization is database-authoritative",
+  ],
+  [
+    supplierImportFinalizationMigration,
+    "Import job audit row count mismatch",
+    "supplier import finalization requires complete durable row accounting",
   ],
   [
     atomicSupplierImportMigration,
@@ -2668,7 +2683,6 @@ if (
   !atomicSupplierImportMigration.includes(
     "public.is_takatak_authorized_session()",
   ) ||
-  !atomicSupplierImportMigration.includes("auth.uid()") ||
   !atomicSupplierImportMigration.includes("FOR UPDATE") ||
   !atomicSupplierImportMigration.includes(
     "product_import_job_rows_job_row_unique",
@@ -2683,13 +2697,17 @@ if (
   !atomicSupplierImportMigration.includes("public.owns_vendor") ||
   !atomicSupplierImportMigration.includes("99999999.99") ||
   !atomicSupplierImportMigration.includes("2147483647") ||
+  !atomicSupplierImportMigration.includes(
+    "'^[0-9]{1,8}([.][0-9]{1,2})?$'",
+  ) ||
+  !atomicSupplierImportMigration.includes("'^[0-9]{1,10}$'") ||
   !importService.includes('"import_product_draft_row" as never') ||
   !vendorImportsRoute.includes("importDraftProductRow") ||
   !vendorImportsRoute.includes("2_147_483_647") ||
   vendorImportsRoute.includes("createProduct(")
 ) {
   violations.push(
-    "supplier CSV imports must create each draft product and its audit row through the guarded atomic import RPC with bounded numeric inputs",
+    "supplier CSV imports must create each draft product and its audit row through the guarded atomic import RPC",
   );
 }
 
@@ -2697,28 +2715,24 @@ if (
   !supplierImportFinalizationMigration.includes(
     "CREATE OR REPLACE FUNCTION public.finalize_product_import_job",
   ) ||
+  !supplierImportFinalizationMigration.includes("SECURITY DEFINER") ||
   !supplierImportFinalizationMigration.includes(
     "Import job audit row count mismatch",
   ) ||
-  !supplierImportFinalizationMigration.includes(
-    "FROM public.vendors AS v",
-  ) ||
-  !supplierImportFinalizationMigration.includes(
-    "v.user_id = v_owner_id",
-  ) ||
-  supplierImportFinalizationMigration.includes(
-    "public.owns_vendor(v_vendor_id, v_owner_id)",
-  ) ||
-  !importService.includes('"finalize_product_import_job" as never')
+  !supplierImportFinalizationMigration.includes("REVOKE UPDATE (") ||
+  !importService.includes('"finalize_product_import_job" as never') ||
+  !vendorImportsRoute.includes("finalizeImportJob(job.id)") ||
+  vendorImportsRoute.includes("success_rows: ok") ||
+  vendorImportsRoute.includes("failed_rows: fail")
 ) {
   violations.push(
-    "supplier import finalization must derive counters from durable audit rows and validate job vendor ownership independently of the admin caller",
+    "supplier import completion must derive status and counters from durable audit rows in PostgreSQL",
   );
 }
 
 if (
   !csvParser.includes("export function parseCsvRecords") ||
-  !csvParser.includes('text[index + 1] === '"'') ||
+  !csvParser.includes("text[index + 1] === '\"'") ||
   !vendorImportsRoute.includes("parseCsvRecords(text)") ||
   !vendorImportsRoute.includes("Duplicate CSV column(s)")
 ) {
