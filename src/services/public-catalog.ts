@@ -120,7 +120,8 @@ export type PublicCatalogSearchSort =
   | "relevance"
   | "price-asc"
   | "price-desc"
-  | "sold";
+  | "sold"
+  | "newest";
 
 export type PublicCatalogSearchFilters = {
   query?: string;
