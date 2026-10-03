@@ -949,6 +949,111 @@ jobs:
           exit 0
           REMOTE
 
+      - name: Verify rollback health
+        id: rollback_health
+        if: >
+          always() &&
+          steps.deployment.outputs.enabled == 'true' &&
+          steps.rollback.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        env:
+          HOST: ${{ secrets.MOCHAHOST_HOST }}
+          PORT: ${{ secrets.MOCHAHOST_SSH_PORT }}
+          USER: ${{ secrets.MOCHAHOST_USER }}
+          APP_ROOT: ${{ secrets.MOCHAHOST_APP_ROOT }}
+          SITE_URL: ${{ vars.PRODUCTION_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$SITE_URL" ]; then
+            echo "ERROR: PRODUCTION_URL repository variable is missing."
+            exit 1
+          fi
+
+          SITE_URL="${SITE_URL%/}"
+
+          RECOVERED_SHA="$(ssh -T \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o ConnectTimeout=30 \
+            -o ConnectionAttempts=3 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=4 \
+            -o TCPKeepAlive=no \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -p "$PORT" \
+            "$USER@$HOST" \
+            "test -s '$APP_ROOT/CURRENT' && tr -d '\\r\\n' < '$APP_ROOT/CURRENT'")"
+
+          if ! printf '%s' "$RECOVERED_SHA" | grep -Eq '^[0-9a-f]{40}      # ------------------------------------------------------------
+      - name: Fail workflow after rollback
+        if: >
+          always() &&
+          steps.deployment.outputs.enabled == 'true' &&
+          (
+            steps.activate.outcome == 'failure' ||
+            steps.health.outcome == 'failure'
+          )
+        shell: bash
+        env:
+          ROLLBACK_OUTCOME: ${{ steps.rollback.outcome }}
+          ROLLBACK_HEALTH_OUTCOME: ${{ steps.rollback_health.outcome }}
+        run: |
+          set -euo pipefail
+          echo "Deployment failed before production certification."
+
+          if [ "$ROLLBACK_OUTCOME" = "success" ] && [ "$ROLLBACK_HEALTH_OUTCOME" = "success" ]; then
+            echo "Automatic rollback completed and the restored release passed production health verification."
+          elif [ "$ROLLBACK_OUTCOME" = "success" ]; then
+            echo "ERROR: Rollback files were restored, but the recovered release failed production health verification."
+            echo "Manual production recovery is required."
+          else
+            echo "ERROR: Automatic rollback did not complete successfully."
+            echo "Manual production recovery is required; do not assume the previous release was restored."
+          fi
+
+          exit 1
+; then
+            echo "ERROR: Restored CURRENT does not contain a full Git SHA."
+            exit 1
+          fi
+
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            echo "Rollback health check attempt $attempt/10"
+
+            if HEALTH="$(curl \
+              --fail \
+              --silent \
+              --show-error \
+              --location \
+              --max-time 20 \
+              "$SITE_URL/api/public/health")"
+            then
+              if RECOVERED_SHA="$RECOVERED_SHA" node -e '
+                const payload = JSON.parse(process.argv[1]);
+                if (
+                  payload.ok !== true ||
+                  payload.runtime !== "tanstack-start" ||
+                  payload.database !== "ready" ||
+                  payload.revision !== process.env.RECOVERED_SHA
+                ) process.exit(1);
+              ' "$HEALTH"
+              then
+                curl --fail --silent --show-error --location --max-time 20 "$SITE_URL/" > /dev/null
+                echo "Rollback health verified for revision: $RECOVERED_SHA"
+                exit 0
+              fi
+            fi
+
+            echo "Rollback health check failed. Retrying..."
+            sleep 5
+          done
+
+          echo "ERROR: Restored release did not pass production health verification."
+          exit 1
+
       # ------------------------------------------------------------
       # 16. Mark deployment failed after rollback
       # ------------------------------------------------------------
