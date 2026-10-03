@@ -2466,6 +2466,25 @@ if (
 }
 
 if (
+  !takatakDrainWorkflow.includes(
+    'if [ "$SITE_URL" != "https://1lv.ca" ]; then',
+  ) ||
+  !inventoryMaintenanceWorkflow.includes(
+    'if [ "$SITE_URL" != "https://1lv.ca" ]; then',
+  ) ||
+  !takatakDrainWorkflow.includes(
+    'if [ "${#DRAIN_SECRET}" -lt 32 ]; then',
+  ) ||
+  !inventoryMaintenanceWorkflow.includes(
+    'if [ "${#MAINTENANCE_SECRET}" -lt 32 ]; then',
+  )
+) {
+  violations.push(
+    "scheduled internal jobs must validate 32-character secrets and send them only to the canonical https://1lv.ca origin",
+  );
+}
+
+if (
   !deployWorkflow.includes("Verify production database and Auth prerequisite") ||
   !deployWorkflow.includes("SUPABASE_ACCESS_TOKEN") ||
   !deployWorkflow.includes("SUPABASE_DB_PASSWORD") ||
