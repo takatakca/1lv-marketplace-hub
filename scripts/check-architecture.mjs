@@ -2281,6 +2281,22 @@ if (
   );
 }
 
+if (
+  !deployWorkflow.includes('test -f "$PREVIOUS_RELEASE/package.json"') ||
+  !deployWorkflow.includes('test -d "$PREVIOUS_RELEASE/node_modules"') ||
+  !deployWorkflow.includes(
+    'test -f "$PREVIOUS_RELEASE/dist/server/server.js"',
+  ) ||
+  !deployWorkflow.includes(
+    'cp "$PREVIOUS_RELEASE/package-lock.json" "$APP_ROOT/package-lock.json.new"',
+  ) ||
+  !deployWorkflow.includes('rm -f "$APP_ROOT/package-lock.json"')
+) {
+  violations.push(
+    "MochaHost rollback must validate the complete previous runtime and restore package metadata consistently",
+  );
+}
+
 const migrateProductionWorkflow = readFileSync(
   join(root, ".github/workflows/migrate-production-db.yml"),
   "utf8",
