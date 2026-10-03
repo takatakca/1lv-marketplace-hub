@@ -231,13 +231,10 @@ export const Route = createFileRoute("/api/internal/inventory/cleanup")({
           }
 
           const { data: didRelease, error: releaseError } =
-            await supabaseAdmin.rpc(
-              "release_order_inventory" as never,
-              {
-                _order_id: order.id,
-                _expected_payment_intent_id: paymentIntentId ?? null,
-              } as never,
-            );
+            await supabaseAdmin.rpc("release_order_inventory", {
+              _order_id: order.id,
+              _expected_payment_intent_id: paymentIntentId ?? null,
+            });
 
           if (releaseError) {
             blocked += 1;
