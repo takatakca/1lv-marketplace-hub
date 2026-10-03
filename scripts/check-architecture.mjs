@@ -319,6 +319,13 @@ const catalogSearchVerifiedReviewsMigration = readFileSync(
   ),
   "utf8",
 );
+const productVariantCatalogFoundationMigration = readFileSync(
+  join(
+    root,
+    "supabase/migrations/20261003020000_product_variant_catalog_foundation.sql",
+  ),
+  "utf8",
+);
 const payoutService = readFileSync(
   join(root, "src/services/payouts.ts"),
   "utf8",
@@ -863,7 +870,27 @@ for (const [content, marker, label] of [
   [
     catalogSearchVerifiedReviewsMigration,
     "SELECT '20261003012500'",
-    "final production schema marker includes marketplace search and verified reviews",
+    "marketplace search and verified reviews retain their historical schema marker",
+  ],
+  [
+    productVariantCatalogFoundationMigration,
+    "SELECT '20261003020000'",
+    "final production schema marker includes normalized product variants",
+  ],
+  [
+    productVariantCatalogFoundationMigration,
+    "CREATE TABLE public.product_variants",
+    "normalized SKU-level product variant storage exists",
+  ],
+  [
+    productVariantCatalogFoundationMigration,
+    "CREATE OR REPLACE FUNCTION public.upsert_vendor_product_variant",
+    "variant writes are vendor-authorized database RPCs",
+  ],
+  [
+    productVariantCatalogFoundationMigration,
+    "CREATE OR REPLACE FUNCTION public.get_public_product_variant_matrix",
+    "public variant data uses a curated projection",
   ],
   [
     catalogSearchVerifiedReviewsMigration,
@@ -2646,19 +2673,19 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261003012500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261003020000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261003012500"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261003020000"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261003012500"') ||
-  !catalogSearchVerifiedReviewsMigration.includes(
-    "SELECT '20261003012500'",
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261003020000"') ||
+  !productVariantCatalogFoundationMigration.includes(
+    "SELECT '20261003020000'",
   )
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261003012500",
+    "production health/migration gates must track schema 20261003020000",
   );
 }
 
