@@ -481,14 +481,14 @@ for (const [content, marker, label] of [
     "1LV integration status validates the TAKATAK API URL",
   ],
   [
-    masterOutbox,
-    '.eq("status", "pending")',
-    "automatic outbox retries process pending events only",
+    takatakOutboxAtomicClaimMigration,
+    "o.status = 'pending'",
+    "automatic outbox retries claim pending events only",
   ],
   [
-    masterOutbox,
-    '.lt("attempt_count", MAX_ATTEMPTS)',
-    "automatic outbox retries enforce MAX_ATTEMPTS at query time",
+    takatakOutboxAtomicClaimMigration,
+    "o.attempt_count < v_max_attempts",
+    "automatic outbox retries enforce MAX_ATTEMPTS inside the atomic DB claim",
   ],
   [
     masterOutbox,
