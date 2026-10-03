@@ -2,12 +2,28 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(176);
+select plan(177);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002153000',
+  '20261002160000',
   'production schema marker is current'
+);
+
+select ok(
+  position(
+    '''newest'''
+    in pg_get_functiondef(
+      'public.search_public_catalog_products(text,text,numeric,numeric,boolean,boolean,text,integer)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'CASE WHEN e.sort_mode = ''newest'' THEN e.created_at END DESC'
+    in pg_get_functiondef(
+      'public.search_public_catalog_products(text,text,numeric,numeric,boolean,boolean,text,integer)'::regprocedure
+    )
+  ) > 0,
+  'public catalog search supports newest ranking by product creation time'
 );
 
 select ok(
