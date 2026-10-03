@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(160);
+select plan(161);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002133000',
+  '20261002134500',
   'production schema marker is current'
 );
 
@@ -301,6 +301,16 @@ select ok(
     )
   ) > 0,
   'partially refunded orders still count as prior paid orders for first-order promotions'
+);
+
+select ok(
+  position(
+    '''refunded'''
+    in pg_get_functiondef(
+      'public.enforce_first_order_promotion_identity()'::regprocedure
+    )
+  ) > 0,
+  'fully refunded orders still count as prior paid orders for first-order promotions'
 );
 
 select ok(
