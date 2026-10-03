@@ -40,6 +40,27 @@ export type TransferResult = {
   reason?: string;
 };
 
+export type AdminPayoutRow =
+  Database["public"]["Tables"]["payouts"]["Row"];
+
+/** Full payout ledger projection for marketplace admins only. */
+export const listAdminPayouts = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<AdminPayoutRow[]> => {
+    const s = await import("./payout-scheduler.server");
+    await s.assertAdmin(context);
+    const db = await s.adminDb();
+
+    const { data, error } = await db
+      .from("payouts")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    if (error) throw error;
+    return (data ?? []) as AdminPayoutRow[];
+  });
+
 /** Generate grouped payouts for a period. Admin only. Creates nothing in Stripe. */
 export const generateVendorPayouts = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
