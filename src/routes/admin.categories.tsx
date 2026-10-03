@@ -23,6 +23,7 @@ function Page() {
   const demo = isDemoMode(user);
   const [rows, setRows] = useState<CatRow[] | null>(null);
   const [form, setForm] = useState(empty);
+  const [editingSlug, setEditingSlug] = useState<string | null>(null);
 
   const refresh = async () => {
     const data = await listCategoriesAdmin();
@@ -53,20 +54,33 @@ function Page() {
       });
       toast.success("Category saved");
       setForm(empty);
+      setEditingSlug(null);
       refresh();
     } catch (err) { toast.error((err as Error).message); }
   };
 
-  const edit = (c: CatRow) => setForm({
-    en: c.name_en, fr: c.name_fr ?? "", slug: c.slug,
-    parent: c.parent_slug ?? "", position: c.position, active: c.active,
-  });
+  const edit = (c: CatRow) => {
+    setEditingSlug(c.slug);
+    setForm({
+      en: c.name_en, fr: c.name_fr ?? "", slug: c.slug,
+      parent: c.parent_slug ?? "", position: c.position, active: c.active,
+    });
+  };
+
+  const resetForm = () => {
+    setEditingSlug(null);
+    setForm(empty);
+  };
 
   const remove = async (slug: string) => {
     if (demo) { toast.success("Removed (demo)"); return; }
     if (!confirm(`Delete category "${slug}"?`)) return;
-    try { await deleteCategory(slug); toast.success("Deleted"); refresh(); }
-    catch (err) { toast.error((err as Error).message); }
+    try {
+      await deleteCategory(slug);
+      toast.success("Deleted");
+      if (editingSlug === slug) resetForm();
+      refresh();
+    } catch (err) { toast.error((err as Error).message); }
   };
 
   return (
@@ -117,11 +131,48 @@ function Page() {
           </table>
         </div>
         <form onSubmit={submit} className="space-y-3 rounded-xl border border-border bg-card p-5">
-          <h3 className="text-sm font-semibold text-navy">Add / edit category</h3>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-navy">
+              {editingSlug ? "Edit category" : "Add category"}
+            </h3>
+            {editingSlug && (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="text-xs font-semibold text-electric"
+              >
+                New category
+              </button>
+            )}
+          </div>
           <input placeholder="English name" value={form.en} onChange={(e) => setForm({ ...form, en: e.target.value })} className={inputCls} />
           <input placeholder="Nom français" value={form.fr} onChange={(e) => setForm({ ...form, fr: e.target.value })} className={inputCls} />
-          <input placeholder="slug (kebab-case)" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} className={inputCls} />
-          <input placeholder="Parent slug (optional)" value={form.parent} onChange={(e) => setForm({ ...form, parent: e.target.value })} className={inputCls} />
+          <input
+            placeholder="slug (kebab-case)"
+            value={form.slug}
+            disabled={editingSlug !== null}
+            onChange={(e) => setForm({ ...form, slug: e.target.value.toLowerCase() })}
+            className={inputCls}
+          />
+          {editingSlug && (
+            <p className="text-[11px] text-muted-foreground">
+              Slugs are stable storefront identifiers. Create a new category instead of renaming one in place.
+            </p>
+          )}
+          <select
+            value={form.parent}
+            onChange={(e) => setForm({ ...form, parent: e.target.value })}
+            className={inputCls}
+          >
+            <option value="">No parent</option>
+            {display
+              .filter((category) => category.slug !== editingSlug)
+              .map((category) => (
+                <option key={category.slug} value={category.slug}>
+                  {category.name_en} ({category.slug})
+                </option>
+              ))}
+          </select>
           <input type="number" placeholder="Sort order" value={form.position} onChange={(e) => setForm({ ...form, position: Number(e.target.value) })} className={inputCls} />
           <label className="flex items-center gap-2 text-xs text-navy">
             <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active
