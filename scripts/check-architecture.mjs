@@ -1321,8 +1321,8 @@ for (const [content, marker, label] of [
   ],
   [
     takatakDrainWorkflow,
-    'url.protocol !== "https:"',
-    "scheduled TAKATAK drain refuses non-HTTPS production URLs",
+    'if [ "$SITE_URL" != "https://1lv.ca" ]; then',
+    "scheduled TAKATAK drain is pinned to the canonical 1LV production origin",
   ],
   [
     takatakDrainWorkflow,
