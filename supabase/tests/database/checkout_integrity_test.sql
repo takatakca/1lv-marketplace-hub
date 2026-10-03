@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(8);
+select plan(9);
 
 select ok(
   not has_function_privilege(
@@ -113,12 +113,22 @@ select is(
 
 select is(
   (
+    select tax_total
+    from public.orders
+    where customer_email = 'checkout-test@example.invalid'
+  ),
+  4.19::numeric,
+  'checkout taxes persisted shipping and merchandise at the Quebec rate'
+);
+
+select is(
+  (
     select total
     from public.orders
     where customer_email = 'checkout-test@example.invalid'
   ),
-  30.99::numeric,
-  'checkout total uses persisted shipping plus Quebec tax'
+  32.18::numeric,
+  'checkout total uses taxable persisted shipping plus Quebec tax'
 );
 
 select is(
