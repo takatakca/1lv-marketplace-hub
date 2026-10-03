@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(156);
+select plan(158);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002130000',
+  '20261002131500',
   'production schema marker is current'
 );
 
@@ -101,6 +101,38 @@ select ok(
       and policyname = 'vendor-assets owner delete'
   ),
   'vendor asset delete policy requires the centralized write authority'
+);
+
+select ok(
+  position(
+    'storage.foldername(NEW.logo_url)'
+    in pg_get_functiondef(
+      'public.enforce_vendor_profile_authority()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'Vendor logo asset ownership mismatch'
+    in pg_get_functiondef(
+      'public.enforce_vendor_profile_authority()'::regprocedure
+    )
+  ) > 0,
+  'vendor profile authority binds logo references to the vendor owner prefix'
+);
+
+select ok(
+  position(
+    'storage.foldername(NEW.banner_url)'
+    in pg_get_functiondef(
+      'public.enforce_vendor_profile_authority()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'Vendor banner asset ownership mismatch'
+    in pg_get_functiondef(
+      'public.enforce_vendor_profile_authority()'::regprocedure
+    )
+  ) > 0,
+  'vendor profile authority binds banner references to the vendor owner prefix'
 );
 
 select ok(
