@@ -2408,6 +2408,29 @@ if (
   );
 }
 
+if (
+  !deployWorkflow.includes('FAILED_SHA="$2"') ||
+  !deployWorkflow.includes(
+    'if [ "$CURRENT" != "$FAILED_SHA" ]; then',
+  ) ||
+  !deployWorkflow.includes(
+    "Existing production release remains active; no rollback switch is required.",
+  ) ||
+  !deployWorkflow.includes(
+    "CURRENT does not contain a valid full Git SHA.",
+  ) ||
+  !deployWorkflow.includes(
+    "PREVIOUS does not contain a valid full Git SHA.",
+  ) ||
+  !deployWorkflow.includes(
+    'if [ "$PREVIOUS" = "$FAILED_SHA" ]; then',
+  )
+) {
+  violations.push(
+    "MochaHost rollback must not move an untouched production release and all release pointers must be validated as full Git SHAs",
+  );
+}
+
 const migrateProductionWorkflow = readFileSync(
   join(root, ".github/workflows/migrate-production-db.yml"),
   "utf8",
