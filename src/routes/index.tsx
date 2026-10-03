@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { Zap, TrendingUp, ShieldCheck, Truck, RefreshCw, Store, Star, ArrowRight, BadgePercent, Sparkles, MapPin, PackageCheck } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
@@ -11,6 +12,7 @@ import { categories, formatCAD } from "@/lib/data";
 import { usePublicCatalog } from "@/hooks/use-public-catalog";
 import { FREE_SHIPPING_THRESHOLD_CAD } from "@/lib/canada-commerce";
 import { usePublicMarketplaceSettings } from "@/hooks/use-marketplace-settings";
+import { searchPublicCatalogProducts } from "@/services/public-catalog";
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -35,13 +37,80 @@ function Home() {
   const { products, vendors, demo, loading, error } = usePublicCatalog();
   const freeShippingThreshold =
     settings?.free_shipping_threshold ?? FREE_SHIPPING_THRESHOLD_CAD;
-  const discounted = products
-    .filter((p) => p.compareAt && p.compareAt > p.price)
-    .sort(
-      (a, b) =>
-        ((b.compareAt ?? b.price) - b.price) / (b.compareAt ?? b.price) -
-        (((a.compareAt ?? a.price) - a.price) / (a.compareAt ?? a.price)),
-    );
+
+  const homeDealsQuery = useQuery({
+    queryKey: ["public-marketplace-home", "deals"],
+    queryFn: () =>
+      searchPublicCatalogProducts({
+        saleOnly: true,
+        sort: "relevance",
+        limit: 500,
+      }),
+    enabled: !demo && !loading,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
+  const homeTrendingQuery = useQuery({
+    queryKey: ["public-marketplace-home", "trending"],
+    queryFn: () =>
+      searchPublicCatalogProducts({
+        sort: "sold",
+        limit: 24,
+      }),
+    enabled: !demo && !loading,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
+  const homeNewestQuery = useQuery({
+    queryKey: ["public-marketplace-home", "newest"],
+    queryFn: () =>
+      searchPublicCatalogProducts({
+        sort: "newest",
+        limit: 24,
+      }),
+    enabled: !demo && !loading,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
+  const homeCanadianQuery = useQuery({
+    queryKey: ["public-marketplace-home", "canadian"],
+    queryFn: () =>
+      searchPublicCatalogProducts({
+        canadianOnly: true,
+        sort: "newest",
+        limit: 24,
+      }),
+    enabled: !demo && !loading,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
+  const homeBudgetQuery = useQuery({
+    queryKey: ["public-marketplace-home", "under-25"],
+    queryFn: () =>
+      searchPublicCatalogProducts({
+        maxPrice: 24.99,
+        sort: "price-asc",
+        limit: 12,
+      }),
+    enabled: !demo && !loading,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
+
+  const discounted = [
+    ...(demo
+      ? products.filter((p) => p.compareAt && p.compareAt > p.price)
+      : homeDealsQuery.data ?? []),
+  ].sort(
+    (a, b) =>
+      ((b.compareAt ?? b.price) - b.price) / (b.compareAt ?? b.price) -
+      (((a.compareAt ?? a.price) - a.price) / (a.compareAt ?? a.price)),
+  );
   const maxDiscount = discounted.reduce((max, product) => {
     const compareAt = product.compareAt ?? product.price;
     if (compareAt <= product.price) return max;
@@ -51,31 +120,56 @@ function Home() {
     );
   }, 0);
   const flash = discounted;
-  const trending = [...products].sort((a, b) => b.sold - a.sold);
-  const local = products.filter((p) => p.vendorCountry === "CA" || p.tags.includes("local"));
-  const newArrivals = [...products].sort(
-    (a, b) =>
-      new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime(),
-  );
+  const trending = demo
+    ? [...products].sort((a, b) => b.sold - a.sold)
+    : homeTrendingQuery.data ?? [];
+  const local = demo
+    ? products.filter(
+        (p) => p.vendorCountry === "CA" || p.tags.includes("local"),
+      )
+    : homeCanadianQuery.data ?? [];
+  const newArrivals = demo
+    ? [...products].sort(
+        (a, b) =>
+          new Date(b.createdAt ?? 0).getTime() -
+          new Date(a.createdAt ?? 0).getTime(),
+      )
+    : homeNewestQuery.data ?? [];
   const best = trending;
-  const under25 = products.filter((p) => p.price < 25).slice(0, 4);
-  const soldProducts = trending.filter((product) => product.sold > 0);
-  const freshProducts = newArrivals.filter((product) => product.tags.includes("new"));
+  const under25 = demo
+    ? products.filter((p) => p.price < 25).slice(0, 4)
+    : (homeBudgetQuery.data ?? []).slice(0, 4);
   const heroDeal = flash[0] ?? trending[0] ?? products[0];
   const tiles = products.slice(0, 3);
   const featuredVendors = vendors.slice(0, 4).map((vendor) => ({
     vendor,
     items: products.filter((p) => p.vendorSlug === vendor.slug),
   }));
+  const homeScopedLoading =
+    !demo &&
+    (homeDealsQuery.isPending ||
+      homeTrendingQuery.isPending ||
+      homeNewestQuery.isPending ||
+      homeCanadianQuery.isPending ||
+      homeBudgetQuery.isPending);
+  const homeScopedError =
+    !demo &&
+    [
+      homeDealsQuery.error,
+      homeTrendingQuery.error,
+      homeNewestQuery.error,
+      homeCanadianQuery.error,
+      homeBudgetQuery.error,
+    ].some(Boolean);
 
   return (
     <AppLayout>
-      {loading && (
+      {(loading || homeScopedLoading) && (
         <div className="border-b border-border bg-muted/40 px-4 py-2 text-center text-xs text-muted-foreground">
           Loading the live 1LV.CA marketplace…
         </div>
       )}
-      {!loading && error && (
+      {!loading && (error || homeScopedError) && (
         <div className="border-b border-destructive/20 bg-destructive/5 px-4 py-2 text-center text-xs text-destructive">
           Live catalog unavailable. {demo ? "Showing authorized preview data." : "Please try again shortly."}
         </div>
@@ -110,7 +204,7 @@ function Home() {
                 </h1>
                 <p className="mt-3 text-sm text-white/80">
                   {discounted.length > 0
-                    ? `${discounted.length} active markdowns. Free shipping over ${freeShippingThreshold} where eligible.`
+                    ? `Active marketplace markdowns. Free shipping over ${freeShippingThreshold} where eligible.`
                     : `Free shipping over ${freeShippingThreshold} where eligible, with protected checkout.`}
                 </p>
                 <span className="mt-5 inline-flex items-center gap-2 rounded-md bg-deal px-5 py-2.5 text-sm font-bold text-deal-foreground transition group-hover:opacity-90">
@@ -191,8 +285,8 @@ function Home() {
               <h2 className="font-display text-xl font-extrabold tracking-tight text-navy md:text-2xl">Shop your way</h2>
             </div>
             <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-              <span className="rounded-full bg-muted px-2.5 py-1">{products.length.toLocaleString()} live products</span>
-              <span className="rounded-full bg-muted px-2.5 py-1">{vendors.length.toLocaleString()} active stores</span>
+              <span className="rounded-full bg-muted px-2.5 py-1">Live product feed</span>
+              <span className="rounded-full bg-muted px-2.5 py-1">Active seller feed</span>
               <span className="rounded-full bg-muted px-2.5 py-1">CAD checkout</span>
             </div>
           </div>
@@ -204,7 +298,7 @@ function Home() {
                 <ArrowRight size={15} className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-deal" />
               </div>
               <div className="mt-3 text-sm font-extrabold text-navy">Current deals</div>
-              <div className="mt-0.5 text-xs text-muted-foreground">{discounted.length} active markdown{discounted.length === 1 ? "" : "s"}</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">Active marketplace markdowns</div>
             </Link>
 
             <Link to="/trending" className="group rounded-xl border border-border bg-card p-4 shadow-merch transition hover:-translate-y-0.5 hover:border-electric/40 hover:shadow-merch-hover">
@@ -213,7 +307,7 @@ function Home() {
                 <ArrowRight size={15} className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-electric" />
               </div>
               <div className="mt-3 text-sm font-extrabold text-navy">Best sellers</div>
-              <div className="mt-0.5 text-xs text-muted-foreground">{soldProducts.length} products with recorded sales</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">Ranked by recorded paid-unit sales</div>
             </Link>
 
             <Link to="/new-arrivals" className="group rounded-xl border border-border bg-card p-4 shadow-merch transition hover:-translate-y-0.5 hover:border-electric/40 hover:shadow-merch-hover">
@@ -222,7 +316,7 @@ function Home() {
                 <ArrowRight size={15} className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-electric" />
               </div>
               <div className="mt-3 text-sm font-extrabold text-navy">New arrivals</div>
-              <div className="mt-0.5 text-xs text-muted-foreground">{freshProducts.length} recently published</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">Recently published marketplace items</div>
             </Link>
 
             <Link to="/search" className="group rounded-xl border border-border bg-card p-4 shadow-merch transition hover:-translate-y-0.5 hover:border-success/40 hover:shadow-merch-hover">
@@ -231,7 +325,7 @@ function Home() {
                 <ArrowRight size={15} className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-success" />
               </div>
               <div className="mt-3 text-sm font-extrabold text-navy">Canadian sellers</div>
-              <div className="mt-0.5 text-xs text-muted-foreground">{local.length} products from Canadian vendors</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">Products from Canadian vendors</div>
             </Link>
           </div>
 
