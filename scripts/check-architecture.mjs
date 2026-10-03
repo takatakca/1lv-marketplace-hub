@@ -229,6 +229,18 @@ const vendorAssetPublicReadScopeMigration = readFileSync(
   join(root, "supabase/migrations/20261002140000_vendor_asset_public_read_scope.sql"),
   "utf8",
 );
+const publicVendorCatalogScopeMigration = readFileSync(
+  join(root, "supabase/migrations/20261002141500_public_vendor_catalog_scope.sql"),
+  "utf8",
+);
+const publicCatalogService = readFileSync(
+  join(root, "src/services/public-catalog.ts"),
+  "utf8",
+);
+const publicStoreRoute = readFileSync(
+  join(root, "src/routes/store.$slug.tsx"),
+  "utf8",
+);
 const vendorAssetService = readFileSync(
   join(root, "src/services/vendor-assets.ts"),
   "utf8",
@@ -596,7 +608,27 @@ for (const [content, marker, label] of [
   [
     vendorAssetPublicReadScopeMigration,
     "SELECT '20261002140000'",
-    "final production schema marker includes scoped public vendor asset reads",
+    "scoped public vendor asset reads retain their historical schema marker",
+  ],
+  [
+    publicVendorCatalogScopeMigration,
+    "SELECT '20261002141500'",
+    "final production schema marker includes vendor-scoped public catalog",
+  ],
+  [
+    publicVendorCatalogScopeMigration,
+    "v.slug = btrim(COALESCE(_vendor_slug, ''))",
+    "vendor storefront catalog filters in PostgreSQL before applying limits",
+  ],
+  [
+    publicCatalogService,
+    '"list_public_catalog_products_for_vendor" as never',
+    "public catalog service exposes the vendor-scoped catalog RPC",
+  ],
+  [
+    publicStoreRoute,
+    "listPublicCatalogProductsForVendor",
+    "storefront route queries only the requested vendor catalog",
   ],
   [
     vendorAssetPublicReadScopeMigration,
@@ -2190,17 +2222,17 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002140000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002141500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002140000"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002141500"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002140000"') ||
-  !vendorAssetPublicReadScopeMigration.includes("SELECT '20261002140000'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002141500"') ||
+  !publicVendorCatalogScopeMigration.includes("SELECT '20261002141500'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002140000",
+    "production health/migration gates must track schema 20261002141500",
   );
 }
 
@@ -2398,6 +2430,27 @@ if (
 ) {
   violations.push(
     "production deployment must fail closed before SSH unless the exact 1LV database is current and hosted Auth is locked down",
+  );
+}
+
+if (
+  !publicVendorCatalogScopeMigration.includes(
+    "CREATE OR REPLACE FUNCTION public.list_public_catalog_products_for_vendor",
+  ) ||
+  !publicVendorCatalogScopeMigration.includes(
+    "v.subscription_status IN ('active', 'trialing')",
+  ) ||
+  !publicVendorCatalogScopeMigration.includes(
+    "NOT p.track_inventory OR p.inventory_quantity > 0",
+  ) ||
+  !publicCatalogService.includes(
+    '"list_public_catalog_products_for_vendor" as never',
+  ) ||
+  !publicStoreRoute.includes("listPublicCatalogProductsForVendor") ||
+  publicStoreRoute.includes("(await listPublicCatalogProducts()).filter")
+) {
+  violations.push(
+    "vendor storefronts must use a vendor-scoped public catalog query instead of filtering a globally limited catalog",
   );
 }
 
