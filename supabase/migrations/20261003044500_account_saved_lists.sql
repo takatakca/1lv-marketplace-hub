@@ -538,9 +538,37 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 DECLARE
+  v_user_id uuid := auth.uid();
   v_list_id uuid;
 BEGIN
-  v_list_id := public.resolve_my_saved_list(_list_id);
+  IF v_user_id IS NULL OR NOT public.is_takatak_authorized_session() THEN
+    RAISE EXCEPTION 'Authorized TAKATAK customer session required'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF _list_id IS NULL THEN
+    SELECT sl.id
+    INTO v_list_id
+    FROM public.saved_lists AS sl
+    WHERE sl.customer_id = v_user_id
+      AND sl.is_default = true
+    LIMIT 1;
+
+    IF v_list_id IS NULL THEN
+      RETURN;
+    END IF;
+  ELSE
+    SELECT sl.id
+    INTO v_list_id
+    FROM public.saved_lists AS sl
+    WHERE sl.id = _list_id
+      AND sl.customer_id = v_user_id;
+
+    IF v_list_id IS NULL THEN
+      RAISE EXCEPTION 'Saved list not found or access denied'
+        USING ERRCODE = '42501';
+    END IF;
+  END IF;
 
   RETURN QUERY
   WITH sales AS (
