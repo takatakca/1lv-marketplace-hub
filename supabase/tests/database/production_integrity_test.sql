@@ -2,12 +2,30 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(151);
+select plan(152);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002123000',
+  '20261002124500',
   'production schema marker is current'
+);
+
+select ok(
+  exists (
+    select 1
+    from storage.buckets as b
+    where b.id = 'vendor-assets'
+      and b.public = false
+      and b.file_size_limit = 4194304
+      and b.allowed_mime_types @> ARRAY[
+        'image/png',
+        'image/jpeg',
+        'image/webp',
+        'image/gif'
+      ]::text[]
+      and cardinality(b.allowed_mime_types) = 4
+  ),
+  'vendor asset bucket enforces private 4MB image-only uploads'
 );
 
 select ok(
