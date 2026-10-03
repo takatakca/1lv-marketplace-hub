@@ -8,7 +8,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { AISearchBar } from "@/components/AISearchBar";
 import { ProductGrid } from "@/components/ProductGrid";
 import { EmptyState } from "@/components/EmptyState";
-import { categories } from "@/lib/data";
+import { usePublicCategories } from "@/hooks/use-public-categories";
 import { usePublicCatalog } from "@/hooks/use-public-catalog";
 import { QUICK_CHIPS, toSearchNavigation } from "@/services/ai-search";
 import { searchPublicCatalogProducts } from "@/services/public-catalog";
@@ -49,10 +49,18 @@ function SearchPage() {
   const sp = Route.useSearch();
   const navigate = Route.useNavigate();
   const { products, demo, loading: catalogLoading } = usePublicCatalog();
+  const {
+    categories: publicCategories,
+    loading: categoriesLoading,
+  } = usePublicCategories();
   const term = (sp.q ?? "").trim().toLowerCase();
 
   const safeSort: Sort = SORTS.includes(sp.sort as Sort) ? (sp.sort as Sort) : "relevance";
-  const smartCategory = categories.some((c) => c.slug === sp.category) ? sp.category : "";
+  const smartCategory = publicCategories.some(
+    (category) => category.slug === sp.category,
+  )
+    ? sp.category
+    : "";
 
   const [sort, setSort] = useState<Sort>(safeSort);
   const [maxPrice, setMaxPrice] = useState<number>(
@@ -84,7 +92,7 @@ function SearchPage() {
     setSaleOnly(sp.sale);
     setCategory(smartCategory);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sp.q, sp.raw, sp.category, sp.minPrice, sp.maxPrice, sp.freeShipping, sp.canadian, sp.rating, sp.sale, sp.sort]);
+  }, [sp.q, sp.raw, sp.category, sp.minPrice, sp.maxPrice, sp.freeShipping, sp.canadian, sp.rating, sp.sale, sp.sort, smartCategory]);
 
   const liveSearchQuery = useQuery({
     queryKey: [
@@ -166,7 +174,9 @@ function SearchPage() {
   ]);
 
   const searchLoading =
-    catalogLoading || (!demo && liveSearchQuery.isPending);
+    catalogLoading ||
+    categoriesLoading ||
+    (!demo && liveSearchQuery.isPending);
   const searchError =
     !demo && liveSearchQuery.error instanceof Error
       ? liveSearchQuery.error.message
@@ -174,7 +184,7 @@ function SearchPage() {
 
   const smartBits = [
     sp.q ? sp.q : null,
-    smartCategory ? `in ${categories.find((c) => c.slug === smartCategory)?.name}` : null,
+    smartCategory ? `in ${publicCategories.find((category) => category.slug === smartCategory)?.name_en}` : null,
     sp.minPrice !== undefined && sp.maxPrice !== undefined
       ? `between $${sp.minPrice} and $${sp.maxPrice}`
       : sp.maxPrice !== undefined
@@ -223,8 +233,11 @@ function SearchPage() {
           className="w-full rounded-md border border-border bg-white px-2 py-1.5 text-xs text-navy outline-none focus:border-electric"
         >
           <option value="">All categories</option>
-          {categories.map((c) => (
-            <option key={c.slug} value={c.slug}>{c.name}</option>
+          {publicCategories.map((category) => (
+            <option key={category.slug} value={category.slug}>
+              {category.parent_slug ? "↳ " : ""}
+              {category.name_en}
+            </option>
           ))}
         </select>
       </div>
