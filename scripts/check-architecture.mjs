@@ -354,6 +354,13 @@ const accountSavedListsMigration = readFileSync(
   ),
   "utf8",
 );
+const vendorBulkCatalogOpsMigration = readFileSync(
+  join(
+    root,
+    "supabase/migrations/20261003052000_vendor_bulk_catalog_ops.sql",
+  ),
+  "utf8",
+);
 const payoutService = readFileSync(
   join(root, "src/services/payouts.ts"),
   "utf8",
@@ -923,7 +930,32 @@ for (const [content, marker, label] of [
   [
     accountSavedListsMigration,
     "SELECT '20261003044500'",
-    "final production schema marker includes persistent account saved lists",
+    "persistent account saved lists retain their historical schema marker",
+  ],
+  [
+    vendorBulkCatalogOpsMigration,
+    "SELECT '20261003052000'",
+    "final production schema marker includes vendor bulk catalog operations",
+  ],
+  [
+    vendorBulkCatalogOpsMigration,
+    "CREATE TABLE public.vendor_catalog_audit_events",
+    "vendor bulk mutations have append-only audit storage",
+  ],
+  [
+    vendorBulkCatalogOpsMigration,
+    "CREATE OR REPLACE FUNCTION public.bulk_set_vendor_product_status",
+    "vendor bulk status mutation is database-authoritative",
+  ],
+  [
+    vendorBulkCatalogOpsMigration,
+    "CREATE OR REPLACE FUNCTION public.bulk_adjust_vendor_inventory",
+    "vendor bulk inventory mutation is database-authoritative",
+  ],
+  [
+    vendorBulkCatalogOpsMigration,
+    "Variantized product inventory must target an exact SKU",
+    "bulk inventory cannot bypass SKU-level stock authority",
   ],
   [
     accountSavedListsMigration,
@@ -2801,19 +2833,19 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261003044500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261003052000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261003044500"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261003052000"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261003044500"') ||
-  !accountSavedListsMigration.includes(
-    "SELECT '20261003044500'",
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261003052000"') ||
+  !vendorBulkCatalogOpsMigration.includes(
+    "SELECT '20261003052000'",
   )
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261003044500",
+    "production health/migration gates must track schema 20261003052000",
   );
 }
 
