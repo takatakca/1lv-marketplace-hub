@@ -2,12 +2,74 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(219);
+select plan(223);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002183000',
+  '20261002184500',
   'production schema marker is current'
+);
+
+select ok(
+  to_regprocedure('public.finalize_product_import_job(uuid)') is not null,
+  'server-authoritative supplier import finalization RPC exists'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.finalize_product_import_job(uuid)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.finalize_product_import_job(uuid)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.finalize_product_import_job(uuid)',
+    'EXECUTE'
+  ),
+  'supplier import finalization RPC is authenticated/service-role only'
+);
+
+select ok(
+  position(
+    'Import job audit row count mismatch'
+    in pg_get_functiondef(
+      'public.finalize_product_import_job(uuid)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'count(*) FILTER (WHERE r.row_status = ''imported'')'
+    in pg_get_functiondef(
+      'public.finalize_product_import_job(uuid)'::regprocedure
+    )
+  ) > 0,
+  'supplier import finalization derives durable counters from recorded audit rows'
+);
+
+select ok(
+  not has_column_privilege(
+    'authenticated',
+    'public.product_import_jobs',
+    'status',
+    'UPDATE'
+  )
+  and not has_column_privilege(
+    'authenticated',
+    'public.product_import_jobs',
+    'success_rows',
+    'UPDATE'
+  )
+  and not has_column_privilege(
+    'authenticated',
+    'public.product_import_jobs',
+    'failed_rows',
+    'UPDATE'
+  ),
+  'browser sessions cannot directly finalize supplier import counters'
 );
 
 select ok(
