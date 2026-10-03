@@ -97,7 +97,7 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [authLoading, queryClient, user?.id]);
+  }, [authLoading, queryClient, user]);
 
   useEffect(() => {
     if (authLoading || user) return;
