@@ -18,6 +18,8 @@ type PublicCatalogProductRow = {
   track_inventory: boolean;
   images: unknown;
   sold_count: number | string;
+  rating_average?: number | string | null;
+  review_count?: number | string;
   created_at: string;
   updated_at: string;
 };
@@ -69,8 +71,8 @@ export function mapPublicProduct(row: PublicCatalogProductRow): Product {
     ...(compareAt !== undefined && Number.isFinite(compareAt) && compareAt > 0
       ? { compareAt }
       : {}),
-    rating: 0,
-    reviews: 0,
+    rating: Number(row.rating_average ?? 0),
+    reviews: Number(row.review_count ?? 0),
     sold: Number(row.sold_count ?? 0),
     images: imageList(row.images),
     tags: productTags(row),
@@ -109,8 +111,8 @@ export function mapPublicVendor(row: PublicCatalogVendorRow): Vendor {
 
 export async function listPublicCatalogProducts(limit = 200): Promise<Product[]> {
   const { data, error } = await supabase.rpc(
-    "list_public_catalog_products" as never,
-    { _limit: limit } as never,
+    "list_public_catalog_products_v2" as never,
+    { _limit: limit, _offset: 0 } as never,
   );
   if (error) throw error;
   return ((data ?? []) as unknown as PublicCatalogProductRow[]).map(mapPublicProduct);
@@ -121,7 +123,8 @@ export type PublicCatalogSearchSort =
   | "price-asc"
   | "price-desc"
   | "sold"
-  | "newest";
+  | "newest"
+  | "rating";
 
 export type PublicCatalogSearchFilters = {
   query?: string;
@@ -130,15 +133,17 @@ export type PublicCatalogSearchFilters = {
   maxPrice?: number;
   canadianOnly?: boolean;
   saleOnly?: boolean;
+  minRating?: number;
   sort?: PublicCatalogSearchSort;
   limit?: number;
+  offset?: number;
 };
 
 export async function searchPublicCatalogProducts(
   filters: PublicCatalogSearchFilters,
 ): Promise<Product[]> {
   const { data, error } = await supabase.rpc(
-    "search_public_catalog_products" as never,
+    "search_public_catalog_products_v2" as never,
     {
       _query: filters.query?.trim() || null,
       _category_slug: filters.categorySlug?.trim() || null,
@@ -148,8 +153,11 @@ export async function searchPublicCatalogProducts(
         typeof filters.maxPrice === "number" ? filters.maxPrice : null,
       _canadian_only: Boolean(filters.canadianOnly),
       _sale_only: Boolean(filters.saleOnly),
+      _min_rating:
+        typeof filters.minRating === "number" ? filters.minRating : null,
       _sort: filters.sort ?? "relevance",
-      _limit: filters.limit ?? 200,
+      _limit: filters.limit ?? 60,
+      _offset: filters.offset ?? 0,
     } as never,
   );
   if (error) throw error;
