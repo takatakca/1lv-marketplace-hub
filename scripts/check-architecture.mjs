@@ -225,6 +225,10 @@ const firstOrderRefundedHistoryMigration = readFileSync(
   join(root, "supabase/migrations/20261002134500_first_order_refunded_history_guard.sql"),
   "utf8",
 );
+const vendorAssetPublicReadScopeMigration = readFileSync(
+  join(root, "supabase/migrations/20261002140000_vendor_asset_public_read_scope.sql"),
+  "utf8",
+);
 const vendorAssetService = readFileSync(
   join(root, "src/services/vendor-assets.ts"),
   "utf8",
@@ -587,7 +591,22 @@ for (const [content, marker, label] of [
   [
     firstOrderRefundedHistoryMigration,
     "SELECT '20261002134500'",
-    "final production schema marker includes fully refunded first-order history",
+    "fully refunded first-order protection retains its historical schema marker",
+  ],
+  [
+    vendorAssetPublicReadScopeMigration,
+    "SELECT '20261002140000'",
+    "final production schema marker includes scoped public vendor asset reads",
+  ],
+  [
+    vendorAssetPublicReadScopeMigration,
+    "public.can_read_vendor_asset(name)",
+    "vendor asset SELECT policy delegates to the scoped read authority",
+  ],
+  [
+    vendorAssetPublicReadScopeMigration,
+    "DROP POLICY IF EXISTS \"vendor-assets public read\"",
+    "legacy bucket-wide anonymous vendor asset reads are removed",
   ],
   [
     firstOrderRefundedHistoryMigration,
@@ -2171,17 +2190,17 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002134500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002140000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002134500"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002140000"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002134500"') ||
-  !firstOrderRefundedHistoryMigration.includes("SELECT '20261002134500'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002140000"') ||
+  !vendorAssetPublicReadScopeMigration.includes("SELECT '20261002140000'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002134500",
+    "production health/migration gates must track schema 20261002140000",
   );
 }
 
@@ -2379,6 +2398,28 @@ if (
 ) {
   violations.push(
     "production deployment must fail closed before SSH unless the exact 1LV database is current and hosted Auth is locked down",
+  );
+}
+
+if (
+  !vendorAssetPublicReadScopeMigration.includes(
+    "CREATE OR REPLACE FUNCTION public.can_read_vendor_asset",
+  ) ||
+  !vendorAssetPublicReadScopeMigration.includes(
+    "v.subscription_status IN ('active', 'trialing')",
+  ) ||
+  !vendorAssetPublicReadScopeMigration.includes(
+    "public.is_takatak_authorized_session()",
+  ) ||
+  !vendorAssetPublicReadScopeMigration.includes(
+    'CREATE POLICY "vendor-assets scoped read"',
+  ) ||
+  !vendorAssetPublicReadScopeMigration.includes(
+    'DROP POLICY IF EXISTS "vendor-assets public read"',
+  )
+) {
+  violations.push(
+    "vendor branding reads must be limited to referenced public assets or authorized owner/admin sessions",
   );
 }
 
