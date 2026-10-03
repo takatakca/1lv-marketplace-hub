@@ -1997,6 +1997,7 @@ if (
 if (
   !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002121500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002121500"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
@@ -2005,6 +2006,21 @@ if (
 ) {
   violations.push(
     "production health/migration gates must track schema 20261002121500",
+  );
+}
+
+if (
+  !deployWorkflow.includes("Verify production database and Auth prerequisite") ||
+  !deployWorkflow.includes("SUPABASE_ACCESS_TOKEN") ||
+  !deployWorkflow.includes("SUPABASE_DB_PASSWORD") ||
+  !deployWorkflow.includes("supabase migration list --linked") ||
+  !deployWorkflow.includes("supabase db push --linked --dry-run") ||
+  !deployWorkflow.includes(
+    "https://api.supabase.com/v1/projects/$EXPECTED_PROJECT_REF/config/auth",
+  )
+) {
+  violations.push(
+    "production deployment must fail closed before SSH unless the exact 1LV database is current and hosted Auth is locked down",
   );
 }
 
