@@ -2100,6 +2100,22 @@ const migrateProductionWorkflow = readFileSync(
 );
 
 if (
+  !ciWorkflow.includes(
+    "supabase db lint --local --schema public --level warning --fail-on warning",
+  ) ||
+  !deployWorkflow.includes(
+    "supabase db lint --local --schema public --level warning --fail-on warning",
+  ) ||
+  !migrateProductionWorkflow.includes(
+    "supabase db lint --local --schema public --level warning --fail-on warning",
+  )
+) {
+  violations.push(
+    "all database validation workflows must fail on PostgreSQL lint warnings",
+  );
+}
+
+if (
   !migrateProductionWorkflow.includes(
     "production migration apply is allowed only from main or the certified 1LV hardening branch",
   ) ||
