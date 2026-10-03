@@ -2080,6 +2080,24 @@ if (
   );
 }
 
+const migrateProductionWorkflow = readFileSync(
+  join(root, ".github/workflows/migrate-production-db.yml"),
+  "utf8",
+);
+
+if (
+  !migrateProductionWorkflow.includes(
+    "production migration apply is allowed only from main or the certified 1LV hardening branch",
+  ) ||
+  !migrateProductionWorkflow.includes(
+    "refs/heads/main|refs/heads/upgrade/persistent-commerce-settings",
+  )
+) {
+  violations.push(
+    "manual production migration apply must be constrained to approved refs",
+  );
+}
+
 if (
   !deployWorkflow.includes("Verify production database and Auth prerequisite") ||
   !deployWorkflow.includes("SUPABASE_ACCESS_TOKEN") ||
