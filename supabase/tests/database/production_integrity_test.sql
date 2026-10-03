@@ -2,12 +2,62 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(171);
+select plan(173);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002150000',
+  '20261002151500',
   'production schema marker is current'
+);
+
+select ok(
+  to_regprocedure(
+    'public.search_public_catalog_products(text,text,numeric,numeric,boolean,boolean,text,integer)'
+  ) is not null
+  and has_function_privilege(
+    'anon',
+    'public.search_public_catalog_products(text,text,numeric,numeric,boolean,boolean,text,integer)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.search_public_catalog_products(text,text,numeric,numeric,boolean,boolean,text,integer)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.search_public_catalog_products(text,text,numeric,numeric,boolean,boolean,text,integer)',
+    'EXECUTE'
+  ),
+  'server-scoped public catalog search RPC is available to storefront callers'
+);
+
+select ok(
+  position(
+    'strpos('
+    in pg_get_functiondef(
+      'public.search_public_catalog_products(text,text,numeric,numeric,boolean,boolean,text,integer)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'v.subscription_status IN (''active'', ''trialing'')'
+    in pg_get_functiondef(
+      'public.search_public_catalog_products(text,text,numeric,numeric,boolean,boolean,text,integer)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'NOT p.track_inventory OR p.inventory_quantity > 0'
+    in pg_get_functiondef(
+      'public.search_public_catalog_products(text,text,numeric,numeric,boolean,boolean,text,integer)'::regprocedure
+    )
+  ) > 0
+  and position(
+    '''refunded''::public.payment_status'
+    in pg_get_functiondef(
+      'public.search_public_catalog_products(text,text,numeric,numeric,boolean,boolean,text,integer)'::regprocedure
+    )
+  ) = 0,
+  'live search filters the eligible truthful catalog before applying its result limit'
 );
 
 select ok(
