@@ -43,6 +43,18 @@ const REQUIRED_RUNTIME_ENV = [
   "INVENTORY_MAINTENANCE_CRON_SECRET",
 ] as const;
 
+const MIN_32_CHAR_SECRET_ENV = [
+  "CHECKOUT_GUEST_TOKEN_SECRET",
+  "TAKATAK_DRAIN_CRON_SECRET",
+  "INVENTORY_MAINTENANCE_CRON_SECRET",
+] as const;
+
+function strongRuntimeSecretsConfigured() {
+  return MIN_32_CHAR_SECRET_ENV.every(
+    (name) => (process.env[name]?.trim().length ?? 0) >= 32,
+  );
+}
+
 type DatabaseHealth = "ready" | "skipped" | "unavailable" | "mismatch";
 
 async function checkDatabaseSchema(): Promise<{
@@ -125,11 +137,21 @@ export const Route = createFileRoute("/api/public/health")({
           );
         }
 
+        const strongRuntimeSecretsReady =
+          strongRuntimeSecretsConfigured();
+
+        if (missing.length === 0 && !strongRuntimeSecretsReady) {
+          console.error(
+            "[1lv.ca] One or more runtime signing/cron secrets are shorter than 32 characters.",
+          );
+        }
+
         const configurationReady =
           missing.length === 0 &&
           masterIntegrationReady &&
           supabaseTargetReady &&
-          releaseRevisionReady;
+          releaseRevisionReady &&
+          strongRuntimeSecretsReady;
 
         const database = configurationReady
           ? await checkDatabaseSchema()
