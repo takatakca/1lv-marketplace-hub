@@ -2,11 +2,11 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(166);
+select plan(168);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002141500',
+  '20261002143000',
   'production schema marker is current'
 );
 
@@ -213,6 +213,50 @@ select ok(
     )
   ) > 0,
   'vendor storefront catalog is scoped, subscription-gated and stock-aware'
+);
+
+select ok(
+  to_regprocedure(
+    'public.list_public_catalog_products_for_category(text,integer)'
+  ) is not null
+  and has_function_privilege(
+    'anon',
+    'public.list_public_catalog_products_for_category(text,integer)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.list_public_catalog_products_for_category(text,integer)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.list_public_catalog_products_for_category(text,integer)',
+    'EXECUTE'
+  ),
+  'category-scoped public catalog RPC is available to storefront and server callers'
+);
+
+select ok(
+  position(
+    'p.category_slug = btrim(COALESCE(_category_slug, ''''))'
+    in pg_get_functiondef(
+      'public.list_public_catalog_products_for_category(text,integer)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'v.subscription_status IN (''active'', ''trialing'')'
+    in pg_get_functiondef(
+      'public.list_public_catalog_products_for_category(text,integer)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'NOT p.track_inventory OR p.inventory_quantity > 0'
+    in pg_get_functiondef(
+      'public.list_public_catalog_products_for_category(text,integer)'::regprocedure
+    )
+  ) > 0,
+  'related-product catalog is category-scoped, subscription-gated and stock-aware'
 );
 
 select ok(
