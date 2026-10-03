@@ -213,6 +213,10 @@ const vendorAssetWriteAuthorityMigration = readFileSync(
   join(root, "supabase/migrations/20261002130000_vendor_asset_write_authority.sql"),
   "utf8",
 );
+const vendorAssetReferenceAuthorityMigration = readFileSync(
+  join(root, "supabase/migrations/20261002131500_vendor_asset_reference_authority.sql"),
+  "utf8",
+);
 const vendorAssetService = readFileSync(
   join(root, "src/services/vendor-assets.ts"),
   "utf8",
@@ -552,7 +556,22 @@ for (const [content, marker, label] of [
   [
     vendorAssetWriteAuthorityMigration,
     "SELECT '20261002130000'",
-    "final production schema marker includes vendor asset write authority",
+    "vendor asset write authority retains its historical schema marker",
+  ],
+  [
+    vendorAssetReferenceAuthorityMigration,
+    "SELECT '20261002131500'",
+    "final production schema marker includes vendor branding reference authority",
+  ],
+  [
+    vendorAssetReferenceAuthorityMigration,
+    "Vendor logo asset ownership mismatch",
+    "vendor logo references cannot impersonate another vendor asset",
+  ],
+  [
+    vendorAssetReferenceAuthorityMigration,
+    "Vendor banner asset ownership mismatch",
+    "vendor banner references cannot impersonate another vendor asset",
   ],
   [
     vendorAssetWriteAuthorityMigration,
@@ -2116,17 +2135,36 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002130000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002131500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002130000"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002131500"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002130000"') ||
-  !vendorAssetWriteAuthorityMigration.includes("SELECT '20261002130000'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002131500"') ||
+  !vendorAssetWriteAuthorityMigration.includes("SELECT '20261002131500'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002130000",
+    "production health/migration gates must track schema 20261002131500",
+  );
+}
+
+if (
+  !vendorAssetReferenceAuthorityMigration.includes(
+    "storage.foldername(NEW.logo_url)",
+  ) ||
+  !vendorAssetReferenceAuthorityMigration.includes(
+    "storage.foldername(NEW.banner_url)",
+  ) ||
+  !vendorAssetReferenceAuthorityMigration.includes(
+    "Vendor logo asset ownership mismatch",
+  ) ||
+  !vendorAssetReferenceAuthorityMigration.includes(
+    "Vendor banner asset ownership mismatch",
+  )
+) {
+  violations.push(
+    "vendor storefront branding references must stay owner-scoped and canonical",
   );
 }
 
