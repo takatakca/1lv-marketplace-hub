@@ -2,12 +2,177 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(194);
+select plan(203);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002171500',
+  '20261002173000',
   'production schema marker is current'
+);
+
+select ok(
+  to_regprocedure('public.enforce_supplier_integration_authority()') is not null
+  and to_regprocedure('public.enforce_product_import_job_authority()') is not null
+  and to_regprocedure('public.enforce_product_import_row_authority()') is not null,
+  'supplier/import authority triggers exist'
+);
+
+select ok(
+  not has_column_privilege(
+    'authenticated',
+    'public.supplier_integrations',
+    'credentials_encrypted',
+    'SELECT'
+  )
+  and not has_column_privilege(
+    'authenticated',
+    'public.supplier_integrations',
+    'credentials_encrypted',
+    'INSERT'
+  )
+  and not has_column_privilege(
+    'authenticated',
+    'public.supplier_integrations',
+    'credentials_encrypted',
+    'UPDATE'
+  ),
+  'browser sessions cannot read or write encrypted supplier credentials'
+);
+
+select ok(
+  has_column_privilege(
+    'authenticated',
+    'public.supplier_integrations',
+    'provider_name',
+    'SELECT'
+  )
+  and has_column_privilege(
+    'authenticated',
+    'public.supplier_integrations',
+    'settings',
+    'UPDATE'
+  ),
+  'browser retains only the safe supplier-integration columns it needs'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'supplier_integrations'
+      and policyname = 'supplier_integrations owner insert'
+      and coalesce(with_check, '') like '%owns_vendor%'
+  )
+  and exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'product_import_jobs'
+      and policyname = 'import_jobs owner insert'
+      and coalesce(with_check, '') like '%owns_vendor%'
+  ),
+  'supplier integrations and import jobs enforce vendor ownership in RLS'
+);
+
+select ok(
+  not has_column_privilege(
+    'authenticated',
+    'public.product_import_jobs',
+    'owner_id',
+    'UPDATE'
+  )
+  and not has_column_privilege(
+    'authenticated',
+    'public.product_import_jobs',
+    'vendor_id',
+    'UPDATE'
+  )
+  and has_column_privilege(
+    'authenticated',
+    'public.product_import_jobs',
+    'status',
+    'UPDATE'
+  ),
+  'browser import jobs cannot reassign identity/scope after creation'
+);
+
+select ok(
+  not has_table_privilege(
+    'authenticated',
+    'public.product_import_job_rows',
+    'UPDATE'
+  )
+  and not has_table_privilege(
+    'authenticated',
+    'public.product_import_job_rows',
+    'DELETE'
+  ),
+  'browser import rows are append-only'
+);
+
+select ok(
+  position(
+    'Authorized TAKATAK session required'
+    in pg_get_functiondef(
+      'public.enforce_supplier_integration_authority()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'Supplier credentials are server-authoritative'
+    in pg_get_functiondef(
+      'public.enforce_supplier_integration_authority()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'Supplier integration vendor does not belong to owner'
+    in pg_get_functiondef(
+      'public.enforce_supplier_integration_authority()'::regprocedure
+    )
+  ) > 0,
+  'supplier integration trigger enforces TAKATAK session, credential and vendor authority'
+);
+
+select ok(
+  position(
+    'Import job identity fields are immutable'
+    in pg_get_functiondef(
+      'public.enforce_product_import_job_authority()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'Import integration does not belong to job owner'
+    in pg_get_functiondef(
+      'public.enforce_product_import_job_authority()'::regprocedure
+    )
+  ) > 0
+  and position(
+    'Import integration vendor does not match job vendor'
+    in pg_get_functiondef(
+      'public.enforce_product_import_job_authority()'::regprocedure
+    )
+  ) > 0,
+  'import jobs keep immutable tenant identity and integration scope'
+);
+
+select ok(
+  position(
+    'Import row product does not belong to job vendor'
+    in pg_get_functiondef(
+      'public.enforce_product_import_row_authority()'::regprocedure
+    )
+  ) > 0,
+  'import rows cannot link products across vendor boundaries'
+);
+
+select ok(
+  position(
+    'Supplier connection status is server-authoritative'
+    in pg_get_functiondef(
+      'public.enforce_supplier_integration_authority()'::regprocedure
+    )
+  ) > 0,
+  'vendors cannot self-assert active/error supplier connection state'
 );
 
 select ok(
