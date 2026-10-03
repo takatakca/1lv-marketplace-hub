@@ -2,12 +2,66 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(215);
+select plan(219);
 
 select is(
   public.get_1lv_schema_version(),
-  '20261002181500',
+  '20261002183000',
   'production schema marker is current'
+);
+
+select ok(
+  to_regprocedure(
+    'public.import_product_draft_row(uuid,integer,jsonb,jsonb)'
+  ) is not null,
+  'atomic supplier import row RPC exists'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.import_product_draft_row(uuid,integer,jsonb,jsonb)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.import_product_draft_row(uuid,integer,jsonb,jsonb)',
+    'EXECUTE'
+  ),
+  'supplier import row RPC is authenticated-only'
+);
+
+select ok(
+  position(
+    'Authorized TAKATAK session required'
+    in pg_get_functiondef(
+      'public.import_product_draft_row(uuid,integer,jsonb,jsonb)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'Import job does not belong to current vendor owner'
+    in pg_get_functiondef(
+      'public.import_product_draft_row(uuid,integer,jsonb,jsonb)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'INSERT INTO public.products'
+    in pg_get_functiondef(
+      'public.import_product_draft_row(uuid,integer,jsonb,jsonb)'::regprocedure
+    )
+  ) > 0
+  and position(
+    'INSERT INTO public.product_import_job_rows'
+    in pg_get_functiondef(
+      'public.import_product_draft_row(uuid,integer,jsonb,jsonb)'::regprocedure
+    )
+  ) > 0,
+  'atomic supplier import enforces TAKATAK tenant authority and writes product plus audit row'
+);
+
+select ok(
+  to_regclass('public.product_import_job_rows_job_row_unique') is not null,
+  'supplier import source row index is unique per import job'
 );
 
 select ok(
