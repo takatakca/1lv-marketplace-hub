@@ -201,6 +201,10 @@ const firstOrderEmailHistoryMigration = readFileSync(
   join(root, "supabase/migrations/20261002121500_first_order_email_history_guard.sql"),
   "utf8",
 );
+const databaseLintCleanupMigration = readFileSync(
+  join(root, "supabase/migrations/20261002123000_database_lint_cleanup.sql"),
+  "utf8",
+);
 const marketplaceSettingsMigration = readFileSync(
   join(root, "supabase/migrations/20260930150630_persistent_marketplace_settings.sql"),
   "utf8",
@@ -517,7 +521,22 @@ for (const [content, marker, label] of [
   [
     firstOrderEmailHistoryMigration,
     "SELECT '20261002121500'",
-    "final production schema marker includes guest-to-account first-order protection",
+    "guest-to-account first-order protection retains its historical schema marker",
+  ],
+  [
+    databaseLintCleanupMigration,
+    "SELECT '20261002123000'",
+    "final production schema marker includes database lint cleanup",
+  ],
+  [
+    databaseLintCleanupMigration,
+    "ALTER FUNCTION public.normalize_canadian_checkout_address(jsonb, text)",
+    "checkout address normalization volatility is explicitly corrected",
+  ],
+  [
+    databaseLintCleanupMigration,
+    "SELECT checkout_request_hash",
+    "locked checkout implementation no longer selects an unused order id",
   ],
   [
     firstOrderEmailHistoryMigration,
@@ -2012,17 +2031,29 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002121500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002123000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002121500"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002123000"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002121500"') ||
-  !firstOrderEmailHistoryMigration.includes("SELECT '20261002121500'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002123000"') ||
+  !databaseLintCleanupMigration.includes("SELECT '20261002123000'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002121500",
+    "production health/migration gates must track schema 20261002123000",
+  );
+}
+
+if (
+  !databaseLintCleanupMigration.includes(
+    "ALTER FUNCTION public.normalize_canadian_checkout_address(jsonb, text)",
+  ) ||
+  !databaseLintCleanupMigration.includes("STABLE;") ||
+  databaseLintCleanupMigration.includes("v_existing_order_id")
+) {
+  violations.push(
+    "database lint cleanup must keep checkout normalization STABLE and remove the unused existing-order variable",
   );
 }
 
