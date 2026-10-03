@@ -131,7 +131,9 @@ export async function updateVendorOrder(
 export async function listItemsForVendorOrder(orderId: string, vendorId: string) {
   const { data, error } = await supabase
     .from("order_items")
-    .select("*")
+    .select(
+      "id, order_id, product_id, vendor_id, title, quantity, unit_price, status, tracking_number, carrier, created_at, updated_at",
+    )
     .eq("order_id", orderId)
     .eq("vendor_id", vendorId);
   if (error) throw error;
