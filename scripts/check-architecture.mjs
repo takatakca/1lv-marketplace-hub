@@ -2526,19 +2526,38 @@ if (
     "updated_at < now() - interval '15 minutes'",
   ) ||
   !takatakOutboxAtomicClaimMigration.includes(
-    "REVOKE ALL ON FUNCTION public.claim_takatak_outbox(integer, integer)",
+    "ADD COLUMN IF NOT EXISTS claim_token uuid",
   ) ||
   !takatakOutboxAtomicClaimMigration.includes(
-    "TO service_role",
-  )
+    "claim_token = gen_random_uuid()",
+  ) ||
+  !takatakOutboxAtomicClaimMigration.includes(
+    "attempt_count = o.attempt_count + 1",
+  ) ||
+  !takatakOutboxAtomicClaimMigration.includes(
+    "attempt_count >= v_max_attempts",
+  ) ||
+  !takatakOutboxAtomicClaimMigration.includes(
+    "claim_token = NULL",
+  ) ||
+  !takatakOutboxAtomicClaimMigration.includes(
+    "REVOKE ALL ON FUNCTION public.claim_takatak_outbox(integer, integer)",
+  ) ||
+  !takatakOutboxAtomicClaimMigration.includes("TO service_role")
 ) {
   violations.push(
-    "TAKATAK outbox claim must remain atomic, stale-recoverable and service-role only",
+    "TAKATAK outbox claim must use atomic SKIP LOCKED leases, unique claim tokens, bounded attempts, stale recovery and service-role-only execution",
   );
 }
 
 if (
   !masterOutbox.includes('"claim_takatak_outbox"') ||
+  !masterOutbox.includes('claim_token: string;') ||
+  !masterOutbox.includes('.eq("claim_token", row.claim_token)') ||
+  !masterOutbox.includes("claimStillCurrent") ||
+  !masterOutbox.includes("transitionClaim") ||
+  !masterOutbox.includes("const attempt = row.attempt_count;") ||
+  masterOutbox.includes("row.attempt_count + 1") ||
   masterOutbox.includes('const staleBefore = new Date(') ||
   masterOutbox.includes('.eq("status", "pending")\n    .lt("attempt_count"') ||
   masterOutbox.includes(
@@ -2546,7 +2565,7 @@ if (
   )
 ) {
   violations.push(
-    "TAKATAK drain must use the atomic PostgreSQL claim instead of client-side select/update claiming",
+    "TAKATAK drain must use token-fenced PostgreSQL claims and must never let a stale worker overwrite a reclaimed event",
   );
 }
 
