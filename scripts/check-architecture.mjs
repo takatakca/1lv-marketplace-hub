@@ -250,7 +250,19 @@ const publicCatalogSearchMigration = readFileSync(
   "utf8",
 );
 const taxableCheckoutDeliveryMigration = readFileSync(
-  join(root, "supabase/migrations/20261002153000_taxable_checkout_delivery.sql"),
+  join(root, "supabase/migrations/20261002154500_taxable_checkout_delivery.sql"),
+  "utf8",
+);
+const publicCatalogNewestSortMigration = readFileSync(
+  join(root, "supabase/migrations/20261002160000_public_catalog_newest_sort.sql"),
+  "utf8",
+);
+const trendingRoute = readFileSync(
+  join(root, "src/routes/trending.tsx"),
+  "utf8",
+);
+const newArrivalsRoute = readFileSync(
+  join(root, "src/routes/new-arrivals.tsx"),
   "utf8",
 );
 const searchRoute = readFileSync(
@@ -673,8 +685,13 @@ for (const [content, marker, label] of [
   ],
   [
     taxableCheckoutDeliveryMigration,
-    "SELECT '20261002153000'",
-    "final production schema marker includes taxable customer-paid delivery",
+    "SELECT '20261002154500'",
+    "taxable customer-paid delivery retains its historical schema marker",
+  ],
+  [
+    publicCatalogNewestSortMigration,
+    "SELECT '20261002160000'",
+    "final production schema marker includes server-side newest ranking",
   ],
   [
     publicCategoryCatalogScopeMigration,
@@ -2357,17 +2374,17 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002153000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002160000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002153000"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002160000"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002153000"') ||
-  !taxableCheckoutDeliveryMigration.includes("SELECT '20261002153000'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002160000"') ||
+  !publicCatalogNewestSortMigration.includes("SELECT '20261002160000'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002153000",
+    "production health/migration gates must track schema 20261002160000",
   );
 }
 
@@ -2386,6 +2403,21 @@ if (
 ) {
   violations.push(
     "new checkout tax must include net delivery and must never rewrite an already-authorized or reused checkout",
+  );
+}
+
+if (
+  !publicCatalogNewestSortMigration.includes("'newest'") ||
+  !publicCatalogNewestSortMigration.includes(
+    "CASE WHEN e.sort_mode = 'newest' THEN e.created_at END DESC",
+  ) ||
+  !publicCatalogService.includes('| "newest";') ||
+  !trendingRoute.includes('sort: "sold"') ||
+  !trendingRoute.includes('sort: "newest"') ||
+  !newArrivalsRoute.includes('sort: "newest"')
+) {
+  violations.push(
+    "trending and new-arrival live rankings must be computed in PostgreSQL before limits",
   );
 }
 
