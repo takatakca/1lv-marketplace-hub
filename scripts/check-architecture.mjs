@@ -221,6 +221,10 @@ const publicCatalogSubscriptionGateMigration = readFileSync(
   join(root, "supabase/migrations/20261002133000_public_catalog_subscription_gate.sql"),
   "utf8",
 );
+const firstOrderRefundedHistoryMigration = readFileSync(
+  join(root, "supabase/migrations/20261002134500_first_order_refunded_history_guard.sql"),
+  "utf8",
+);
 const vendorAssetService = readFileSync(
   join(root, "src/services/vendor-assets.ts"),
   "utf8",
@@ -578,7 +582,17 @@ for (const [content, marker, label] of [
   [
     publicCatalogSubscriptionGateMigration,
     "SELECT '20261002133000'",
-    "final production schema marker includes public catalog subscription eligibility",
+    "public catalog subscription eligibility retains its historical schema marker",
+  ],
+  [
+    firstOrderRefundedHistoryMigration,
+    "SELECT '20261002134500'",
+    "final production schema marker includes fully refunded first-order history",
+  ],
+  [
+    firstOrderRefundedHistoryMigration,
+    "'refunded'",
+    "fully refunded orders remain prior paid history for first-order promotion eligibility",
   ],
   [
     publicCatalogSubscriptionGateMigration,
@@ -2157,17 +2171,17 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002133000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002134500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002133000"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002134500"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002133000"') ||
-  !publicCatalogSubscriptionGateMigration.includes("SELECT '20261002133000'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002134500"') ||
+  !firstOrderRefundedHistoryMigration.includes("SELECT '20261002134500'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002133000",
+    "production health/migration gates must track schema 20261002134500",
   );
 }
 
@@ -2353,6 +2367,20 @@ if (
 ) {
   violations.push(
     "production deployment must fail closed before SSH unless the exact 1LV database is current and hosted Auth is locked down",
+  );
+}
+
+if (
+  !firstOrderRefundedHistoryMigration.includes(
+    "'partially_refunded'",
+  ) ||
+  !firstOrderRefundedHistoryMigration.includes("'refunded'") ||
+  !firstOrderRefundedHistoryMigration.includes(
+    "Promotion is available on the first paid order only",
+  )
+) {
+  violations.push(
+    "first-order promotions must treat fully refunded orders as prior paid history",
   );
 }
 
