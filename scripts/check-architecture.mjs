@@ -281,6 +281,10 @@ const supplierImportAuthorityMigration = readFileSync(
   join(root, "supabase/migrations/20261002173000_supplier_import_authority.sql"),
   "utf8",
 );
+const payoutSettingsAdminScopeMigration = readFileSync(
+  join(root, "supabase/migrations/20261002174500_payout_settings_admin_scope.sql"),
+  "utf8",
+);
 const publicCategoryService = readFileSync(
   join(root, "src/services/public-categories.ts"),
   "utf8",
@@ -765,7 +769,17 @@ for (const [content, marker, label] of [
   [
     supplierImportAuthorityMigration,
     "SELECT '20261002173000'",
-    "final production schema marker includes supplier/import authority",
+    "supplier/import authority retains its historical schema marker",
+  ],
+  [
+    payoutSettingsAdminScopeMigration,
+    "SELECT '20261002174500'",
+    "final production schema marker includes payout-settings admin scope",
+  ],
+  [
+    payoutSettingsAdminScopeMigration,
+    'CREATE POLICY "admins read payout settings"',
+    "payout scheduler settings stay admin-only",
   ],
   [
     supplierImportAuthorityMigration,
@@ -2473,17 +2487,33 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002173000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002174500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002173000"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002174500"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002173000"') ||
-  !supplierImportAuthorityMigration.includes("SELECT '20261002173000'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002174500"') ||
+  !payoutSettingsAdminScopeMigration.includes("SELECT '20261002174500'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002173000",
+    "production health/migration gates must track schema 20261002174500",
+  );
+}
+
+if (
+  !payoutSettingsAdminScopeMigration.includes(
+    'DROP POLICY IF EXISTS "authenticated read payout settings"',
+  ) ||
+  !payoutSettingsAdminScopeMigration.includes(
+    'CREATE POLICY "admins read payout settings"',
+  ) ||
+  !payoutSettingsAdminScopeMigration.includes(
+    "public.has_role(auth.uid(), 'admin'::public.app_role)",
+  )
+) {
+  violations.push(
+    "payout scheduler settings must remain readable only by marketplace admins",
   );
 }
 
