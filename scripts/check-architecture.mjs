@@ -361,6 +361,13 @@ const vendorBulkCatalogOpsMigration = readFileSync(
   ),
   "utf8",
 );
+const vendorPerformanceAnalyticsMigration = readFileSync(
+  join(
+    root,
+    "supabase/migrations/20261003060000_vendor_performance_analytics.sql",
+  ),
+  "utf8",
+);
 const payoutService = readFileSync(
   join(root, "src/services/payouts.ts"),
   "utf8",
@@ -935,7 +942,17 @@ for (const [content, marker, label] of [
   [
     vendorBulkCatalogOpsMigration,
     "SELECT '20261003052000'",
-    "final production schema marker includes vendor bulk catalog operations",
+    "vendor bulk catalog operations retain their historical schema marker",
+  ],
+  [
+    vendorPerformanceAnalyticsMigration,
+    "SELECT '20261003060000'",
+    "final production schema marker includes vendor performance analytics",
+  ],
+  [
+    vendorPerformanceAnalyticsMigration,
+    "CREATE OR REPLACE FUNCTION public.get_vendor_performance_dashboard",
+    "vendor performance analytics are computed through a protected database projection",
   ],
   [
     vendorBulkCatalogOpsMigration,
@@ -2833,19 +2850,19 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261003052000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261003060000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261003052000"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261003060000"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261003052000"') ||
-  !vendorBulkCatalogOpsMigration.includes(
-    "SELECT '20261003052000'",
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261003060000"') ||
+  !vendorPerformanceAnalyticsMigration.includes(
+    "SELECT '20261003060000'",
   )
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261003052000",
+    "production health/migration gates must track schema 20261003060000",
   );
 }
 
