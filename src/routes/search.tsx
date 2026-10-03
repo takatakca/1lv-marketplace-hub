@@ -73,13 +73,10 @@ function SearchPage() {
   const [saleOnly, setSaleOnly] = useState(sp.sale);
   const [category, setCategory] = useState(smartCategory);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const effectiveSort: Sort =
-    !demo && sort === "rating" ? "relevance" : sort;
+  const effectiveSort: Sort = sort;
   const quickChips = demo
     ? QUICK_CHIPS
-    : QUICK_CHIPS.filter(
-        (chip) => chip.label !== "Free shipping" && chip.label !== "Top rated",
-      );
+    : QUICK_CHIPS.filter((chip) => chip.label !== "Free shipping");
 
   // Re-sync when the URL changes (new search submitted from the header).
   useEffect(() => {
@@ -103,6 +100,7 @@ function SearchPage() {
       maxPrice,
       caOnly,
       saleOnly,
+      minRating,
       effectiveSort,
     ],
     queryFn: () =>
@@ -113,8 +111,9 @@ function SearchPage() {
         maxPrice,
         canadianOnly: caOnly,
         saleOnly,
-        sort: effectiveSort === "rating" ? "relevance" : effectiveSort,
-        limit: 200,
+        minRating,
+        sort: effectiveSort,
+        limit: 60,
       }),
     enabled: !demo && !catalogLoading,
     staleTime: 30_000,
@@ -194,7 +193,7 @@ function SearchPage() {
           : null,
     demo && sp.freeShipping ? "with free shipping" : null,
     sp.canadian ? "from Canadian sellers" : null,
-    demo && sp.rating ? `rated ${sp.rating}+ stars` : null,
+    sp.rating ? `rated ${sp.rating}+ verified stars` : null,
     sp.sale ? "on sale" : null,
   ].filter(Boolean);
 
@@ -204,7 +203,7 @@ function SearchPage() {
     (demo && sp.freeShipping) ||
     sp.canadian ||
     sp.sale ||
-    (demo && sp.rating > 0) ||
+    sp.rating > 0 ||
     !!smartCategory;
 
   const clearSmart = () =>
@@ -255,25 +254,23 @@ function SearchPage() {
         />
       </div>
       {demo && (
-        <>
-          <div className="space-y-2">
-            <p className="font-semibold text-navy">Shipping</p>
-            <label className="flex items-center gap-2 text-xs">
-              <input type="checkbox" checked={freeShip} onChange={(e) => setFreeShip(e.target.checked)} />
-              Free / fast shipping
-            </label>
-          </div>
-          <div className="space-y-2">
-            <p className="font-semibold text-navy">Rating</p>
-            {[0, 3, 4, 4.5].map((r) => (
-              <label key={r} className="flex items-center gap-2 text-xs">
-                <input type="radio" name="rating" checked={minRating === r} onChange={() => setMinRating(r)} />
-                {r === 0 ? "Any" : `${r}+ stars`}
-              </label>
-            ))}
-          </div>
-        </>
+        <div className="space-y-2">
+          <p className="font-semibold text-navy">Shipping</p>
+          <label className="flex items-center gap-2 text-xs">
+            <input type="checkbox" checked={freeShip} onChange={(e) => setFreeShip(e.target.checked)} />
+            Free / fast shipping
+          </label>
+        </div>
       )}
+      <div className="space-y-2">
+        <p className="font-semibold text-navy">Verified rating</p>
+        {[0, 3, 4, 4.5].map((r) => (
+          <label key={r} className="flex items-center gap-2 text-xs">
+            <input type="radio" name="rating" checked={minRating === r} onChange={() => setMinRating(r)} />
+            {r === 0 ? "Any" : `${r}+ stars`}
+          </label>
+        ))}
+      </div>
       <div className="space-y-2">
         <p className="font-semibold text-navy">Vendor</p>
         <label className="flex items-center gap-2 text-xs">
@@ -344,7 +341,7 @@ function SearchPage() {
                 <option value="relevance">Relevance</option>
                 <option value="price-asc">Price: Low to High</option>
                 <option value="price-desc">Price: High to Low</option>
-                {demo && <option value="rating">Top rated</option>}
+                <option value="rating">Top rated</option>
                 <option value="sold">Best sellers</option>
               </select>
             </label>
