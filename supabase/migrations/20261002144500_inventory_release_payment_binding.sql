@@ -95,6 +95,9 @@ $$;
 REVOKE ALL ON FUNCTION public.release_order_inventory(uuid)
 FROM PUBLIC, anon, authenticated, service_role;
 
+REVOKE ALL ON FUNCTION public.release_expired_inventory_reservations(integer)
+FROM PUBLIC, anon, authenticated, service_role;
+
 REVOKE ALL ON FUNCTION public.release_order_inventory(uuid, text)
 FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.release_order_inventory(uuid, text)
