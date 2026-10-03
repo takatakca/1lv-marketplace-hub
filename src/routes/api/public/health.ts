@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { takatakConfigured } from "@/lib/takatak/client.server";
 
-const EXPECTED_SCHEMA_VERSION = "20261003020000";
+const EXPECTED_SCHEMA_VERSION = "20261003024500";
 const EXPECTED_SUPABASE_PROJECT_REF = "odoybkshqszucvoxzjyz";
 const EXPECTED_SUPABASE_HOST =
   `${EXPECTED_SUPABASE_PROJECT_REF}.supabase.co`;
