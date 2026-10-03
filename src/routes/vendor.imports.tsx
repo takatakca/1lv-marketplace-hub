@@ -44,8 +44,17 @@ type ParseResult = {
 function validateRow(r: Row): string[] {
   const errs: string[] = [];
   if (!r.title) errs.push("missing title");
-  if (!r.price || isNaN(Number(r.price)) || Number(r.price) < 0) errs.push("invalid price");
-  if (r.inventory_quantity && isNaN(Number(r.inventory_quantity))) errs.push("invalid inventory");
+
+  if (!/^[0-9]{1,8}(?:\.[0-9]{1,2})?$/.test(r.price ?? "")) {
+    errs.push("invalid price");
+  }
+
+  if (!/^[0-9]{1,10}$/.test(r.inventory_quantity ?? "")) {
+    errs.push("invalid inventory");
+  } else if (Number(r.inventory_quantity) > 2_147_483_647) {
+    errs.push("inventory out of range");
+  }
+
   return errs;
 }
 
