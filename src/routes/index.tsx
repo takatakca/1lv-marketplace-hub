@@ -8,10 +8,11 @@ import { ProductImage } from "@/components/ProductImage";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { CouponStrip } from "@/components/CouponStrip";
 import { RecentlyViewed } from "@/components/RecentlyViewed";
-import { categories, formatCAD } from "@/lib/data";
+import { categories as demoCategoryMeta, formatCAD } from "@/lib/data";
 import { usePublicCatalog } from "@/hooks/use-public-catalog";
 import { FREE_SHIPPING_THRESHOLD_CAD } from "@/lib/canada-commerce";
 import { usePublicMarketplaceSettings } from "@/hooks/use-marketplace-settings";
+import { usePublicCategories } from "@/hooks/use-public-categories";
 import { listPublicCatalogProductsForVendor, searchPublicCatalogProducts } from "@/services/public-catalog";
 
 export const Route = createFileRoute("/")({
@@ -35,8 +36,21 @@ export const Route = createFileRoute("/")({
 function Home() {
   const { settings } = usePublicMarketplaceSettings();
   const { products, vendors, demo, loading, error } = usePublicCatalog();
+  const {
+    categories: publicCategories,
+    loading: categoriesLoading,
+    error: categoriesError,
+  } = usePublicCategories();
   const freeShippingThreshold =
     settings?.free_shipping_threshold ?? FREE_SHIPPING_THRESHOLD_CAD;
+
+  const rootPublicCategories = publicCategories.filter(
+    (category) => category.parent_slug === null,
+  );
+  const categoryRail =
+    rootPublicCategories.length > 0
+      ? rootPublicCategories
+      : publicCategories;
 
   const homeDealsQuery = useQuery({
     queryKey: ["public-marketplace-home", "deals"],
@@ -181,12 +195,12 @@ function Home() {
 
   return (
     <AppLayout>
-      {(loading || homeScopedLoading) && (
+      {(loading || categoriesLoading || homeScopedLoading) && (
         <div className="border-b border-border bg-muted/40 px-4 py-2 text-center text-xs text-muted-foreground">
           Loading the live 1LV.CA marketplace…
         </div>
       )}
-      {!loading && (error || homeScopedError) && (
+      {!loading && (error || categoriesError || homeScopedError) && (
         <div className="border-b border-destructive/20 bg-destructive/5 px-4 py-2 text-center text-xs text-destructive">
           Live catalog unavailable. {demo ? "Showing authorized preview data." : "Please try again shortly."}
         </div>
@@ -276,19 +290,26 @@ function Home() {
       <section className="border-b border-border bg-background">
         <div className="mx-auto max-w-7xl px-2 py-4">
           <div className="scrollbar-hide flex gap-1 overflow-x-auto">
-            {categories.map((c) => (
-              <Link
-                key={c.slug}
-                to="/category/$slug"
-                params={{ slug: c.slug }}
-                className="group flex min-w-[76px] flex-col items-center gap-1.5 rounded-lg px-2 py-1.5 text-center transition hover:bg-muted"
-              >
-                <div className="grid h-12 w-12 place-items-center rounded-full bg-gradient-to-br from-electric/12 to-deal/12 text-xl transition group-hover:shadow-merch">
-                  {c.emoji}
-                </div>
-                <span className="text-[11px] font-medium leading-tight text-navy group-hover:text-electric">{c.name}</span>
-              </Link>
-            ))}
+            {categoryRail.map((category) => {
+              const meta = demoCategoryMeta.find(
+                (item) => item.slug === category.slug,
+              );
+              return (
+                <Link
+                  key={category.slug}
+                  to="/category/$slug"
+                  params={{ slug: category.slug }}
+                  className="group flex min-w-[76px] flex-col items-center gap-1.5 rounded-lg px-2 py-1.5 text-center transition hover:bg-muted"
+                >
+                  <div className="grid h-12 w-12 place-items-center rounded-full bg-gradient-to-br from-electric/12 to-deal/12 text-xl transition group-hover:shadow-merch">
+                    {meta?.emoji ?? "📦"}
+                  </div>
+                  <span className="text-[11px] font-medium leading-tight text-navy group-hover:text-electric">
+                    {category.name_en}
+                  </span>
+                </Link>
+              );
+            })}
           </div>
         </div>
       </section>
