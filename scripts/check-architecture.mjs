@@ -277,6 +277,10 @@ const retainedSalesIndexesMigration = readFileSync(
   join(root, "supabase/migrations/20261002171500_retained_sales_indexes.sql"),
   "utf8",
 );
+const supplierImportAuthorityMigration = readFileSync(
+  join(root, "supabase/migrations/20261002173000_supplier_import_authority.sql"),
+  "utf8",
+);
 const publicCategoryService = readFileSync(
   join(root, "src/services/public-categories.ts"),
   "utf8",
@@ -756,7 +760,37 @@ for (const [content, marker, label] of [
   [
     retainedSalesIndexesMigration,
     "SELECT '20261002171500'",
-    "final production schema marker includes retained-sales indexes",
+    "retained-sales indexes retain their historical schema marker",
+  ],
+  [
+    supplierImportAuthorityMigration,
+    "SELECT '20261002173000'",
+    "final production schema marker includes supplier/import authority",
+  ],
+  [
+    supplierImportAuthorityMigration,
+    "REVOKE SELECT, INSERT, UPDATE ON TABLE public.supplier_integrations",
+    "authenticated clients lose table-wide supplier integration privileges",
+  ],
+  [
+    supplierImportAuthorityMigration,
+    "credentials_encrypted",
+    "encrypted supplier credentials stay server-only",
+  ],
+  [
+    supplierImportAuthorityMigration,
+    "Supplier integration vendor does not belong to owner",
+    "supplier integrations cannot cross vendor ownership boundaries",
+  ],
+  [
+    supplierImportAuthorityMigration,
+    "Import integration vendor does not match job vendor",
+    "import jobs cannot cross integration/vendor boundaries",
+  ],
+  [
+    supplierImportAuthorityMigration,
+    "Import row product does not belong to job vendor",
+    "import rows cannot reference another vendor's product",
   ],
   [
     publicCategoryCatalogScopeMigration,
@@ -2439,17 +2473,39 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002171500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002173000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002171500"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002173000"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002171500"') ||
-  !retainedSalesIndexesMigration.includes("SELECT '20261002171500'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002173000"') ||
+  !supplierImportAuthorityMigration.includes("SELECT '20261002173000'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002171500",
+    "production health/migration gates must track schema 20261002173000",
+  );
+}
+
+if (
+  !supplierImportAuthorityMigration.includes(
+    "REVOKE SELECT, INSERT, UPDATE ON TABLE public.supplier_integrations",
+  ) ||
+  !supplierImportAuthorityMigration.includes(
+    "Supplier credentials are server-authoritative",
+  ) ||
+  !supplierImportAuthorityMigration.includes(
+    "Supplier integration vendor does not belong to owner",
+  ) ||
+  !supplierImportAuthorityMigration.includes(
+    "Import integration does not belong to job owner",
+  ) ||
+  !supplierImportAuthorityMigration.includes(
+    "Import row product does not belong to job vendor",
+  )
+) {
+  violations.push(
+    "supplier/import browser access must preserve server-only credentials and vendor tenant isolation",
   );
 }
 
