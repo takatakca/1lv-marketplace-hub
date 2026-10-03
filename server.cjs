@@ -10,6 +10,7 @@ const CURRENT_RELEASE_FILE = path.join(__dirname, "CURRENT");
 
 const MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024;
 const REQUEST_BODY_TOO_LARGE_CODE = "ERR_1LV_REQUEST_BODY_TOO_LARGE";
+const INVALID_CONTENT_LENGTH_CODE = "ERR_1LV_INVALID_CONTENT_LENGTH";
 
 // Production deploys atomically update CURRENT before asking Passenger to
 // restart. Export that exact release SHA into the TanStack runtime so the
@@ -185,7 +186,7 @@ function toWebRequest(req) {
       const declared = Number(rawLength);
       if (!Number.isSafeInteger(declared) || declared < 0) {
         const error = new Error("Invalid Content-Length.");
-        error.code = "ERR_1LV_INVALID_CONTENT_LENGTH";
+        error.code = INVALID_CONTENT_LENGTH_CODE;
         throw error;
       }
       if (declared > MAX_REQUEST_BODY_BYTES) {
@@ -378,6 +379,21 @@ const server = http.createServer(async (req, res) => {
         "Connection": "close",
       });
       res.end("Payload Too Large", () => req.destroy());
+      return;
+    }
+
+    if (
+      error &&
+      typeof error === "object" &&
+      error.code === INVALID_CONTENT_LENGTH_CODE &&
+      !res.headersSent
+    ) {
+      res.writeHead(400, {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Connection": "close",
+      });
+      res.end("Bad Request", () => req.destroy());
       return;
     }
 
