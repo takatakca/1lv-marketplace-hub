@@ -116,6 +116,47 @@ export async function listPublicCatalogProducts(limit = 200): Promise<Product[]>
   return ((data ?? []) as unknown as PublicCatalogProductRow[]).map(mapPublicProduct);
 }
 
+export type PublicCatalogSearchSort =
+  | "relevance"
+  | "price-asc"
+  | "price-desc"
+  | "sold";
+
+export type PublicCatalogSearchFilters = {
+  query?: string;
+  categorySlug?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  canadianOnly?: boolean;
+  saleOnly?: boolean;
+  sort?: PublicCatalogSearchSort;
+  limit?: number;
+};
+
+export async function searchPublicCatalogProducts(
+  filters: PublicCatalogSearchFilters,
+): Promise<Product[]> {
+  const { data, error } = await supabase.rpc(
+    "search_public_catalog_products" as never,
+    {
+      _query: filters.query?.trim() || null,
+      _category_slug: filters.categorySlug?.trim() || null,
+      _min_price:
+        typeof filters.minPrice === "number" ? filters.minPrice : null,
+      _max_price:
+        typeof filters.maxPrice === "number" ? filters.maxPrice : null,
+      _canadian_only: Boolean(filters.canadianOnly),
+      _sale_only: Boolean(filters.saleOnly),
+      _sort: filters.sort ?? "relevance",
+      _limit: filters.limit ?? 200,
+    } as never,
+  );
+  if (error) throw error;
+  return ((data ?? []) as unknown as PublicCatalogProductRow[]).map(
+    mapPublicProduct,
+  );
+}
+
 export async function listPublicCatalogProductsForVendor(
   vendorSlug: string,
   limit = 200,
