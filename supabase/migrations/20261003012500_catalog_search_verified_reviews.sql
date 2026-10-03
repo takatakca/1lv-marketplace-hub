@@ -41,6 +41,17 @@ CREATE TABLE IF NOT EXISTS public.product_reviews (
 
 ALTER TABLE public.product_reviews ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "TAKATAK authenticated sessions only"
+ON public.product_reviews;
+
+CREATE POLICY "TAKATAK authenticated sessions only"
+ON public.product_reviews
+AS RESTRICTIVE
+FOR ALL
+TO authenticated
+USING ((select public.is_takatak_authorized_session()))
+WITH CHECK ((select public.is_takatak_authorized_session()));
+
 REVOKE ALL ON TABLE public.product_reviews FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE
 ON TABLE public.product_reviews
