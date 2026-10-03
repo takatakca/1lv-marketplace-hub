@@ -297,6 +297,10 @@ const atomicSupplierImportMigration = readFileSync(
   join(root, "supabase/migrations/20261002183000_atomic_supplier_import_row.sql"),
   "utf8",
 );
+const supplierImportFinalizationMigration = readFileSync(
+  join(root, "supabase/migrations/20261002184500_supplier_import_finalization.sql"),
+  "utf8",
+);
 const importService = readFileSync(
   join(root, "src/services/imports.ts"),
   "utf8",
@@ -2556,17 +2560,17 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002183000"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261002184500"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002183000"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261002184500"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261002183000"') ||
-  !atomicSupplierImportMigration.includes("SELECT '20261002183000'")
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261002184500"') ||
+  !supplierImportFinalizationMigration.includes("SELECT '20261002184500'")
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261002183000",
+    "production health/migration gates must track schema 20261002184500",
   );
 }
 
@@ -2664,13 +2668,12 @@ if (
   !atomicSupplierImportMigration.includes(
     "public.is_takatak_authorized_session()",
   ) ||
+  !atomicSupplierImportMigration.includes("auth.uid()") ||
   !atomicSupplierImportMigration.includes("FOR UPDATE") ||
   !atomicSupplierImportMigration.includes(
     "product_import_job_rows_job_row_unique",
   ) ||
-  !atomicSupplierImportMigration.includes(
-    "INSERT INTO public.products",
-  ) ||
+  !atomicSupplierImportMigration.includes("INSERT INTO public.products") ||
   !atomicSupplierImportMigration.includes(
     "INSERT INTO public.product_import_job_rows",
   ) ||
@@ -2680,8 +2683,36 @@ if (
   !atomicSupplierImportMigration.includes("public.owns_vendor") ||
   !atomicSupplierImportMigration.includes("99999999.99") ||
   !atomicSupplierImportMigration.includes("2147483647") ||
-  !atomicSupplierImportMigration.includes("'^[0-9]{1,8}([.][0-9]{1,2})?  violations.push(
-    "supplier CSV imports must create each draft product and its audit row through the guarded atomic import RPC",
+  !importService.includes('"import_product_draft_row" as never') ||
+  !vendorImportsRoute.includes("importDraftProductRow") ||
+  !vendorImportsRoute.includes("2_147_483_647") ||
+  vendorImportsRoute.includes("createProduct(")
+) {
+  violations.push(
+    "supplier CSV imports must create each draft product and its audit row through the guarded atomic import RPC with bounded numeric inputs",
+  );
+}
+
+if (
+  !supplierImportFinalizationMigration.includes(
+    "CREATE OR REPLACE FUNCTION public.finalize_product_import_job",
+  ) ||
+  !supplierImportFinalizationMigration.includes(
+    "Import job audit row count mismatch",
+  ) ||
+  !supplierImportFinalizationMigration.includes(
+    "FROM public.vendors AS v",
+  ) ||
+  !supplierImportFinalizationMigration.includes(
+    "v.user_id = v_owner_id",
+  ) ||
+  supplierImportFinalizationMigration.includes(
+    "public.owns_vendor(v_vendor_id, v_owner_id)",
+  ) ||
+  !importService.includes('"finalize_product_import_job" as never')
+) {
+  violations.push(
+    "supplier import finalization must derive counters from durable audit rows and validate job vendor ownership independently of the admin caller",
   );
 }
 
