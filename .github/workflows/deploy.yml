@@ -355,6 +355,74 @@ jobs:
           echo "Deployment enabled: $SHOULD_DEPLOY"
 
       # ------------------------------------------------------------
+      # Block activation until the exact 1LV production database is already
+      # migrated and hosted Auth is fail-closed. Deployment never applies DB
+      # migrations; it only verifies the production prerequisite.
+      # ------------------------------------------------------------
+      - name: Verify production database and Auth prerequisite
+        if: steps.deployment.outputs.enabled == 'true'
+        shell: bash
+        env:
+          EXPECTED_PROJECT_REF: odoybkshqszucvoxzjyz
+          EXPECTED_SCHEMA_VERSION: "20261002121500"
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          test -n "${SUPABASE_ACCESS_TOKEN:-}" || {
+            echo "ERROR: SUPABASE_ACCESS_TOKEN is required before production deployment."
+            exit 1
+          }
+          test -n "${SUPABASE_DB_PASSWORD:-}" || {
+            echo "ERROR: SUPABASE_DB_PASSWORD is required before production deployment."
+            exit 1
+          }
+
+          shopt -s nullglob
+          EXPECTED_MIGRATIONS=(supabase/migrations/"${EXPECTED_SCHEMA_VERSION}"_*.sql)
+          if [ "${#EXPECTED_MIGRATIONS[@]}" -ne 1 ]; then
+            echo "ERROR: expected exactly one local migration for schema ${EXPECTED_SCHEMA_VERSION}."
+            exit 1
+          fi
+
+          AUTH_CONFIG="$(
+            curl --fail --silent --show-error               -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"               "https://api.supabase.com/v1/projects/$EXPECTED_PROJECT_REF/config/auth"
+          )"
+
+          DISABLE_SIGNUP="$(printf '%s' "$AUTH_CONFIG" | jq -r '.disable_signup // false')"
+          ANONYMOUS_ENABLED="$(printf '%s' "$AUTH_CONFIG" | jq -r '.external_anonymous_users_enabled // false')"
+
+          test "$DISABLE_SIGNUP" = "true" || {
+            echo "ERROR: hosted 1LV Supabase Auth still allows public signup."
+            exit 1
+          }
+          test "$ANONYMOUS_ENABLED" != "true" || {
+            echo "ERROR: hosted 1LV Supabase Auth still allows anonymous users."
+            exit 1
+          }
+
+          supabase link --project-ref "$EXPECTED_PROJECT_REF"
+
+          HISTORY_OUTPUT="$(supabase migration list --linked)"
+          printf '%s\n' "$HISTORY_OUTPUT"
+
+          if ! printf '%s\n' "$HISTORY_OUTPUT" | grep -q "$EXPECTED_SCHEMA_VERSION"; then
+            echo "ERROR: production database is not at required schema $EXPECTED_SCHEMA_VERSION."
+            exit 1
+          fi
+
+          DRY_RUN_OUTPUT="$(supabase db push --linked --dry-run 2>&1)"
+          printf '%s\n' "$DRY_RUN_OUTPUT"
+
+          if printf '%s\n' "$DRY_RUN_OUTPUT" | grep -Eqi 'would apply|pending migration|applying migration'; then
+            echo "ERROR: production database still has pending migrations; deployment is blocked."
+            exit 1
+          fi
+
+          echo "Production DB/Auth prerequisite verified before SSH activation."
+
+      # ------------------------------------------------------------
       # Validate every deploy-time secret/variable before SSH.
       # Values are never printed.
       # ------------------------------------------------------------
