@@ -2915,11 +2915,15 @@ if (
 }
 
 if (
-  !publicCatalogNewestSortMigration.includes("'newest'") ||
-  !publicCatalogNewestSortMigration.includes(
-    "CASE WHEN e.sort_mode = 'newest' THEN e.created_at END DESC",
+  !catalogSearchVerifiedReviewsMigration.includes("'newest'") ||
+  !catalogSearchVerifiedReviewsMigration.includes(
+    "CASE WHEN s.sort_mode = 'newest' THEN s.created_at END DESC",
   ) ||
-  !publicCatalogService.includes('| "newest";') ||
+  !catalogSearchVerifiedReviewsMigration.includes(
+    "CASE WHEN s.sort_mode = 'sold' THEN s.sold_count END DESC",
+  ) ||
+  !publicCatalogService.includes('| "newest"') ||
+  !publicCatalogService.includes('| "rating";') ||
   !trendingRoute.includes('sort: "sold"') ||
   !trendingRoute.includes('sort: "newest"') ||
   !newArrivalsRoute.includes('sort: "newest"')
