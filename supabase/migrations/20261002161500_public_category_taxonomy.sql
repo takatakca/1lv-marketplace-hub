@@ -7,7 +7,7 @@ RETURNS TABLE (
   name_en text,
   name_fr text,
   parent_slug text,
-  position integer
+  "position" integer
 )
 LANGUAGE sql
 STABLE
@@ -37,7 +37,7 @@ RETURNS TABLE (
   name_en text,
   name_fr text,
   parent_slug text,
-  position integer
+  "position" integer
 )
 LANGUAGE sql
 STABLE
