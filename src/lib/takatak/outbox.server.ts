@@ -337,10 +337,58 @@ export type DrainResult = {
 };
 
 /** Process pending/retryable events with exponential backoff. */
+async function claimStillCurrent(
+  client: Db,
+  id: string,
+  claimToken: string,
+): Promise<boolean> {
+  const { data, error } = await client
+    .from("takatak_outbox")
+    .select("id")
+    .eq("id", id)
+    .eq("status", "processing")
+    .eq("claim_token", claimToken)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Could not verify TAKATAK claim lease: ${error.message}`);
+  }
+  return Boolean(data);
+}
+
+async function transitionClaim(
+  client: Db,
+  id: string,
+  claimToken: string,
+  patch: Record<string, unknown>,
+): Promise<"updated" | "superseded"> {
+  const { data, error } = await client
+    .from("takatak_outbox")
+    .update({ ...patch, claim_token: null })
+    .eq("id", id)
+    .eq("status", "processing")
+    .eq("claim_token", claimToken)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Could not persist TAKATAK claim state: ${error.message}`);
+  }
+  return data ? "updated" : "superseded";
+}
+
+/** Process pending/retryable events with exponential backoff. */
 export async function drainTakatakOutbox(limit = 25): Promise<DrainResult> {
   if (!takatakConfigured()) {
-    return { ok: false, setupRequired: true, processed: 0, delivered: 0, failed: 0 };
+    return {
+      ok: false,
+      setupRequired: true,
+      processed: 0,
+      delivered: 0,
+      failed: 0,
+    };
   }
+
   const client = await db();
   const claimLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
   const { data: rows, error: claimError } = await client.rpc(
@@ -374,9 +422,19 @@ export async function drainTakatakOutbox(limit = 25): Promise<DrainResult> {
     aggregate_id: string;
     payload: Record<string, unknown>;
     attempt_count: number;
+    claim_token: string;
   }>;
 
   for (const row of list) {
+    if (!row.claim_token) {
+      console.error(
+        "[1lv.ca] TAKATAK claim RPC returned a row without a claim token:",
+        row.id,
+      );
+      failed++;
+      continue;
+    }
+
     const result = await sendTakatakEvent({
       eventId: row.id,
       eventType: row.event_type,
@@ -384,12 +442,19 @@ export async function drainTakatakOutbox(limit = 25): Promise<DrainResult> {
       aggregateId: row.aggregate_id,
       payload: row.payload ?? {},
     });
-    const attempt = row.attempt_count + 1;
+
+    // attempt_count is incremented atomically when PostgreSQL grants the lease.
+    const attempt = row.attempt_count;
+
     if (result.ok) {
       try {
-        // Persist the authoritative aggregate link BEFORE marking the event
-        // delivered. A retry is safe because TAKATAK event ingestion is
-        // idempotent on row.id.
+        // A slow/stale worker must stop before touching local aggregate links.
+        // The remote delivery is idempotent on row.id, so abandoning this
+        // local completion is safe when another worker owns the newer lease.
+        if (!(await claimStillCurrent(client, row.id, row.claim_token))) {
+          continue;
+        }
+
         await recordRemoteId(
           client,
           row.aggregate_type,
@@ -397,61 +462,78 @@ export async function drainTakatakOutbox(limit = 25): Promise<DrainResult> {
           result.remoteId,
         );
 
-        const { error: deliveredError } = await client
-          .from("takatak_outbox")
-          .update({
+        const state = await transitionClaim(
+          client,
+          row.id,
+          row.claim_token,
+          {
             status: "delivered",
             attempt_count: attempt,
             last_error: null,
             remote_id: result.remoteId,
             delivered_at: new Date().toISOString(),
-          })
-          .eq("id", row.id)
-          .eq("status", "processing");
+          },
+        );
 
-        if (deliveredError) {
-          throw new Error(
-            `Could not persist TAKATAK delivery state: ${deliveredError.message}`,
-          );
+        if (state === "updated") {
+          delivered++;
         }
-
-        delivered++;
       } catch (error) {
-        failed++;
         const message =
           error instanceof Error
             ? error.message.slice(0, 500)
             : "Failed to persist TAKATAK aggregate link.";
-        await client
-          .from("takatak_outbox")
-          .update({
-            status: attempt >= MAX_ATTEMPTS ? "failed" : "pending",
-            attempt_count: attempt,
-            last_error: message,
-            next_attempt_at: nextAttemptAt(attempt),
-          })
-          .eq("id", row.id)
-          .eq("status", "processing");
+
+        try {
+          const state = await transitionClaim(
+            client,
+            row.id,
+            row.claim_token,
+            {
+              status: attempt >= MAX_ATTEMPTS ? "failed" : "pending",
+              attempt_count: attempt,
+              last_error: message,
+              next_attempt_at: nextAttemptAt(attempt),
+            },
+          );
+          if (state === "updated") failed++;
+        } catch (persistError) {
+          failed++;
+          console.error(
+            "[1lv.ca] Could not persist TAKATAK post-delivery retry state:",
+            persistError instanceof Error
+              ? persistError.message
+              : "Unknown database error",
+          );
+        }
       }
-    } else {
-      failed++;
-      const { error: failureStateError } = await client
-        .from("takatak_outbox")
-        .update({
+      continue;
+    }
+
+    try {
+      const state = await transitionClaim(
+        client,
+        row.id,
+        row.claim_token,
+        {
           status: attempt >= MAX_ATTEMPTS ? "failed" : "pending",
           attempt_count: attempt,
           last_error: result.error,
           next_attempt_at: nextAttemptAt(attempt),
-        })
-        .eq("id", row.id)
-        .eq("status", "processing");
+        },
+      );
 
-      if (failureStateError) {
-        console.error(
-          "[1lv.ca] Could not persist TAKATAK retry state:",
-          failureStateError.message,
-        );
-      }
+      // If the lease was superseded, the newer worker owns the row and this
+      // worker must not count or mutate its outcome.
+      if (state === "updated") failed++;
+    } catch (persistError) {
+      failed++;
+      console.error(
+        "[1lv.ca] Could not persist TAKATAK retry state:",
+        persistError instanceof Error
+          ? persistError.message
+          : "Unknown database error",
+      );
     }
   }
 
