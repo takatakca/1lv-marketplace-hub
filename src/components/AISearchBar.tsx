@@ -15,6 +15,8 @@ import {
   type Suggestion,
 } from "@/services/ai-search";
 import { usePublicCatalog } from "@/hooks/use-public-catalog";
+import { usePublicCategories } from "@/hooks/use-public-categories";
+import { categories as demoCategoryMeta } from "@/lib/data";
 
 type SpeechRecognitionResultLike = {
   0: { transcript: string };
@@ -62,6 +64,7 @@ export function AISearchBar({
   const navigate = useNavigate();
   const { products: catalogProducts, vendors: catalogVendors, demo } =
     usePublicCatalog();
+  const { categories: publicCategories } = usePublicCategories();
   const [q, setQ] = useState(initialQuery);
   const [open, setOpen] = useState(false);
   const [recent, setRecent] = useState<string[]>([]);
@@ -87,9 +90,39 @@ export function AISearchBar({
 
   useEffect(() => () => recognitionRef.current?.stop(), []);
 
+  const categorySuggestions = useMemo(
+    () =>
+      publicCategories.map((category) => {
+        const meta = demoCategoryMeta.find(
+          (item) => item.slug === category.slug,
+        );
+        return {
+          slug: category.slug,
+          name: category.name_en,
+          aliases:
+            demo && meta
+              ? meta.subcategories
+              : publicCategories
+                  .filter(
+                    (item) => item.parent_slug === category.slug,
+                  )
+                  .map((item) => item.name_en),
+          emoji: meta?.emoji ?? "📦",
+        };
+      }),
+    [publicCategories, demo],
+  );
+
   const suggestions = useMemo(
-    () => getSuggestions(q, 8, catalogProducts, catalogVendors),
-    [q, catalogProducts, catalogVendors],
+    () =>
+      getSuggestions(
+        q,
+        8,
+        catalogProducts,
+        catalogVendors,
+        categorySuggestions,
+      ),
+    [q, catalogProducts, catalogVendors, categorySuggestions],
   );
   const quickChips = demo
     ? QUICK_CHIPS
