@@ -372,7 +372,7 @@ jobs:
         shell: bash
         env:
           EXPECTED_PROJECT_REF: odoybkshqszucvoxzjyz
-          EXPECTED_SCHEMA_VERSION: "20261002181500"
+          EXPECTED_SCHEMA_VERSION: "20261002183000"
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
