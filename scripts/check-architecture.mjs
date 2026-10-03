@@ -333,6 +333,13 @@ const variantAuthoritativeCheckoutMigration = readFileSync(
   ),
   "utf8",
 );
+const returnRmaEngineMigration = readFileSync(
+  join(
+    root,
+    "supabase/migrations/20261003033000_return_rma_engine.sql",
+  ),
+  "utf8",
+);
 const payoutService = readFileSync(
   join(root, "src/services/payouts.ts"),
   "utf8",
@@ -887,7 +894,32 @@ for (const [content, marker, label] of [
   [
     variantAuthoritativeCheckoutMigration,
     "SELECT '20261003024500'",
-    "final production schema marker includes SKU-authoritative checkout",
+    "SKU-authoritative checkout retains its historical schema marker",
+  ],
+  [
+    returnRmaEngineMigration,
+    "SELECT '20261003033000'",
+    "final production schema marker includes the item-level RMA engine",
+  ],
+  [
+    returnRmaEngineMigration,
+    "CREATE TABLE public.return_requests",
+    "dedicated return request storage exists",
+  ],
+  [
+    returnRmaEngineMigration,
+    "CREATE TABLE public.return_events",
+    "return lifecycle history is persisted",
+  ],
+  [
+    returnRmaEngineMigration,
+    "CREATE OR REPLACE FUNCTION public.reserve_return_refund",
+    "return refunds are linked into the existing financial authority",
+  ],
+  [
+    returnRmaEngineMigration,
+    "CREATE TRIGGER refund_records_sync_return_status",
+    "Stripe refund finalization synchronizes linked return state",
   ],
   [
     variantAuthoritativeCheckoutMigration,
@@ -2700,19 +2732,19 @@ if (
 }
 
 if (
-  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261003024500"') ||
+  !healthRoute.includes('EXPECTED_SCHEMA_VERSION = "20261003033000"') ||
   !deployWorkflow.includes("supabase test db --local") ||
-  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261003024500"') ||
+  !deployWorkflow.includes('EXPECTED_SCHEMA_VERSION: "20261003033000"') ||
   !readFileSync(
     join(root, ".github/workflows/migrate-production-db.yml"),
     "utf8",
-  ).includes('EXPECTED_SCHEMA_VERSION: "20261003024500"') ||
-  !variantAuthoritativeCheckoutMigration.includes(
-    "SELECT '20261003024500'",
+  ).includes('EXPECTED_SCHEMA_VERSION: "20261003033000"') ||
+  !returnRmaEngineMigration.includes(
+    "SELECT '20261003033000'",
   )
 ) {
   violations.push(
-    "production health/migration gates must track schema 20261003024500",
+    "production health/migration gates must track schema 20261003033000",
   );
 }
 
