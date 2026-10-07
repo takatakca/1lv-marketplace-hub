@@ -8,6 +8,7 @@ import { createPaymentIntent, isStripeConfigured } from "@/services/payments";
 import { PaymentBadge, isUnpaid } from "@/components/PaymentBadge";
 import { StripePaymentForm } from "@/components/StripePaymentForm";
 import { formatCAD } from "@/lib/data";
+import { seoHead } from "@/seo/head";
 
 type Search = { order?: string; demo?: number };
 
@@ -17,7 +18,7 @@ export const Route = createFileRoute("/order-confirmation")({
     order: typeof s.order === "string" ? s.order : undefined,
     demo: Number(s.demo) ? 1 : 0,
   }),
-  head: () => ({ meta: [{ title: "Order confirmed — 1LV.CA" }] }),
+  head: () => seoHead({ title: "Order confirmed — 1LV.CA", noindex: true }),
 });
 
 function Confirmation() {

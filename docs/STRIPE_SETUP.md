@@ -304,7 +304,7 @@ select cron.schedule(
   'weekly-vendor-payout-generation',
   '0 7 * * 1',
   $$ select net.http_post(
-       url := 'https://project--deec4249-153f-4f4a-8a40-79e457dc6c83.lovable.app/api/public/hooks/payout-scheduler',
+       url := 'https://1lv.ca/api/public/hooks/payout-scheduler',
        headers := '{"Content-Type":"application/json","apikey":"YOUR_ANON_KEY"}'::jsonb,
        body := '{}'::jsonb
      ); $$

@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Logo } from "./Logo";
+import { ManageCookiesLink } from "@/consent/ManageCookiesLink";
 
 export function Footer() {
   return (
@@ -38,6 +39,7 @@ export function Footer() {
       <div className="border-t border-white/10">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-6 py-4 text-xs text-white/60 sm:flex-row">
           <span>© {new Date().getFullYear()} 1LV.CA — Made in Canada with care.</span>
+          <ManageCookiesLink className="hover:text-electric" />
           <span>Prices in CAD · GST/QST/HST calculated at checkout</span>
         </div>
       </div>

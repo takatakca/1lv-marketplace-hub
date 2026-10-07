@@ -1,10 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Check } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
+import { seoHead } from "@/seo/head";
 
 export const Route = createFileRoute("/vendor-pricing")({
   component: VendorPricing,
-  head: () => ({ meta: [{ title: "Vendor pricing — 1LV.CA" }] }),
+  head: () =>
+    seoHead({
+      title: "Vendor pricing — 1LV.CA",
+      // Existing page heading + intro.
+      description: "Simple, fair pricing. Pick a plan. Cancel anytime. CAD pricing.",
+      path: "/vendor-pricing",
+    }),
 });
 
 const tiers = [

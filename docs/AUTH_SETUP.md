@@ -44,8 +44,7 @@ The "Continue with Google" buttons on `/login` and `/signup` call
    branding. In Google Cloud Console:
    - Create an **OAuth 2.0 Client ID** (Web application).
    - Authorized JavaScript origins:
-     - `https://onelovevision.lovable.app`
-     - `https://1lv.ca` (when the custom domain is live)
+     - `https://1lv.ca` (production)
      - `http://localhost:8080` (local dev)
    - Authorized redirect URI (copy from Cloud's Google settings — it looks like):
      `https://odoybkshqszucvoxzjyz.supabase.co/auth/v1/callback`
@@ -55,8 +54,6 @@ The "Continue with Google" buttons on `/login` and `/signup` call
 signup). Make sure these are in **Cloud → Users → URL configuration →
 Redirect URLs**:
 
-- `https://onelovevision.lovable.app/account`
-- `https://onelovevision.lovable.app/role-select`
 - `https://1lv.ca/account`
 - `https://1lv.ca/role-select`
 - preview/dev wildcards as needed
@@ -118,9 +115,7 @@ The vendor role is granted later by the existing `vendor.onboarding` flow
 | Environment | Origin |
 | --- | --- |
 | Local dev | `http://localhost:8080` |
-| Lovable preview | `https://id-preview--deec4249-153f-4f4a-8a40-79e457dc6c83.lovable.app` |
-| Published | `https://onelovevision.lovable.app` |
-| Production custom domain | `https://1lv.ca` |
+| Production | `https://1lv.ca` |
 
 Add **every** origin you actually use to:
 

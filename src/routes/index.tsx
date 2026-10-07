@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Zap, TrendingUp, ShieldCheck, Truck, RefreshCw, Store, Star, ArrowRight } from "lucide-react";
+import { Zap, TrendingUp, ShieldCheck, Truck, RefreshCw, Store, ArrowRight } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
 import { ProductRail, SectionHead } from "@/components/ProductRail";
@@ -8,23 +8,31 @@ import { CountdownTimer } from "@/components/CountdownTimer";
 import { CouponStrip } from "@/components/CouponStrip";
 import { RecentlyViewed } from "@/components/RecentlyViewed";
 import { categories, products, productsByTag, vendors, formatCAD } from "@/lib/data";
+import { seoHead } from "@/seo/head";
 
 export const Route = createFileRoute("/")({
   component: Home,
-  head: () => ({
-    meta: [
-      { title: "1LV.CA — Daily deals from Canadian & global vendors" },
-      {
-        name: "description",
-        content:
-          "Shop flash deals, trending products and verified Canadian sellers on 1LV.CA. Free shipping over $49 CAD, 30-day returns, buyer protection.",
-      },
-      { property: "og:title", content: "1LV.CA — Canada's deal marketplace" },
-      { property: "og:description", content: "Flash deals, Canadian sellers, free shipping over $49 CAD." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-  }),
+  head: () => {
+    // No `path` (canonical/og:url) here on purpose: this route is prerendered into dist/client/index.html,
+    // the SPA shell that server.cjs serves for EVERY URL. A canonical "/" there would tell crawlers that
+    // every page is the home page. Add `path: "/"` once pages are server-rendered or prerendered per route.
+    const seo = seoHead({
+      title: "1LV.CA — Daily deals from Canadian & global vendors",
+      description:
+        "Shop flash deals, trending products and verified Canadian sellers on 1LV.CA. Free shipping over $49 CAD, 30-day returns, buyer protection.",
+    });
+    return {
+      meta: [
+        ...seo.meta,
+        { property: "og:title", content: "1LV.CA — Canada's deal marketplace" },
+        {
+          property: "og:description",
+          content: "Flash deals, Canadian sellers, free shipping over $49 CAD.",
+        },
+      ],
+      links: seo.links,
+    };
+  },
 });
 
 function Home() {
@@ -191,7 +199,7 @@ function Home() {
                   <div className="text-white">
                     <div className="text-sm font-bold leading-tight">{vendor.name}</div>
                     <div className="flex items-center gap-1 text-[11px] text-white/85">
-                      <Star size={10} className="fill-warning text-warning" /> {vendor.rating} · {vendor.city}
+                      {vendor.city}
                     </div>
                   </div>
                 </div>

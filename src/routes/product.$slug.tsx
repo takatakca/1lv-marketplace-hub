@@ -1,13 +1,12 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
-  ChevronRight, Heart, Minus, Plus, ShieldCheck, Truck, RefreshCw, Store, Ticket, Star, Lock, PackageCheck,
+  ChevronRight, Heart, Minus, Plus, ShieldCheck, Truck, RefreshCw, Store, Ticket, Lock, PackageCheck,
 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
 import { ProductRail, SectionHead } from "@/components/ProductRail";
 import { ProductImage } from "@/components/ProductImage";
-import { RatingStars } from "@/components/RatingStars";
 import { StickyBuyBar } from "@/components/StickyBuyBar";
 import { RecentlyViewed } from "@/components/RecentlyViewed";
 import { getProduct, getVendor, products, productsByCategory, formatCAD, getCategory, type Product } from "@/lib/data";
@@ -15,6 +14,7 @@ import { useCart } from "@/hooks/use-cart";
 import { useWishlist } from "@/hooks/use-wishlist";
 import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 import { toast } from "sonner";
+import { seoHead } from "@/seo/head";
 
 type LoaderData = { product: Product };
 
@@ -25,23 +25,17 @@ export const Route = createFileRoute("/product/$slug")({
     if (!product) throw notFound();
     return { product };
   },
-  head: ({ loaderData }) => {
+  head: ({ loaderData, params }) => {
     const data = loaderData as LoaderData | undefined;
+    const seo = seoHead({
+      title: `${data?.product.title ?? "Product"} — 1LV.CA`,
+      description: data?.product.description.slice(0, 150),
+      path: `/product/${params.slug}`,
+      image: data?.product.images[0],
+    });
     return {
-      meta: [
-        { title: `${data?.product.title ?? "Product"} — 1LV.CA` },
-        { name: "description", content: data?.product.description.slice(0, 150) ?? "" },
-        { property: "og:title", content: `${data?.product.title ?? "Product"} — 1LV.CA` },
-        { property: "og:description", content: data?.product.description.slice(0, 150) ?? "" },
-        { property: "og:type", content: "product" },
-        { name: "twitter:card", content: "summary_large_image" },
-        ...(data?.product.images[0]
-          ? [
-              { property: "og:image", content: data.product.images[0] },
-              { name: "twitter:image", content: data.product.images[0] },
-            ]
-          : []),
-      ],
+      meta: [...seo.meta, { property: "og:type", content: "product" }],
+      links: seo.links,
     };
   },
 });
@@ -124,8 +118,6 @@ function ProductPage() {
             <div className="mt-6 hidden lg:block">
               <h1 className="font-display text-2xl font-extrabold tracking-tight text-navy">{product.title}</h1>
               <div className="mt-2 flex flex-wrap items-center gap-3">
-                <RatingStars rating={product.rating} reviews={product.reviews} />
-                <span className="text-xs text-muted-foreground">{product.sold.toLocaleString()} sold</span>
                 {product.tags.includes("local") && (
                   <span className="rounded-md bg-success/10 px-2 py-0.5 text-[11px] font-bold text-success">🇨🇦 Ships from Canada</span>
                 )}
@@ -164,10 +156,6 @@ function ProductPage() {
             {/* Mobile title block */}
             <div className="mb-3 lg:hidden">
               <h1 className="font-display text-xl font-extrabold tracking-tight text-navy">{product.title}</h1>
-              <div className="mt-1.5 flex flex-wrap items-center gap-3">
-                <RatingStars rating={product.rating} reviews={product.reviews} />
-                <span className="text-xs text-muted-foreground">{product.sold.toLocaleString()} sold</span>
-              </div>
             </div>
 
             <div className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-merch">
@@ -275,7 +263,7 @@ function ProductPage() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-bold text-navy">{vendor.name} {vendor.country === "CA" && "🇨🇦"}</div>
                   <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                    <Star size={10} className="fill-warning text-warning" /> {vendor.rating} · {vendor.city} · {vendor.yearsActive}y on 1LV
+                    {vendor.city} · {vendor.yearsActive}y on 1LV
                   </div>
                 </div>
                 <span className="shrink-0 text-xs font-bold text-electric">Visit store</span>
@@ -290,31 +278,6 @@ function ProductPage() {
           <Accordion title="Shipping & delivery">Ships to all Canadian provinces. Free over $49 CAD.</Accordion>
           <Accordion title="Returns & buyer protection">30-day returns on unused items, covered by 1LV buyer protection.</Accordion>
         </div>
-
-        {/* Review summary */}
-        <section className="mt-10 rounded-xl border border-border bg-card p-5 shadow-merch">
-          <div className="grid gap-6 sm:grid-cols-[200px_1fr]">
-            <div className="text-center sm:text-left">
-              <div className="font-display text-4xl font-extrabold text-navy">{product.rating.toFixed(1)}</div>
-              <RatingStars rating={product.rating} size={16} />
-              <p className="mt-1 text-xs text-muted-foreground">{product.reviews.toLocaleString()} verified reviews</p>
-            </div>
-            <div className="space-y-1.5">
-              {[5, 4, 3, 2, 1].map((s) => {
-                const pct = s === 5 ? 72 : s === 4 ? 18 : s === 3 ? 6 : s === 2 ? 2 : 2;
-                return (
-                  <div key={s} className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="w-8">{s}★</span>
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                      <div className="h-full rounded-full bg-warning" style={{ width: `${pct}%` }} />
-                    </div>
-                    <span className="w-9 text-right">{pct}%</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </section>
 
         {fromStore.length > 0 && vendor && (
           <section className="mt-10">

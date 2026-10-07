@@ -6,10 +6,11 @@ import { PasswordField } from "@/components/PasswordField";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
+import { seoHead } from "@/seo/head";
 
 export const Route = createFileRoute("/login")({
   component: Login,
-  head: () => ({ meta: [{ title: "Sign in — 1LV.CA" }] }),
+  head: () => seoHead({ title: "Sign in — 1LV.CA", noindex: true }),
 });
 
 function Login() {

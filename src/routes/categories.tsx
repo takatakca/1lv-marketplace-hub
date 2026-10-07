@@ -1,15 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppLayout } from "@/components/AppLayout";
 import { categories, productsByCategory } from "@/lib/data";
+import { seoHead } from "@/seo/head";
 
 export const Route = createFileRoute("/categories")({
   component: AllCategories,
-  head: () => ({
-    meta: [
-      { title: "All Categories — 1LV.CA" },
-      { name: "description", content: "Browse all product categories on 1LV.CA — electronics, home, fashion, beauty, sports and more." },
-    ],
-  }),
+  head: () =>
+    seoHead({
+      title: "All Categories — 1LV.CA",
+      description:
+        "Browse all product categories on 1LV.CA — electronics, home, fashion, beauty, sports and more.",
+      path: "/categories",
+    }),
 });
 
 function AllCategories() {

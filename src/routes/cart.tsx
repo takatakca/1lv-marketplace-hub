@@ -7,10 +7,11 @@ import { FreeShippingBar } from "@/components/FreeShippingBar";
 import { useCart } from "@/hooks/use-cart";
 import { formatCAD } from "@/lib/data";
 import { toast } from "sonner";
+import { seoHead } from "@/seo/head";
 
 export const Route = createFileRoute("/cart")({
   component: CartPage,
-  head: () => ({ meta: [{ title: "Your cart — 1LV.CA" }] }),
+  head: () => seoHead({ title: "Your cart — 1LV.CA", noindex: true }),
 });
 
 const COUPONS: Record<string, { kind: "pct" | "fixed" | "ship"; value: number; label: string }> = {

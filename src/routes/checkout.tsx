@@ -9,10 +9,11 @@ import { useAuth } from "@/hooks/use-auth";
 import { createOrder, type Address } from "@/services/checkout";
 import { createPaymentIntent, isStripeConfigured } from "@/services/payments";
 import { StripePaymentForm } from "@/components/StripePaymentForm";
+import { seoHead } from "@/seo/head";
 
 export const Route = createFileRoute("/checkout")({
   component: Checkout,
-  head: () => ({ meta: [{ title: "Checkout — 1LV.CA" }] }),
+  head: () => seoHead({ title: "Checkout — 1LV.CA", noindex: true }),
 });
 
 function Field({ label, name, ...props }: { label: string; name: string } & React.InputHTMLAttributes<HTMLInputElement>) {

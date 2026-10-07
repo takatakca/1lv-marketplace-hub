@@ -5,10 +5,11 @@ import { ProductGrid } from "@/components/ProductGrid";
 import { EmptyState } from "@/components/EmptyState";
 import { useWishlist } from "@/hooks/use-wishlist";
 import { products } from "@/lib/data";
+import { seoHead } from "@/seo/head";
 
 export const Route = createFileRoute("/wishlist")({
   component: Wishlist,
-  head: () => ({ meta: [{ title: "Wishlist — 1LV.CA" }] }),
+  head: () => seoHead({ title: "Wishlist — 1LV.CA", noindex: true }),
 });
 
 function Wishlist() {

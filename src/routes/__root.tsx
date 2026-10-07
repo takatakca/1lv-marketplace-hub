@@ -13,6 +13,9 @@ import appCss from "../styles.css?url";
 import { AuthProvider } from "@/hooks/use-auth";
 import { CartProvider } from "@/hooks/use-cart";
 import { WishlistProvider } from "@/hooks/use-wishlist";
+import { seoHead } from "@/seo/head";
+import { jsonLdScript, siteJsonLd, websiteJsonLd } from "@/seo/jsonld";
+import { CookieBanner } from "@/consent/CookieBanner";
 
 function NotFoundComponent() {
   return (
@@ -65,18 +68,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "1LV.CA — Canada's marketplace for everything" },
-      { name: "description", content: "Shop millions of products from trusted Canadian and global vendors. Fast shipping in CAD, easy returns, daily deals." },
       { name: "author", content: "1LV.CA" },
-      { property: "og:title", content: "1LV.CA — Canada's marketplace for everything" },
-      { property: "og:description", content: "Shop millions of products from trusted Canadian and global vendors. Fast shipping in CAD, easy returns, daily deals." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: "1LV.CA — Canada's marketplace for everything" },
-      { name: "twitter:description", content: "Shop millions of products from trusted Canadian and global vendors. Fast shipping in CAD, easy returns, daily deals." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/85fb07e3-1fdf-4e19-9b5f-d46798d6c22f/id-preview-f9af8b71--deec4249-153f-4f4a-8a40-79e457dc6c83.lovable.app-1778728543768.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/85fb07e3-1fdf-4e19-9b5f-d46798d6c22f/id-preview-f9af8b71--deec4249-153f-4f4a-8a40-79e457dc6c83.lovable.app-1778728543768.png" },
+      // Site defaults (title, description, Open Graph, Twitter) from src/site.config.ts.
+      // No canonical here: the SPA shell is served for every URL. Public routes set their own
+      // (except the home page, see src/routes/index.tsx).
+      ...seoHead().meta,
     ],
+    scripts: [jsonLdScript([siteJsonLd(), websiteJsonLd()])],
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -95,12 +93,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="fr-CA">
       <head>
         <HeadContent />
       </head>
       <body>
         {children}
+        <CookieBanner />
         <Scripts />
       </body>
     </html>

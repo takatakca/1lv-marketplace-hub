@@ -1,10 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ShoppingBag, Store } from "lucide-react";
 import { AuthShell } from "@/components/AuthShell";
+import { seoHead } from "@/seo/head";
 
 export const Route = createFileRoute("/role-select")({
   component: RoleSelect,
-  head: () => ({ meta: [{ title: "Choose your account type — 1LV.CA" }] }),
+  head: () => seoHead({ title: "Choose your account type — 1LV.CA", noindex: true }),
 });
 
 function RoleSelect() {

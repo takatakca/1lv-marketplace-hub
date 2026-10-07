@@ -9,6 +9,7 @@ import { ProductGrid } from "@/components/ProductGrid";
 import { EmptyState } from "@/components/EmptyState";
 import { products, vendors, categories } from "@/lib/data";
 import { QUICK_CHIPS } from "@/services/ai-search";
+import { seoHead } from "@/seo/head";
 
 const searchSchema = z.object({
   q: fallback(z.string(), "").default(""),
@@ -26,16 +27,26 @@ const searchSchema = z.object({
 export const Route = createFileRoute("/search")({
   validateSearch: zodValidator(searchSchema),
   component: SearchPage,
-  head: () => ({
-    meta: [
-      { title: "Search products — 1LV.CA Marketplace" },
-      { name: "description", content: "Search 1LV.CA with smart filters and voice search: price, free shipping, Canadian sellers, ratings and deals." },
-      { property: "og:title", content: "Search products — 1LV.CA" },
-      { property: "og:description", content: "Smart, voice-enabled product search across Canadian and global vendors." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-  }),
+  head: () => {
+    // Canonical without the query string: every filtered result page points to /search.
+    const seo = seoHead({
+      title: "Search products — 1LV.CA Marketplace",
+      description:
+        "Search 1LV.CA with smart filters and voice search: price, free shipping, Canadian sellers, ratings and deals.",
+      path: "/search",
+    });
+    return {
+      meta: [
+        ...seo.meta,
+        { property: "og:title", content: "Search products — 1LV.CA" },
+        {
+          property: "og:description",
+          content: "Smart, voice-enabled product search across Canadian and global vendors.",
+        },
+      ],
+      links: seo.links,
+    };
+  },
 });
 
 type Sort = "relevance" | "price-asc" | "price-desc" | "rating" | "sold";

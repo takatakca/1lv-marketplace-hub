@@ -1,13 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppLayout } from "@/components/AppLayout";
 import { CheckCircle2, Globe2, ShieldCheck, Wallet } from "lucide-react";
+import { seoHead } from "@/seo/head";
 
 export const Route = createFileRoute("/become-a-vendor")({
   component: BecomeVendor,
-  head: () => ({ meta: [
-    { title: "Sell on 1LV.CA — Become a vendor" },
-    { name: "description", content: "Join 1LV.CA and reach Canadian shoppers. List products in minutes, manage orders, get paid in CAD." },
-  ] }),
+  head: () =>
+    seoHead({
+      title: "Sell on 1LV.CA — Become a vendor",
+      description:
+        "Join 1LV.CA and reach Canadian shoppers. List products in minutes, manage orders, get paid in CAD.",
+      path: "/become-a-vendor",
+    }),
 });
 
 function BecomeVendor() {

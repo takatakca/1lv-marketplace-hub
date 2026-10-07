@@ -5,19 +5,28 @@ import { ProductGrid } from "@/components/ProductGrid";
 import { SectionHead } from "@/components/ProductRail";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { products } from "@/lib/data";
+import { seoHead } from "@/seo/head";
 
 export const Route = createFileRoute("/deals")({
   component: DealsPage,
-  head: () => ({
-    meta: [
-      { title: "Daily Deals & Flash Sales — 1LV.CA" },
-      { name: "description", content: "Flash sales, daily markdowns and limited-time discounts in CAD. Free shipping over $49, 30-day returns." },
-      { property: "og:title", content: "Daily Deals & Flash Sales — 1LV.CA" },
-      { property: "og:description", content: "Up to 60% off daily deals from Canadian and global sellers." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-  }),
+  head: () => {
+    const seo = seoHead({
+      title: "Daily Deals & Flash Sales — 1LV.CA",
+      description:
+        "Flash sales, daily markdowns and limited-time discounts in CAD. Free shipping over $49, 30-day returns.",
+      path: "/deals",
+    });
+    return {
+      meta: [
+        ...seo.meta,
+        {
+          property: "og:description",
+          content: "Up to 60% off daily deals from Canadian and global sellers.",
+        },
+      ],
+      links: seo.links,
+    };
+  },
 });
 
 const coupons = [

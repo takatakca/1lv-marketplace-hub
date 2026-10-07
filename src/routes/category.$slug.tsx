@@ -2,6 +2,7 @@ import { createFileRoute, notFound } from "@tanstack/react-router";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
 import { getCategory, productsByCategory } from "@/lib/data";
+import { seoHead } from "@/seo/head";
 
 export const Route = createFileRoute("/category/$slug")({
   component: CategoryPage,
@@ -10,12 +11,12 @@ export const Route = createFileRoute("/category/$slug")({
     if (!cat) throw notFound();
     return { cat };
   },
-  head: ({ loaderData }) => ({
-    meta: [
-      { title: `${loaderData?.cat.name ?? "Category"} — 1LV.CA` },
-      { name: "description", content: `Shop ${loaderData?.cat.name ?? "products"} on 1LV.CA from Canadian and global vendors.` },
-    ],
-  }),
+  head: ({ loaderData, params }) =>
+    seoHead({
+      title: `${loaderData?.cat.name ?? "Category"} — 1LV.CA`,
+      description: `Shop ${loaderData?.cat.name ?? "products"} on 1LV.CA from Canadian and global vendors.`,
+      path: `/category/${params.slug}`,
+    }),
 });
 
 function CategoryPage() {

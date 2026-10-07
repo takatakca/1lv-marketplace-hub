@@ -4,10 +4,11 @@ import { AuthShell } from "@/components/AuthShell";
 import { PasswordField, passwordStrength } from "@/components/PasswordField";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { seoHead } from "@/seo/head";
 
 export const Route = createFileRoute("/reset-password")({
   component: ResetPassword,
-  head: () => ({ meta: [{ title: "Set new password — 1LV.CA" }] }),
+  head: () => seoHead({ title: "Set new password — 1LV.CA", noindex: true }),
 });
 
 function ResetPassword() {

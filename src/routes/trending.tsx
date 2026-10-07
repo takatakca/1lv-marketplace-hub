@@ -4,19 +4,28 @@ import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
 import { SectionHead } from "@/components/ProductRail";
 import { categories, products } from "@/lib/data";
+import { seoHead } from "@/seo/head";
 
 export const Route = createFileRoute("/trending")({
   component: TrendingPage,
-  head: () => ({
-    meta: [
-      { title: "Trending Now — Best Sellers on 1LV.CA" },
-      { name: "description", content: "The products Canadian shoppers are buying most this week, ranked by units sold. Updated hourly." },
-      { property: "og:title", content: "Trending Now — Best Sellers on 1LV.CA" },
-      { property: "og:description", content: "Ranked best sellers across the 1LV.CA marketplace, updated hourly." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-  }),
+  head: () => {
+    const seo = seoHead({
+      title: "Trending Now — Best Sellers on 1LV.CA",
+      description:
+        "The products Canadian shoppers are buying most this week, ranked by units sold. Updated hourly.",
+      path: "/trending",
+    });
+    return {
+      meta: [
+        ...seo.meta,
+        {
+          property: "og:description",
+          content: "Ranked best sellers across the 1LV.CA marketplace, updated hourly.",
+        },
+      ],
+      links: seo.links,
+    };
+  },
 });
 
 function TrendingPage() {
@@ -45,7 +54,7 @@ function TrendingPage() {
       {/* Hot categories */}
       <section className="surface-3 border-b border-border">
         <div className="scrollbar-hide mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 py-3">
-          {hotCategories.map(({ c, sold }) => (
+          {hotCategories.map(({ c }) => (
             <Link
               key={c.slug}
               to="/category/$slug"
@@ -53,7 +62,6 @@ function TrendingPage() {
               className="flex shrink-0 items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-navy shadow-merch hover:border-electric hover:text-electric"
             >
               <span>{c.emoji}</span> {c.name}
-              <span className="text-[10px] font-bold text-deal">{(sold / 1000).toFixed(1)}k sold</span>
             </Link>
           ))}
         </div>

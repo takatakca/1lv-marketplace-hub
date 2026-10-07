@@ -1,0 +1,21 @@
+# 1LV.CA
+User-agent: *
+Allow: /
+Disallow: /account
+Disallow: /admin
+Disallow: /api/
+Disallow: /cart
+Disallow: /checkout
+Disallow: /login
+Disallow: /signup
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /role-select
+Disallow: /order-confirmation
+Disallow: /orders
+Disallow: /wishlist
+# Vendor dashboard only ("/vendor-pricing" stays public).
+Disallow: /vendor$
+Disallow: /vendor/
+
+Sitemap: https://1lv.ca/sitemap.xml

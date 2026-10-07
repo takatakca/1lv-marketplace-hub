@@ -3,15 +3,16 @@ import { Sparkles } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
 import { products, productsByTag } from "@/lib/data";
+import { seoHead } from "@/seo/head";
 
 export const Route = createFileRoute("/new-arrivals")({
   component: NewArrivalsPage,
-  head: () => ({
-    meta: [
-      { title: "New arrivals — 1LV.CA" },
-      { name: "description", content: "Just landed: fresh products from Canadian and global vendors on 1LV.CA." },
-    ],
-  }),
+  head: () =>
+    seoHead({
+      title: "New arrivals — 1LV.CA",
+      description: "Just landed: fresh products from Canadian and global vendors on 1LV.CA.",
+      path: "/new-arrivals",
+    }),
 });
 
 function NewArrivalsPage() {

@@ -6,10 +6,11 @@ import { PasswordField, passwordStrength } from "@/components/PasswordField";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatCanadianPhone } from "./login";
+import { seoHead } from "@/seo/head";
 
 export const Route = createFileRoute("/signup")({
   component: Signup,
-  head: () => ({ meta: [{ title: "Create your account — 1LV.CA" }] }),
+  head: () => seoHead({ title: "Create your account — 1LV.CA", noindex: true }),
 });
 
 function Signup() {
@@ -18,7 +19,8 @@ function Signup() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [terms, setTerms] = useState(false);
-  const [marketing, setMarketing] = useState(true);
+  // CASL: marketing consent is an active opt-in, unticked by default.
+  const [marketing, setMarketing] = useState(false);
   const [loading, setLoading] = useState(false);
   const nav = useNavigate();
 
@@ -45,6 +47,8 @@ function Signup() {
           display_name: name,
           phone: fmtPhone ?? undefined,
           marketing_opt_in: marketing,
+          // CASL proof of consent: date of the opt-in (only when the box was ticked).
+          marketing_opt_in_at: marketing ? new Date().toISOString() : undefined,
         },
       },
     });

@@ -2,10 +2,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { Package, Heart, Tag, Eye, Store, Shield, CheckCircle2 } from "lucide-react";
+import { seoHead } from "@/seo/head";
 
 export const Route = createFileRoute("/account")({
   component: Account,
-  head: () => ({ meta: [{ title: "My account — 1LV.CA" }] }),
+  head: () => seoHead({ title: "My account — 1LV.CA", noindex: true }),
 });
 
 function Account() {

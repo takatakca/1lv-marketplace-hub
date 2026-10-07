@@ -2,7 +2,6 @@ import { Link } from "@tanstack/react-router";
 import { Heart, Truck, Zap, ShoppingCart } from "lucide-react";
 import type { Product } from "@/lib/data";
 import { vendors, formatCAD } from "@/lib/data";
-import { RatingStars } from "./RatingStars";
 import { ProductImage } from "./ProductImage";
 import { useWishlist } from "@/hooks/use-wishlist";
 import { useCart } from "@/hooks/use-cart";
@@ -90,11 +89,6 @@ export function ProductCard({ product, rank }: { product: Product; rank?: number
               <span className="rounded-sm bg-deal/10 px-1 py-px text-[10px] font-bold text-deal">-{off}%</span>
             </>
           )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <RatingStars rating={product.rating} size={12} />
-          <span className="text-[11px] text-muted-foreground">{product.sold.toLocaleString()} sold</span>
         </div>
 
         <div className="mt-auto flex items-center justify-between gap-2 pt-1 text-[11px] text-muted-foreground">

@@ -3,15 +3,17 @@ import { Ticket, Check } from "lucide-react";
 import { useState } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { toast } from "sonner";
+import { seoHead } from "@/seo/head";
 
 export const Route = createFileRoute("/coupons")({
   component: CouponsPage,
-  head: () => ({
-    meta: [
-      { title: "Coupons & promo codes — 1LV.CA" },
-      { name: "description", content: "Active coupons, promo codes and shopping discounts on 1LV.CA. Save more on every order." },
-    ],
-  }),
+  head: () =>
+    seoHead({
+      title: "Coupons & promo codes — 1LV.CA",
+      description:
+        "Active coupons, promo codes and shopping discounts on 1LV.CA. Save more on every order.",
+      path: "/coupons",
+    }),
 });
 
 const COUPONS = [

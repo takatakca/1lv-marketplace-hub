@@ -6,10 +6,11 @@ import { Package } from "lucide-react";
 import { products, formatCAD } from "@/lib/data";
 import { useAuth } from "@/hooks/use-auth";
 import { listMyOrders } from "@/services/checkout";
+import { seoHead } from "@/seo/head";
 
 export const Route = createFileRoute("/orders")({
   component: Orders,
-  head: () => ({ meta: [{ title: "My orders — 1LV.CA" }] }),
+  head: () => seoHead({ title: "My orders — 1LV.CA", noindex: true }),
 });
 
 type OrderRow = Awaited<ReturnType<typeof listMyOrders>>[number];

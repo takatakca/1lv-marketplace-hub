@@ -6,6 +6,7 @@ import { getPublicVendorBySlug, type PublicVendorRecord } from "@/services/vendo
 import { listVendorProducts, type ProductRecord } from "@/services/products";
 import { resolveAssetUrl } from "@/services/vendor-assets";
 import { formatCAD } from "@/lib/data";
+import { seoHead } from "@/seo/head";
 
 export const Route = createFileRoute("/store/$slug")({
   loader: async ({ params }) => {
@@ -33,16 +34,16 @@ export const Route = createFileRoute("/store/$slug")({
     </AppLayout>
   ),
   component: StorePage,
-  head: ({ loaderData }) => ({
-    meta: loaderData
-      ? [
-          { title: `${loaderData.vendor.store_name} — 1LV.CA` },
-          { name: "description", content: loaderData.vendor.description ?? `Shop products from ${loaderData.vendor.store_name} on 1LV.CA.` },
-          { property: "og:title", content: `${loaderData.vendor.store_name} — 1LV.CA` },
-          { property: "og:description", content: loaderData.vendor.description ?? "" },
-        ]
-      : [],
-  }),
+  head: ({ loaderData, params }) =>
+    loaderData
+      ? seoHead({
+          title: `${loaderData.vendor.store_name} — 1LV.CA`,
+          description:
+            loaderData.vendor.description ??
+            `Shop products from ${loaderData.vendor.store_name} on 1LV.CA.`,
+          path: `/store/${params.slug}`,
+        })
+      : { meta: [] },
 });
 
 function StorePage() {
