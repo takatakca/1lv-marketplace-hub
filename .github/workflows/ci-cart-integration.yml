@@ -1,0 +1,43 @@
+name: 1LV Account Cart Integration
+
+on:
+  pull_request:
+    branches:
+      - upgrade/persistent-commerce-settings
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cart:
+    name: Cart unit, lint, build, typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Cart model regression tests
+        run: node scripts/cart-model-tests.mjs
+      - name: Lint cart changes
+        run: |
+          npx eslint --max-warnings=0 --rule "prettier/prettier: off" src/lib/cart-model.ts src/services/account-cart.ts src/hooks/use-cart.tsx src/routes/cart.tsx
+      - name: Build app
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          test -n "$VITE_SUPABASE_URL"
+          test -n "$VITE_SUPABASE_PUBLISHABLE_KEY"
+          npm run build
+      - name: TypeScript
+        run: npx tsc --noEmit
+      - name: Confirm this does not apply the database migration
+        run: |
+          echo "No production migration or deployment is executed from this job."
+          test -f supabase/migrations/20261003064500_account_persistent_cart.sql
