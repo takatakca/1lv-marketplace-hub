@@ -100,15 +100,15 @@ export function applyCartChange(items: CartItem[], change: CartChange): CartItem
   if (change.kind === "remove") return items.filter((i) => i.lineId !== change.lineId);
   if (change.kind === "set") {
     return items.map((i) => i.lineId === change.lineId
-      ? { ...i, qty: Math.min(cartQuantity(change.qty), i.maxQty ?? 99) }
+      ? { ...i, qty: Math.max(1, Math.min(cartQuantity(change.qty), i.maxQty ?? 99)) }
       : i);
   }
   const item = change.item;
   const existing = items.find((i) => i.lineId === item.lineId);
   if (existing) {
     return items.map((i) => i.lineId === item.lineId
-      ? { ...i, qty: Math.min(99, i.maxQty ?? 99, i.qty + cartQuantity(item.qty)) }
+      ? { ...i, qty: Math.max(1, Math.min(99, i.maxQty ?? 99, i.qty + cartQuantity(item.qty))) }
       : i);
   }
-  return [...items, { ...item, qty: Math.min(cartQuantity(item.qty), item.maxQty ?? 99) }].slice(0, CART_LIMIT);
+  return [...items, { ...item, qty: Math.max(1, Math.min(cartQuantity(item.qty), item.maxQty ?? 99)) }].slice(0, CART_LIMIT);
 }
