@@ -46,6 +46,12 @@ Changes:
 - Frontend cart price display is informational. Real checkout remains server-authoritative.
 - Never bypass migration gates, expose service-role tokens, or send secret values into documentation.
 
+## 2026-10-14 — Checkout/payment honesty continuation
+
+On the cart PR branch, the subsequent checkout change guards direct `/checkout` access while an authenticated cart is still syncing, failed to sync, or contains unavailable/overstock lines. Abandoning Stripe no longer clears the cart or treats unpaid status as confirmed payment. The pending-payment flow keeps cart items if payment setup is unavailable, and the confirmation route states the real payment status (including unverified status) rather than celebrating an unverified order.
+
+These are code changes, **not a production release**. The new commit needs exact-head CI verification and real browser/payment acceptance later. Outstanding: model a paid-order-specific cart cleanup only after verified Stripe webhook/order attribution; do not clear other tabs' or later-added cart items. No live payment, Supabase migration or secrets were modified.
+
 ## Next exact steps (in order)
 
 1. Verify the latest stacked PR #12 head SHA in GitHub Actions after any final code/doc commits; resolve any new CI failure before merging.

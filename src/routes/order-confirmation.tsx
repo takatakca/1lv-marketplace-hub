@@ -24,7 +24,7 @@ export const Route = createFileRoute("/order-confirmation")({
   }),
   head: () => ({
     meta: [
-      { title: "Order confirmed — 1LV.CA" },
+      { title: "Order status — 1LV.CA" },
       { name: "referrer", content: "no-referrer" },
     ],
   }),
@@ -35,6 +35,8 @@ function Confirmation() {
   const [details, setDetails] = useState<Awaited<ReturnType<typeof getOrderByNumber>> | null>(null);
   const [guestContext, setGuestContext] = useState<GuestPaymentContext | null>(null);
   const [loading, setLoading] = useState(Boolean(order && !demo));
+  const paymentVerified = !demo && details?.payment_status === "paid";
+  const orderLocated = Boolean(details);
 
   useEffect(() => {
     if (!order || demo) return;
@@ -76,10 +78,20 @@ function Confirmation() {
   return (
     <AppLayout>
       <div className="mx-auto max-w-2xl px-4 py-16 text-center">
-        <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-success/10 text-success">
-          <CheckCircle2 size={32} />
+        <div className={`mx-auto grid h-16 w-16 place-items-center rounded-full ${paymentVerified ? "bg-success/10 text-success" : "bg-electric/10 text-electric"}`}>
+          {paymentVerified ? <CheckCircle2 size={32} /> : <AlertCircle size={32} />}
         </div>
-        <h1 className="mt-5 font-display text-3xl font-extrabold text-navy">Thank you for your order!</h1>
+        <h1 className="mt-5 font-display text-3xl font-extrabold text-navy">
+          {demo
+            ? "Demo checkout — no payment"
+            : loading
+              ? "Checking order status…"
+              : !orderLocated
+                ? "Order status unavailable"
+                : paymentVerified
+                  ? "Payment received — thank you!"
+                  : "Order received — payment pending"}
+        </h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Order <span className="font-semibold text-navy">{order}</span>
           {demo ? <> · <span className="rounded bg-electric/10 px-1.5 py-0.5 text-[11px] font-semibold text-electric">Demo</span></> : null}
@@ -126,7 +138,9 @@ function Confirmation() {
                 )}
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">Order created. Details will appear in your account once available.</p>
+              <p className="text-sm text-muted-foreground">
+                We could not verify this order or its payment status. Please check My Orders, or contact support if the problem continues.
+              </p>
             )}
 
             <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">

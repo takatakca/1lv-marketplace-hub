@@ -26,7 +26,7 @@ jobs:
         run: node scripts/cart-model-tests.mjs
       - name: Lint cart changes
         run: |
-          npx eslint --max-warnings=0 --rule "prettier/prettier: off" src/lib/cart-model.ts src/services/account-cart.ts src/hooks/use-cart.tsx src/routes/cart.tsx
+          npx eslint --max-warnings=0 --rule "prettier/prettier: off" src/lib/cart-model.ts src/services/account-cart.ts src/hooks/use-cart.tsx src/routes/cart.tsx src/routes/checkout.tsx src/routes/order-confirmation.tsx
       - name: Build app
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}

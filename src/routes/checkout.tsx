@@ -94,7 +94,7 @@ type PaymentStep = {
 };
 
 function Checkout() {
-  const { items, subtotal, clear } = useCart();
+  const { items, subtotal, syncStatus, retrySync } = useCart();
   const { user } = useAuth();
   const { settings: marketplaceSettings } = usePublicMarketplaceSettings();
   const nav = useNavigate();
@@ -104,6 +104,11 @@ function Checkout() {
   const checkoutKeyRef = useRef<string | null>(null);
   const guestBlocked =
     !user && marketplaceSettings?.allow_guest_checkout === false;
+  const unavailableItems = items.some(
+    (item) => item.available === false ||
+      (item.maxQty !== undefined && item.qty > item.maxQty),
+  );
+  const checkoutBlocked = syncStatus !== "ready" || unavailableItems;
   const contactEmail =
     user?.email && !user.email.toLowerCase().endsWith("@auth.1lv.ca")
       ? user.email
@@ -147,7 +152,19 @@ function Checkout() {
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (items.length === 0 || submitting || paymentStep) return;
+    if (submitting || paymentStep) return;
+    if (syncStatus !== "ready") {
+      toast.error("Your cart has not finished syncing. Please retry before checking out.");
+      return;
+    }
+    if (unavailableItems || items.length === 0) {
+      toast.error("Review your cart: an item may be unavailable or out of stock.");
+      return;
+    }
+    if (guestBlocked) {
+      toast.error("Please sign in before checking out.");
+      return;
+    }
 
     setSubmitting(true);
     const form = new FormData(event.currentTarget);
@@ -219,12 +236,16 @@ function Checkout() {
         return;
       }
 
-      toast.success(
-        result.demo
-          ? "Demo order placed — Stripe setup required for live payment."
-          : "Order created — pending payment (Stripe setup required).",
+      // An unpaid order is NOT a completed purchase. Keep the cart intact
+      // so that a failed or unavailable payment cannot silently lose items.
+      toast.message(
+        result.demo ? "Demo checkout only" : "Order saved — payment pending",
+        {
+          description: result.demo
+            ? "No charge was made. Live products require configured payments."
+            : "Payment is not complete. Open the order to retry when available.",
+        },
       );
-      clear();
       nav({
         to: "/order-confirmation",
         search: {
@@ -268,7 +289,11 @@ function Checkout() {
                 clientSecret={paymentStep.clientSecret}
                 orderNumber={paymentStep.orderNumber}
                 onCancel={() => {
-                  clear();
+                  // Leaving the payment form does not pay or cancel the order.
+                  // Preserve the cart and direct shoppers to the pending order.
+                  toast.message("Payment not completed", {
+                    description: "Your order remains pending. You can retry payment from its status page.",
+                  });
                   nav({
                     to: "/order-confirmation",
                     search: {
@@ -375,10 +400,29 @@ function Checkout() {
                 >
                   Sign in to checkout
                 </Link>
+              ) : checkoutBlocked ? (
+                <div role="status" className="space-y-2 rounded-lg border border-border bg-muted/40 p-3 text-sm">
+                  <p className="font-medium text-navy">
+                    {syncStatus === "syncing"
+                      ? "Synchronizing your cart…"
+                      : syncStatus === "error"
+                        ? "Cart synchronization failed. No order has been placed."
+                        : "Some items are unavailable or exceed remaining stock."}
+                  </p>
+                  {syncStatus === "error" ? (
+                    <button type="button" onClick={retrySync} className="font-semibold text-electric hover:underline">
+                      Retry cart synchronization
+                    </button>
+                  ) : (
+                    <Link to="/cart" className="font-semibold text-electric hover:underline">
+                      Review your cart
+                    </Link>
+                  )}
+                </div>
               ) : (
                 <button
                   type="submit"
-                  disabled={submitting || items.length === 0}
+                  disabled={submitting || checkoutBlocked || items.length === 0}
                   className="w-full rounded-md bg-electric px-4 py-3 text-sm font-bold text-electric-foreground shadow-glow transition hover:opacity-90 disabled:opacity-60"
                 >
                   {submitting
