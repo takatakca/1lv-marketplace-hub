@@ -2,6 +2,9 @@
 
 Newest first. Format: `YYYY-MM-DD | agent | branch → PR | status | what | next step`
 
+- 2026-10-14 | ChatGPT | upgrade/account-cart-ui-20261014 → PR #12 | PR #12 | Distinguish unavailable order/wishlist/admin data from genuinely empty datasets, with retry and identity isolation | Verify exact-head CI; no production release
+
+
 - 2026-10-14 | ChatGPT | upgrade/account-cart-ui-20261014 → PR #12 | PR #12 | Guest receipt/token cleanup, real order detail, no fake tracking and partial refund code at 0edcc3a PASSED CI 38614892717 | DB project access, idempotent cart merge and live Stripe/RLS gates remain
 
 

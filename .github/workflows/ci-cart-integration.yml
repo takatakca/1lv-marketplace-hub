@@ -30,7 +30,7 @@ jobs:
         run: node scripts/guest-payment-tests.mjs
       - name: Lint cart changes
         run: |
-          npx eslint --max-warnings=0 --rule "prettier/prettier: off" src/lib/cart-model.ts src/services/account-cart.ts src/hooks/use-cart.tsx src/routes/cart.tsx src/routes/checkout.tsx src/routes/order-confirmation.tsx src/routes/orders.\$id.tsx src/lib/payment-status.ts src/services/guest-payment.ts src/components/PaymentBadge.tsx
+          npx eslint --max-warnings=0 --rule "prettier/prettier: off" src/lib/cart-model.ts src/services/account-cart.ts src/hooks/use-cart.tsx src/routes/cart.tsx src/routes/checkout.tsx src/routes/order-confirmation.tsx src/routes/orders.\$id.tsx src/lib/payment-status.ts src/services/guest-payment.ts src/components/PaymentBadge.tsx src/routes/orders.tsx src/routes/wishlist.tsx src/routes/admin.index.tsx
       - name: Guard application / database schema version alignment
         run: node scripts/check-schema-marker.mjs
       - name: Build app

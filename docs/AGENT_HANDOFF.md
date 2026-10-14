@@ -1,5 +1,9 @@
 # 1LV.CA — AGENT HANDOFF
 
+## 2026-10-14 — Read-failure honesty and account isolation
+
+Latest code batch on PR #12 changes `src/routes/orders.tsx`, `src/routes/wishlist.tsx`, `src/routes/admin.index.tsx`, `.github/workflows/ci-cart-integration.yml` and `WORKLOG.md`. Order histories, wishlists and admin metrics now show an explicit retryable error when their reads fail rather than falsely asserting no records. Account switching cannot expose the previously selected user's order rows. Obtain current head SHA via PR #12 and verify its own CI before claiming success. This change does not apply migrations or deploy.
+
 ## Certified latest coding checkpoint — 2026-10-14
 
 - **Last verified code SHA:** `0edcc3a1c48982d8a55425feca42b5a1102ea83f`

@@ -47,6 +47,17 @@ function Wishlist() {
             <div className="py-10 text-sm text-muted-foreground">
               Loading your saved products…
             </div>
+          ) : user && savedProducts.isError ? (
+            <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm">
+              <p className="font-semibold text-navy">Your saved products could not be loaded.</p>
+              <p className="mt-1 text-muted-foreground">
+                We could not verify your wishlist. Your saved products have not been deleted.
+              </p>
+              <button type="button" onClick={() => void savedProducts.refetch()}
+                className="mt-3 rounded-md bg-navy px-4 py-2 font-semibold text-white">
+                Retry loading wishlist
+              </button>
+            </div>
           ) : items.length > 0 ? (
             <ProductGrid products={items} />
           ) : (

@@ -16,12 +16,34 @@ type OrderRow = Awaited<ReturnType<typeof listMyOrders>>[number];
 
 function Orders() {
   const { user, loading } = useAuth();
-  const [orders, setOrders] = useState<OrderRow[] | null>(null);
+  const userId = user?.id ?? null;
+  const [retryToken, setRetryToken] = useState(0);
+  const [view, setView] = useState<{
+    owner: string | null;
+    orders: OrderRow[] | null;
+    error: boolean;
+  }>({ owner: null, orders: null, error: false });
 
   useEffect(() => {
-    if (!user) return;
-    listMyOrders(user.id).then(setOrders).catch(() => setOrders([]));
-  }, [user]);
+    let active = true;
+    if (!userId) {
+      setView({ owner: null, orders: null, error: false });
+      return () => { active = false; };
+    }
+    setView({ owner: userId, orders: null, error: false });
+    void listMyOrders(userId)
+      .then((rows) => {
+        if (active) setView({ owner: userId, orders: rows, error: false });
+      })
+      .catch(() => {
+        if (active) setView({ owner: userId, orders: null, error: true });
+      });
+    return () => { active = false; };
+  }, [userId, retryToken]);
+
+  // Never show a previous account's order rows while switching identities.
+  const orders = view.owner === userId ? view.orders : null;
+  const orderLoadError = view.owner === userId && view.error;
 
   if (loading) {
     return (
@@ -48,8 +70,19 @@ function Orders() {
       <div className="mx-auto max-w-5xl px-4 py-8">
         <h1 className="font-display text-3xl font-extrabold text-navy">My orders</h1>
 
-        {orders === null ? (
-          <div className="mt-6 text-sm text-muted-foreground">Loading orders…</div>
+        {orderLoadError ? (
+          <div role="alert" className="mt-6 rounded-xl border border-destructive/30 bg-destructive/5 p-5">
+            <p className="font-semibold text-navy">Your orders could not be loaded.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              We could not verify your order history. No orders have been removed.
+            </p>
+            <button type="button" onClick={() => setRetryToken((value) => value + 1)}
+              className="mt-3 rounded-md bg-navy px-4 py-2 text-sm font-semibold text-white">
+              Retry loading orders
+            </button>
+          </div>
+        ) : orders === null ? (
+          <div role="status" className="mt-6 text-sm text-muted-foreground">Loading orders…</div>
         ) : orders.length === 0 ? (
           <div className="mt-8">
             <EmptyState
