@@ -55,7 +55,7 @@ export async function listAccountCartItems(): Promise<CartItem[]> {
 /** Only live UUID products are eligible for the database merge. */
 export async function mergeGuestCartIntoAccount(items: CartItem[]): Promise<void> {
   const guestLines = items
-    .filter((i) => isLiveProductId(i.productId))
+    .filter((i) => isLiveProductId(i.productId) && (!i.variantId || isLiveProductId(i.variantId)))
     .slice(0, 100)
     .map((i) => ({
       product_id: i.productId,
