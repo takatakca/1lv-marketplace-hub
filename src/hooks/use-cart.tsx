@@ -1,19 +1,34 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { Product } from "@/lib/data";
+import { useAuth } from "@/hooks/use-auth";
+import {
+  applyCartChange,
+  cartLineId,
+  cartQuantity,
+  CART_STORAGE_KEY,
+  isLiveProductId,
+  normalizeCartVariant,
+  restoreCartItems,
+  type CartChange,
+  type CartItem,
+} from "@/lib/cart-model";
+import {
+  clearAccountCart,
+  listAccountCartItems,
+  mergeGuestCartIntoAccount,
+  setAccountCartItem,
+} from "@/services/account-cart";
 
-export type CartItem = {
-  lineId: string;
-  productId: string;
-  slug: string;
-  title: string;
-  price: number;
-  image: string;
-  vendorSlug: string;
-  qty: number;
-  variantId?: string;
-  variantSku?: string;
-  variant?: Record<string, string>;
-};
+export type { CartItem } from "@/lib/cart-model";
+type SyncStatus = "syncing" | "ready" | "error";
 
 type CartContextValue = {
   items: CartItem[];
@@ -33,217 +48,226 @@ type CartContextValue = {
   clear: () => void;
   count: number;
   subtotal: number;
+  syncStatus: SyncStatus;
+  retrySync: () => void;
 };
 
 const CartContext = createContext<CartContextValue | undefined>(undefined);
-const KEY = "1lvca:cart:v1";
 
-function normalizeVariant(
-  variant?: Record<string, string>,
-): Record<string, string> | undefined {
-  if (!variant) return undefined;
-
-  const entries = Object.entries(variant)
-    .map(([key, value]) => [key.trim(), value.trim()] as const)
-    .filter(([key, value]) => key.length > 0 && value.length > 0)
-    .sort(([a], [b]) => a.localeCompare(b));
-
-  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
-}
-
-function createLineId(
-  productId: string,
-  variant?: Record<string, string>,
-  variantId?: string,
-): string {
-  if (variantId?.trim()) {
-    return `${productId}::variant:${variantId.trim()}`;
+function readGuestCart(): CartItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(CART_STORAGE_KEY);
+    return raw ? restoreCartItems(JSON.parse(raw) as unknown) : [];
+  } catch {
+    return [];
   }
-
-  const normalized = normalizeVariant(variant);
-  if (!normalized) return productId;
-
-  const variantKey = Object.entries(normalized)
-    .map(
-      ([key, value]) =>
-        `${encodeURIComponent(key)}=${encodeURIComponent(value)}`,
-    )
-    .join("&");
-
-  return `${productId}::${variantKey}`;
 }
 
-function restoreCartItem(value: unknown): CartItem | null {
-  if (!value || typeof value !== "object") return null;
-
-  const raw = value as Partial<CartItem>;
-  if (
-    typeof raw.productId !== "string" ||
-    typeof raw.slug !== "string" ||
-    typeof raw.title !== "string" ||
-    typeof raw.price !== "number" ||
-    !Number.isFinite(raw.price) ||
-    typeof raw.image !== "string" ||
-    typeof raw.vendorSlug !== "string" ||
-    typeof raw.qty !== "number" ||
-    !Number.isFinite(raw.qty)
-  ) {
-    return null;
+function writeGuestCart(items: CartItem[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (items.length === 0) window.localStorage.removeItem(CART_STORAGE_KEY);
+    else window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    // Private browsing may deny localStorage. Shopping remains available in memory.
   }
-
-  const variant =
-    raw.variant && typeof raw.variant === "object"
-      ? normalizeVariant(raw.variant)
-      : undefined;
-  const qty = Math.max(1, Math.min(99, Math.floor(raw.qty)));
-  const variantId =
-    typeof raw.variantId === "string" && raw.variantId.trim()
-      ? raw.variantId.trim()
-      : undefined;
-  const variantSku =
-    typeof raw.variantSku === "string" && raw.variantSku.trim()
-      ? raw.variantSku.trim()
-      : undefined;
-  const lineId =
-    typeof raw.lineId === "string" && raw.lineId.trim()
-      ? raw.lineId
-      : createLineId(raw.productId, variant, variantId);
-
-  return {
-    lineId,
-    productId: raw.productId,
-    slug: raw.slug,
-    title: raw.title,
-    price: raw.price,
-    image: raw.image,
-    vendorSlug: raw.vendorSlug,
-    qty,
-    ...(variantId ? { variantId } : {}),
-    ...(variantSku ? { variantSku } : {}),
-    ...(variant ? { variant } : {}),
-  };
 }
 
-function mergeRestoredItems(items: CartItem[]): CartItem[] {
-  const merged = new Map<string, CartItem>();
-
-  for (const item of items) {
-    const existing = merged.get(item.lineId);
-    if (existing) {
-      merged.set(item.lineId, {
-        ...existing,
-        qty: Math.min(99, existing.qty + item.qty),
-      });
-    } else {
-      merged.set(item.lineId, item);
-    }
-  }
-
-  return [...merged.values()];
+function replayCartChanges(items: CartItem[], changes: CartChange[]): CartItem[] {
+  return changes.reduce(applyCartChange, items);
 }
 
+/**
+ * Guest intent remains in browser storage; TAKATAK-authorized accounts use
+ * the existing protected 1LV RPCs. We never copy another account's cart to
+ * guest storage or let a client-supplied price reach financial checkout logic.
+ */
 export function CartProvider({ children }: { children: ReactNode }) {
+  const { user, loading: authLoading } = useAuth();
+  const userId = user?.id ?? null;
   const [items, setItems] = useState<CartItem[]>([]);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("syncing");
+  const [retryToken, setRetryToken] = useState(0);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (!raw) return;
+  const itemsRef = useRef<CartItem[]>([]);
+  const serverItemsRef = useRef<CartItem[]>([]);
+  const pendingRef = useRef<CartChange[]>([]);
+  const accountRef = useRef<string | null>(null);
+  const generationRef = useRef(0);
+  const readyRef = useRef(false);
+  const flushingRef = useRef(false);
 
-      const parsed: unknown = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return;
-
-      setItems(
-        mergeRestoredItems(
-          parsed
-            .map(restoreCartItem)
-            .filter((item): item is CartItem => item !== null),
-        ),
-      );
-    } catch {
-      /* Cart storage is optional. A malformed local cart must not block shopping. */
-    }
+  const show = useCallback((next: CartItem[]) => {
+    itemsRef.current = next;
+    setItems(next);
   }, []);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem(KEY, JSON.stringify(items));
-  }, [items]);
+  const flushPending = useCallback(async () => {
+    if (flushingRef.current || !readyRef.current || !accountRef.current) return;
+    const generation = generationRef.current;
+    flushingRef.current = true;
 
-  const add: CartContextValue["add"] = (
-    product,
-    qty = 1,
-    variantInput,
-    variantIdentity,
-  ) =>
-    setItems((previous) => {
-      const variant = normalizeVariant(variantInput);
-      const variantId = variantIdentity?.id?.trim() || undefined;
-      const variantSku = variantIdentity?.sku?.trim() || undefined;
-      const lineId = createLineId(product.id, variant, variantId);
-      const safeQty = Math.max(1, Math.min(99, Math.floor(qty)));
-      const existing = previous.find((item) => item.lineId === lineId);
+    try {
+      while (pendingRef.current.length > 0) {
+        if (generation !== generationRef.current || !accountRef.current) return;
+        const change = pendingRef.current[0];
+        if (change.kind === "clear") {
+          await clearAccountCart();
+          if (generation !== generationRef.current) return;
+          serverItemsRef.current = [];
+        } else {
+          const next = applyCartChange(serverItemsRef.current, change);
+          const target = change.kind === "add"
+            ? change.item
+            : serverItemsRef.current.find((item) => item.lineId === change.lineId);
 
-      if (existing) {
-        return previous.map((item) =>
-          item.lineId === lineId
-            ? { ...item, qty: Math.min(99, item.qty + safeQty) }
-            : item,
-        );
+          if (target && isLiveProductId(target.productId)) {
+            const qty = change.kind === "remove"
+              ? 0
+              : next.find((item) => item.lineId === target.lineId)?.qty ?? 0;
+            // Absolute quantities make retry safe if an HTTP response was lost.
+            const savedQty = await setAccountCartItem(target, qty);
+            if (generation !== generationRef.current) return;
+            serverItemsRef.current = savedQty === 0
+              ? next.filter((item) => item.lineId !== target.lineId)
+              : next.map((item) => item.lineId === target.lineId
+                ? { ...item, qty: savedQty }
+                : item);
+          } else {
+            serverItemsRef.current = next;
+          }
+        }
+        pendingRef.current.shift();
       }
 
-      return [
-        ...previous,
-        {
-          lineId,
-          productId: product.id,
-          slug: product.slug,
-          title: product.title,
-          price:
-            typeof variantIdentity?.price === "number" &&
-            Number.isFinite(variantIdentity.price)
-              ? variantIdentity.price
-              : product.price,
-          image: variantIdentity?.image || product.images[0] || "",
-          vendorSlug: product.vendorSlug,
-          qty: safeQty,
-          ...(variantId ? { variantId } : {}),
-          ...(variantSku ? { variantSku } : {}),
-          ...(variant ? { variant } : {}),
-        },
-      ];
+      const canonical = await listAccountCartItems();
+      if (generation !== generationRef.current) return;
+      serverItemsRef.current = canonical;
+      show(replayCartChanges(canonical, pendingRef.current));
+      setSyncStatus("ready");
+    } catch (error) {
+      if (generation !== generationRef.current) return;
+      console.error("[1LV cart] Account sync failed:", error);
+      readyRef.current = false;
+      setSyncStatus("error");
+    } finally {
+      flushingRef.current = false;
+      if (generation === generationRef.current && readyRef.current &&
+          pendingRef.current.length > 0) {
+        void flushPending();
+      }
+    }
+  }, [show]);
+
+  useEffect(() => {
+    const generation = ++generationRef.current;
+    readyRef.current = false;
+
+    if (authLoading) {
+      setSyncStatus("syncing");
+      return;
+    }
+
+    if (!userId) {
+      // Explicitly discard the previous user's account cart from this tab.
+      accountRef.current = null;
+      serverItemsRef.current = [];
+      pendingRef.current = [];
+      show(readGuestCart());
+      readyRef.current = true;
+      setSyncStatus("ready");
+      return;
+    }
+
+    if (accountRef.current !== userId) {
+      accountRef.current = userId;
+      pendingRef.current = [];
+      serverItemsRef.current = [];
+      show([]);
+    }
+    setSyncStatus("syncing");
+
+    void (async () => {
+      try {
+        const guestItems = readGuestCart();
+        const eligible = guestItems.filter((item) => isLiveProductId(item.productId));
+        if (eligible.length > 0) {
+          await mergeGuestCartIntoAccount(eligible);
+          if (generation !== generationRef.current) return;
+          // Merge RPC succeeded: remove merged lines before listing so a
+          // later fetch failure/reload cannot add them twice.
+          writeGuestCart(guestItems.filter((item) => !isLiveProductId(item.productId)));
+        }
+
+        const canonical = await listAccountCartItems();
+        if (generation !== generationRef.current) return;
+        serverItemsRef.current = canonical;
+        show(replayCartChanges(canonical, pendingRef.current));
+        readyRef.current = true;
+        setSyncStatus("ready");
+        void flushPending();
+      } catch (error) {
+        if (generation !== generationRef.current) return;
+        console.error("[1LV cart] Unable to load saved cart:", error);
+        // Preserve guest intent for a later merge, never silently discard it.
+        show(replayCartChanges(readGuestCart(), pendingRef.current));
+        setSyncStatus("error");
+      }
+    })();
+  }, [authLoading, userId, retryToken, show, flushPending]);
+
+  const mutate = useCallback((change: CartChange) => {
+    if (authLoading) return;
+    const next = applyCartChange(itemsRef.current, change);
+    show(next);
+
+    if (!userId) {
+      writeGuestCart(next);
+      return;
+    }
+
+    pendingRef.current.push(change);
+    if (readyRef.current) void flushPending();
+  }, [authLoading, userId, show, flushPending]);
+
+  const add: CartContextValue["add"] = (product, qty = 1, variantInput, variantIdentity) => {
+    const variant = normalizeCartVariant(variantInput);
+    const variantId = variantIdentity?.id?.trim() || undefined;
+    const lineId = cartLineId(product.id, variant, variantId);
+    mutate({
+      kind: "add",
+      item: {
+        lineId,
+        productId: product.id,
+        slug: product.slug,
+        title: product.title,
+        price: typeof variantIdentity?.price === "number" &&
+          Number.isFinite(variantIdentity.price)
+          ? variantIdentity.price : product.price,
+        image: variantIdentity?.image || product.images[0] || "",
+        vendorSlug: product.vendorSlug,
+        qty: cartQuantity(qty),
+        ...(variantId ? { variantId } : {}),
+        ...(variantIdentity?.sku ? { variantSku: variantIdentity.sku } : {}),
+        ...(variant ? { variant } : {}),
+      },
     });
+  };
 
-  const remove = (lineId: string) =>
-    setItems((previous) =>
-      previous.filter((item) => item.lineId !== lineId),
-    );
-
+  const remove = (lineId: string) => mutate({ kind: "remove", lineId });
   const setQty = (lineId: string, qty: number) =>
-    setItems((previous) =>
-      previous.map((item) =>
-        item.lineId === lineId
-          ? {
-              ...item,
-              qty: Math.max(1, Math.min(99, Math.floor(qty))),
-            }
-          : item,
-      ),
-    );
+    mutate({ kind: "set", lineId, qty });
+  const clear = () => mutate({ kind: "clear" });
 
-  const clear = () => setItems([]);
-
+  const retrySync = useCallback(() => setRetryToken((n) => n + 1), []);
   const count = items.reduce((sum, item) => sum + item.qty, 0);
-  const subtotal = items.reduce(
-    (sum, item) => sum + item.price * item.qty,
-    0,
-  );
+  const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
 
   return (
-    <CartContext.Provider
-      value={{ items, add, remove, setQty, clear, count, subtotal }}
-    >
+    <CartContext.Provider value={{
+      items, add, remove, setQty, clear, count, subtotal, syncStatus, retrySync,
+    }}>
       {children}
     </CartContext.Provider>
   );
@@ -251,8 +275,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
 export function useCart() {
   const context = useContext(CartContext);
-  if (!context) {
-    throw new Error("useCart must be used inside CartProvider");
-  }
+  if (!context) throw new Error("useCart must be used inside CartProvider");
   return context;
 }
