@@ -1,5 +1,8 @@
 # 1LV.CA — PROJECT STATUS
 
+**2026-10-14 new commits:** `89610f0` creates the agent-standard documentation (**CI success 38613657563**); `ba17025` implements defensive payment status rendering/tests (CI 38613941139 pending at last check). They are on PR #12 only; not live.
+
+
 Reviewed 2026-10-14. **Advanced code, NOT certified or deployed as a complete production system.**
 
 - Repository: https://github.com/takatakca/1lv-marketplace-hub

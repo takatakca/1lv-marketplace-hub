@@ -1,5 +1,8 @@
 # 1LV.CA — Agent continuation / durable handoff
 
+Latest note 2026-10-14: Full canonical agent handoff now lives in `docs/AGENT_HANDOFF.md`; baseline docs commit `89610f0` passed Actions 38613657563; payment status code commit `ba17025` is awaiting Actions 38613941139 at last check. No live migration, main merge or production deployment has been performed. Continue from GitHub head, not this historical snapshot.
+
+
 Updated: **2026-10-14** (GitHub connector session).
 Read this before changing anything. Check the *live* GitHub commit/PR/workflow state first; this record is a handoff, not proof production is live.
 

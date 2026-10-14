@@ -1,5 +1,15 @@
 # 1LV.CA — AGENT HANDOFF
 
+## 2026-10-14 — Latest code pushed and validation
+
+- Documentation baseline: `89610f0e328c3c3e5a2e602e4af76bfbfccf71d0`, **GitHub Actions 38613657563 SUCCESS**: https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38613657563
+- Latest pushed **code** commit at time of this update: `ba1702564d4af19e332f5b27b06c07a3af1c1a67`. Adds `src/lib/payment-status.ts`, `scripts/payment-status-tests.mjs`, status corrections in `src/routes/order-confirmation.tsx` and test/lint steps in `.github/workflows/ci-cart-integration.yml`.
+- Code CI run **38613941139**: https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38613941139 — queued at last inspection; do not mark this code certified unless this exact SHA concludes SUCCESS.
+- This documentation refresh is committed separately; its own resulting SHA must be read from PR #12 or `git rev-parse HEAD`.
+- Real deployment remains **NOT VERIFIED / NOT PERFORMED**; an attempt to view `https://1lv.ca` through an external reader returned 403, and the public health endpoint could not be read. These web access failures are not proof the site itself is offline.
+- Next exact action: inspect run 38613941139 and the newest run on PR #12; if failed, inspect job logs and fix the same branch. If green, continue the next independent task, preserving PR #8 migration/security release gates.
+
+
 Updated 2026-10-14. **Not a claim of deployment.** Read `AGENTS.md`, `WORKLOG.md`, `.agent/CONTINUATION.md`, PRs #8/#11/#12 and GitHub Actions before any write.
 
 ## Latest completed task

@@ -1,5 +1,8 @@
 # 1LV.CA — TASK QUEUE
 
+**Code milestone:** `ba1702564d4af19e332f5b27b06c07a3af1c1a67` adds 11 payment-status regression cases and honest paid/pending/failed/refunded/unknown UX. Await exact-head CI before marking this item complete; database and production acceptance remain blocked.
+
+
 Reviewed 2026-10-14. Ordered by release risk; update status only with verifiable evidence.
 
 | Priority | Status | Work / acceptance |
