@@ -1,5 +1,8 @@
 # 1LV.CA — Agent continuation / durable handoff
 
+Code checkpoint 2026-10-14: `6a12e57a3edca4bde0b1eef6e84da42b420e936f` passed GitHub Actions `38615696004`; order history, wishlist and admin dashboards now have genuine failure states and retry, with account-scoped async reads. Full handoff: `docs/AGENT_HANDOFF.md`. No production deploy or 1LV Supabase access.
+
+
 Verified 2026-10-14 code checkpoint: `0edcc3a1c48982d8a55425feca42b5a1102ea83f`, Actions run `38614892717` SUCCESS. Guest payment capability cleanup now preserves session-scoped receipt lookup, fake tracking fallback removed, partial refunds distinguished. Canonical durable report: `docs/AGENT_HANDOFF.md`. No main merge or production deploy, live 1LV Supabase access unavailable.
 
 

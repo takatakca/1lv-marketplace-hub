@@ -1,5 +1,8 @@
 # 1LV.CA — TASK QUEUE
 
+**UI reliability code complete and CI green (not deployed):** commit `6a12e57` addresses truthful read failures across orders/wishlist/admin; [run 38615696004](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38615696004). Next executable tasks prioritize server-idempotent guest cart merge and authorized addresses once isolated 1LV DB testing is available. Continue resolving runtime security findings and the production full-stack gate.
+
+
 **New completed-in-code checkpoint:** guest order lookup and payment-status UX `0edcc3a`; CI SUCCESS run 38614892717. Browser/RLS/Stripe integration and production release still pending. Next safe backend priorities: idempotent guest merge and tenant-isolated shipping addresses under authorized Supabase project with tests.
 
 

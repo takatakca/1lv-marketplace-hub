@@ -1,5 +1,20 @@
 # 1LV.CA — AGENT HANDOFF
 
+## Latest verified code and next task — 2026-10-14
+
+**Latest verified code commit:** `6a12e57a3edca4bde0b1eef6e84da42b420e936f`.
+
+**GitHub Actions verification:** [run 38615696004 — SUCCESS at that exact SHA](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38615696004). Passed locked install, cart/payment/guest context regressions, scoped ESLint, schema guard, production build and TypeScript. These checks do **not** certify the Supabase production data, Stripe payments or MochaHost deployment.
+
+**Last completed task:** prevent misleading empty records when data reads fail and prevent stale cross-account display. `src/routes/orders.tsx`, `src/routes/wishlist.tsx`, `src/routes/admin.index.tsx` now distinguish genuine empty datasets from load errors and offer retry; order/admin state resets or is owner-keyed. The PR CI lint scope was updated.
+
+**Active next task:** resolve backend guest-cart merge idempotency and saved delivery addresses with SQL/RLS/CI validation, only when the correct Supabase environment can be safely tested. Independently coordinate dependency vulnerability #6/PR #10 and lockfile PR #11. No unsafe DB edits in other TAKATAK projects.
+
+**Current draft branch:** `upgrade/account-cart-ui-20261014`, stacked PR #12 on PR #8. Last pushed code SHA above; to obtain this handoff's own latest documentation SHA read `git rev-parse HEAD` or [PR #12 commits](https://github.com/takatakca/1lv-marketplace-hub/pull/12/commits).
+
+**Release blocker rechecked:** Supabase connection lists several TAKATAK projects but NOT required 1LV reference `odoybkshqszucvoxzjyz`. HTTP health verification from external environments was unsuccessful (one 403; one DNS resolution failure), which is **not** proof of site downtime. No live migration, signed Stripe payment test, `main` merge or MochaHost deployment has occurred. **Do not merge PR #8/#12** without the gates in `docs/DEPLOYMENT.md`.
+
+
 ## 2026-10-14 — Read-failure honesty and account isolation
 
 Latest code batch on PR #12 changes `src/routes/orders.tsx`, `src/routes/wishlist.tsx`, `src/routes/admin.index.tsx`, `.github/workflows/ci-cart-integration.yml` and `WORKLOG.md`. Order histories, wishlists and admin metrics now show an explicit retryable error when their reads fail rather than falsely asserting no records. Account switching cannot expose the previously selected user's order rows. Obtain current head SHA via PR #12 and verify its own CI before claiming success. This change does not apply migrations or deploy.

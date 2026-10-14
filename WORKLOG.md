@@ -2,6 +2,9 @@
 
 Newest first. Format: `YYYY-MM-DD | agent | branch → PR | status | what | next step`
 
+- 2026-10-14 | ChatGPT | upgrade/account-cart-ui-20261014 → PR #12 | PR #12 | Orders/wishlist/admin read failure UX and account isolation 6a12e57 PASSED CI 38615696004; handoff refreshed | Blocked from production by Supabase project access, migrations, Stripe and security/rollback
+
+
 - 2026-10-14 | ChatGPT | upgrade/account-cart-ui-20261014 → PR #12 | PR #12 | Distinguish unavailable order/wishlist/admin data from genuinely empty datasets, with retry and identity isolation | Verify exact-head CI; no production release
 
 

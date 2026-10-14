@@ -1,5 +1,8 @@
 # 1LV.CA — PROJECT STATUS
 
+**New verified checkpoint:** commit `6a12e57a3edca4bde0b1eef6e84da42b420e936f`, [CI 38615696004 SUCCESS](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38615696004). Order history, wishlist and admin data loading now fail visibly rather than impersonating empty datasets; still only in draft PR #12.
+
+
 **Latest verified 2026-10-14:** `0edcc3a1c48982d8a55425feca42b5a1102ea83f`, CI [38614892717 SUCCESS](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38614892717). Guest order receipt/retry continuity, honest no-tracking empty state, and partial-refund status added. This code is still only on draft PR #12; no production migration/deploy proven.
 
 
