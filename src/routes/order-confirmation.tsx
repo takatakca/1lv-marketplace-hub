@@ -35,6 +35,7 @@ function Confirmation() {
   const [details, setDetails] = useState<Awaited<ReturnType<typeof getOrderByNumber>> | null>(null);
   const [guestContext, setGuestContext] = useState<GuestPaymentContext | null>(null);
   const [loading, setLoading] = useState(Boolean(order && !demo));
+  const [refreshing, setRefreshing] = useState(false);
   const paymentVerified = !demo && details?.payment_status === "paid";
   const orderLocated = Boolean(details);
 
@@ -51,6 +52,57 @@ function Confirmation() {
       cancel = true;
     };
   }, [order, demo]);
+
+  // Stripe may redirect before the signed webhook updates the order.
+  // Query authoritative order state; never trust a redirect query flag.
+  useEffect(() => {
+    if (!order || demo || details?.payment_status === "paid") return;
+    let active = true;
+    let inFlight = false;
+    let attempts = 0;
+    const timer = window.setInterval(() => {
+      if (!active || inFlight || attempts >= 12 || document.visibilityState === "hidden") return;
+      attempts += 1;
+      inFlight = true;
+      const context = getGuestPaymentContext(order);
+      void getOrderByNumber(order, context?.checkoutKey ?? null)
+        .then((latest) => {
+          if (active && latest) setDetails(latest);
+        })
+        .catch(() => {
+          // Preserve last known state; manual refresh remains available.
+        })
+        .finally(() => {
+          inFlight = false;
+          if (attempts >= 12) window.clearInterval(timer);
+        });
+    }, 5000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [order, demo, details?.payment_status]);
+
+  const refreshStatus = async () => {
+    if (!order || demo || refreshing) return;
+    setRefreshing(true);
+    try {
+      const context = getGuestPaymentContext(order);
+      const current = await getOrderByNumber(order, context?.checkoutKey ?? null);
+      if (current) {
+        setDetails(current);
+        toast.message(current.payment_status === "paid"
+          ? "Payment confirmed"
+          : "Payment is not yet confirmed");
+      } else {
+        toast.error("We could not verify this order yet.");
+      }
+    } catch {
+      toast.error("Unable to refresh order status. Please try again.");
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     if (order && details?.payment_status === "paid") {
@@ -115,6 +167,16 @@ function Confirmation() {
                   <span className="text-muted-foreground">Fulfillment</span>
                   <span className="font-semibold text-navy capitalize">{details.status}</span>
                 </div>
+                {details.payment_status !== "paid" && (
+                  <button
+                    type="button"
+                    onClick={() => void refreshStatus()}
+                    disabled={refreshing}
+                    className="mt-3 text-xs font-semibold text-electric underline-offset-2 hover:underline disabled:opacity-60"
+                  >
+                    {refreshing ? "Checking payment status…" : "Check payment status"}
+                  </button>
+                )
 
                 <div className="mt-4 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
                   <p className="font-semibold text-navy">Next steps</p>
@@ -138,9 +200,19 @@ function Confirmation() {
                 )}
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                We could not verify this order or its payment status. Please check My Orders, or contact support if the problem continues.
-              </p>
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  We could not verify this order or its payment status. Check My Orders or contact support if the problem continues.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void refreshStatus()}
+                  disabled={refreshing}
+                  className="text-xs font-semibold text-electric underline-offset-2 hover:underline disabled:opacity-60"
+                >
+                  {refreshing ? "Checking…" : "Try checking the order again"}
+                </button>
+              </div>
             )}
 
             <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">

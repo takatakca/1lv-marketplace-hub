@@ -58,6 +58,10 @@ Code-only follow-up aligns the deployment and health `EXPECTED_SCHEMA_VERSION` w
 
 The prior checkout correction at exact commit `8ddb1c693c18c464360d81fd5d6d461ac8650020` passed [GitHub Actions run 38608452178](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38608452178). The schema alignment commit must be checked at its own head. The Supabase connector still does not list project `odoybkshqszucvoxzjyz`. Do not touch TAKATAK STAGING or other project databases in its place.
 
+## 2026-10-14 — Order-status reconciliation
+
+PR #12 adds bounded visible-tab polling after Stripe returns (12 checks at five-second intervals), stopping at a backend-confirmed paid state, with manual refresh for delayed webhooks. Redirect flags are not proof of payment. Real webhook/browser acceptance remains pending. Schema alignment commit a354a7e passed GitHub Actions 38608917072.
+
 ## Next exact steps (in order)
 
 1. Verify the latest stacked PR #12 head SHA in GitHub Actions after any final code/doc commits; resolve any new CI failure before merging.
