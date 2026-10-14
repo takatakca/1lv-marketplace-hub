@@ -191,13 +191,23 @@ export function CartProvider({ children }: { children: ReactNode }) {
     void (async () => {
       try {
         const guestItems = readGuestCart();
-        const eligible = guestItems.filter((item) => isLiveProductId(item.productId));
+        const eligible = guestItems.filter((item) =>
+          isLiveProductId(item.productId) &&
+          (!item.variantId || isLiveProductId(item.variantId)),
+        );
         if (eligible.length > 0) {
           await mergeGuestCartIntoAccount(eligible);
+          // Do this immediately after successful RPC even if the auth epoch
+          // changes; otherwise a refresh/logout can merge the same lines again.
+          // Subtract only the quantities actually sent, preserving any later
+          // browser-side additions rather than erasing them wholesale.
+          const merged = new Map(eligible.map((item) => [item.lineId, item.qty]));
+          const remaining = readGuestCart().flatMap((item) => {
+            const delta = item.qty - (merged.get(item.lineId) ?? 0);
+            return delta > 0 ? [{ ...item, qty: delta }] : [];
+          });
+          writeGuestCart(remaining);
           if (generation !== generationRef.current) return;
-          // Merge RPC succeeded: remove merged lines before listing so a
-          // later fetch failure/reload cannot add them twice.
-          writeGuestCart(guestItems.filter((item) => !isLiveProductId(item.productId)));
         }
 
         const canonical = await listAccountCartItems();
