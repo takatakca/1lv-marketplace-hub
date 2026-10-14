@@ -1,0 +1,54 @@
+name: 1LV Pull Request Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 1lv-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: npm lock, build and TypeScript
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+
+      # Production deploy MUST use npm ci. Never silently replace it with
+      # npm install: that would hide an out-of-sync package-lock.json.
+      - name: Verify reproducible npm install
+        run: npm ci
+
+      - name: Check Node entrypoint syntax
+        run: node --check server.cjs
+
+      - name: Build production assets
+        env:
+          # CI-only public placeholders; do not use production secrets in PRs.
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: ci-not-a-real-supabase-key
+        run: npm run build
+
+      - name: Validate generated asset entrypoint
+        run: test -f dist/client/index.html
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      # This checks only compilation/install reproducibility. It does NOT
+      # certify payments, DB migrations, Stripe, TAKATAK API or live deploy.
