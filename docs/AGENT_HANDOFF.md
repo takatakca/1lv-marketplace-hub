@@ -1,5 +1,16 @@
 # 1LV.CA — AGENT HANDOFF
 
+## Certified latest coding checkpoint — 2026-10-14
+
+- **Last verified code SHA:** `0edcc3a1c48982d8a55425feca42b5a1102ea83f`
+- **CI SUCCESS:** [1LV Account Cart Integration run 38614892717](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38614892717). Checked `npm ci`, cart model, payment-status and guest payment-storage regressions, scoped ESLint, schema marker, Vite production build and TypeScript. This is not a real Stripe integration test or production deployment.
+- **Files in the code change:** `src/services/guest-payment.ts`, `src/routes/order-confirmation.tsx`, `src/routes/orders.$id.tsx`, `src/lib/payment-status.ts`, `src/components/PaymentBadge.tsx`, `scripts/payment-status-tests.mjs`, `scripts/guest-payment-tests.mjs`, `.github/workflows/ci-cart-integration.yml`, `WORKLOG.md`, `docs/AGENT_HANDOFF.md`.
+- **Outcome:** preserve authorized guest lookup key within its original browser session after settled payment while discarding the payment capability; allow guest order details and permitted retry; remove fabricated shipment/tracking fallback; recognize partial refunds as a real terminal status, never charge them again.
+- **Latest documentation commit:** this handoff refresh follows `0edcc3a`; obtain its own SHA via `git rev-parse HEAD` or [PR #12 commits](https://github.com/takatakca/1lv-marketplace-hub/pull/12/commits).
+- **Deployment status:** **NOT DEPLOYED**. The expected 1LV Supabase project `odoybkshqszucvoxzjyz` is still absent from the connected project list; no remote migration applied or signed Stripe and RLS QA performed. Host HTTP request returned 403 in an external read, not proof of downtime.
+- **Exact next action:** confirm latest head SHA and CI, then implement server-side idempotent guest merge and authorized address storage on a separate reviewed migration once correct Supabase access and local DB test facilities are available; independently remediate dependency runtime vulnerabilities #6/PR #10 and coordinate PR #11. Do not merge PR #8 or #12 until the full checklist in `docs/DEPLOYMENT.md` passes.
+
+
 ## 2026-10-14 — Guest order integrity continuation
 
 New code batch after `29da1e9` repairs guest receipt lookup by preserving checkout key while removing the payment token after settlement, enables guest `/orders/$id` lookup/retry via the original session, removes fictitious shipped/tracking information from inaccessible orders, and distinguishes partial refunds. Added `scripts/guest-payment-tests.mjs` and expanded CI/payment-status cases. Exact new code SHA and CI conclusion must be retrieved from PR #12; DO NOT MERGE and no remote schema changes.

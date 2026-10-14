@@ -22,3 +22,7 @@ Only after verified paid order attribution may the application clear exactly pur
 
 ### ADR-007: No secrets or wrong DB
 Secrets live in host/Actions secret stores; Supabase migration requires proof of right project, backup, SQL review, local verification and explicit authorized run. `scripts/check-schema-marker.mjs` keeps schema, health and release expectations aligned.
+
+### ADR-008: Guest receipts survive payment capability cleanup
+
+Upon verified `paid` or refunded terminal state, remove only the short-lived guest payment capability while retaining the unguessable guest order lookup checkout key in **sessionStorage** for that same browser session. The backend still verifies this key before exposing any order. Full deletion is a separate explicit operation. A guest order must never display fabricated shipping/tracking data if inaccessible.

@@ -1,5 +1,8 @@
 # 1LV.CA — Agent continuation / durable handoff
 
+Verified 2026-10-14 code checkpoint: `0edcc3a1c48982d8a55425feca42b5a1102ea83f`, Actions run `38614892717` SUCCESS. Guest payment capability cleanup now preserves session-scoped receipt lookup, fake tracking fallback removed, partial refunds distinguished. Canonical durable report: `docs/AGENT_HANDOFF.md`. No main merge or production deploy, live 1LV Supabase access unavailable.
+
+
 Latest note 2026-10-14: Full canonical agent handoff now lives in `docs/AGENT_HANDOFF.md`; baseline docs commit `89610f0` passed Actions 38613657563; payment status code commit `ba17025` is awaiting Actions 38613941139 at last check. No live migration, main merge or production deployment has been performed. Continue from GitHub head, not this historical snapshot.
 
 

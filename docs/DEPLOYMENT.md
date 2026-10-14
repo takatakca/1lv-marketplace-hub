@@ -25,3 +25,7 @@ Read the GitHub Actions run and its `GITHUB_SHA`, then verify HTTPS `https://1lv
 ## Known blocker
 
 Prior live Supabase listing did not expose the 1LV project; no production migration, authenticated live payment test, or MochaHost deployment was performed in this handoff.
+
+## Latest code-only validation — 2026-10-14
+
+PR #12 commit `0edcc3a1c48982d8a55425feca42b5a1102ea83f` passed CI [38614892717](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38614892717), including client guest order context and payment status regression tests. This does **not** validate a real hosted Stripe transaction or backend guest capability/RLS configuration. Deployment gates remain unchanged.

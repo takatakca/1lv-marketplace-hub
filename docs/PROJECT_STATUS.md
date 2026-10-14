@@ -1,5 +1,8 @@
 # 1LV.CA — PROJECT STATUS
 
+**Latest verified 2026-10-14:** `0edcc3a1c48982d8a55425feca42b5a1102ea83f`, CI [38614892717 SUCCESS](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38614892717). Guest order receipt/retry continuity, honest no-tracking empty state, and partial-refund status added. This code is still only on draft PR #12; no production migration/deploy proven.
+
+
 **2026-10-14 new commits:** `89610f0` creates the agent-standard documentation (**CI success 38613657563**); `ba17025` implements defensive payment status rendering/tests (CI 38613941139 pending at last check). They are on PR #12 only; not live.
 
 

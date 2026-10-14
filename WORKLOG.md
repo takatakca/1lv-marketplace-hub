@@ -2,6 +2,9 @@
 
 Newest first. Format: `YYYY-MM-DD | agent | branch → PR | status | what | next step`
 
+- 2026-10-14 | ChatGPT | upgrade/account-cart-ui-20261014 → PR #12 | PR #12 | Guest receipt/token cleanup, real order detail, no fake tracking and partial refund code at 0edcc3a PASSED CI 38614892717 | DB project access, idempotent cart merge and live Stripe/RLS gates remain
+
+
 - 2026-10-14 | ChatGPT | upgrade/account-cart-ui-20261014 → PR #12 | PR #12 | Retain guest lookup key after payment, remove fake tracking, support partial refunds and guest detail/retry | Check exact-head CI and authorizations before release
 - 2026-10-14 | ChatGPT | upgrade/account-cart-ui-20261014 → PR #12 | PR #12 | Payment status handling + 11 regression cases pushed as ba17025; docs 89610f0 CI successful | Check run 38613941139, fix if red, no production merge
 
