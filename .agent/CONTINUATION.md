@@ -52,6 +52,12 @@ On the cart PR branch, the subsequent checkout change guards direct `/checkout` 
 
 These are code changes, **not a production release**. The new commit needs exact-head CI verification and real browser/payment acceptance later. Outstanding: model a paid-order-specific cart cleanup only after verified Stripe webhook/order attribution; do not clear other tabs' or later-added cart items. No live payment, Supabase migration or secrets were modified.
 
+## 2026-10-14 — Schema marker and release workflow consistency
+
+Code-only follow-up aligns the deployment and health `EXPECTED_SCHEMA_VERSION` with the latest account-cart migration (`20261003064500`). A fail-closed `scripts/check-schema-marker.mjs` guard is wired to cart PR CI, main PR CI, production packaging/deploy and explicit production migration validation. This corrects a mismatch that would have rejected a correctly migrated 1LV runtime. The guard does **not** apply migrations or bypass existing release prerequisites.
+
+The prior checkout correction at exact commit `8ddb1c693c18c464360d81fd5d6d461ac8650020` passed [GitHub Actions run 38608452178](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38608452178). The schema alignment commit must be checked at its own head. The Supabase connector still does not list project `odoybkshqszucvoxzjyz`. Do not touch TAKATAK STAGING or other project databases in its place.
+
 ## Next exact steps (in order)
 
 1. Verify the latest stacked PR #12 head SHA in GitHub Actions after any final code/doc commits; resolve any new CI failure before merging.

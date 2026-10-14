@@ -46,6 +46,9 @@ jobs:
             find .github/workflows -type f \( -name '*.yml' -o -name '*.yaml' \) -print | sort
           )
 
+      - name: Guard application / database schema version alignment
+        run: node scripts/check-schema-marker.mjs
+
       - name: Audit production dependencies
         run: |
           set -euo pipefail
