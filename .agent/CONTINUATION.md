@@ -35,7 +35,11 @@ Changes:
 
 ## Tests and deployment status
 
-- Source committed on the stacked branch. **Actual CI result pending** until a PR workflow runs. Inspect SHA-specific run, logs and exact failing line; repair before calling tested.
+- PR #12 created: https://github.com/takatakca/1lv-marketplace-hub/pull/12 (draft, base = PR #8 branch).
+- Workflow run **38510344738 SUCCESS** at head `5ede6ec2f52bf10b713dbe235f1e6968523b8050`: npm ci, cart model regression, cart lint, application build, TypeScript and no-migration guard passed. Newer commits must be validated at their exact SHA before certification.
+- npm ci on the stacked parent dependency graph reported **12 advisories (1 low, 10 high, 1 critical)** in run 38510154896. This is unresolved security work; consult existing issue #6 / PR #10 and verify a fresh runtime-only audit before production.
+- Auth+RLS integration has *not* been tested against 1LV live/staging Supabase because project access is unavailable. Browser session-switch testing also remains open.
+- Guest merge is not fully idempotent if a server RPC commits but its network response is lost; require a server idempotency key and migration review before claiming exactly-once behavior.
 - No authorized live 1LV Supabase database test; local pgTAP evidence from parent PR is *not* proof of this UI integration.
 - No payment/Stripe test or live merchant test performed this session.
 - **Production: blocked; DO NOT MERGE OR DEPLOY this branch** until database migration, auth, identity, checkout and server smoke gates pass.
@@ -44,7 +48,7 @@ Changes:
 
 ## Next exact steps (in order)
 
-1. Open stacked cart PR, verify its CI; fix errors in code, test and TS at the branch head until green.
+1. Verify the latest stacked PR #12 head SHA in GitHub Actions after any final code/doc commits; resolve any new CI failure before merging.
 2. Independently review and test cart integration for auth session changes, offline writes, duplicate guest merges, out-of-stock variants, guest checkout, save/clear flows and cross-user isolation.
 3. Maintain the parent PR #8 release constraints, **do not merge it to main automatically**; migrate only after approved backup, correct Supabase project authorization, full SQL review and acceptance tests.
 4. Coordinate with PR #11 dependency-lock repair; rebase/merge correctly after branch checks, avoiding other agents' work loss.
@@ -57,4 +61,6 @@ Changes:
 - Main GitHub: https://github.com/takatakca/1lv-marketplace-hub
 - PR #8 backend release gate: https://github.com/takatakca/1lv-marketplace-hub/pull/8
 - PR #11 dependency fix: https://github.com/takatakca/1lv-marketplace-hub/pull/11
+- PR #12 stacked cart UI: https://github.com/takatakca/1lv-marketplace-hub/pull/12
+- Latest previously successful cart CI: https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38510344738
 - Last failed production deploy: https://github.com/takatakca/1lv-marketplace-hub/actions/runs/37750107702
