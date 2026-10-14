@@ -62,6 +62,10 @@ The prior checkout correction at exact commit `8ddb1c693c18c464360d81fd5d6d461ac
 
 PR #12 adds bounded visible-tab polling after Stripe returns (12 checks at five-second intervals), stopping at a backend-confirmed paid state, with manual refresh for delayed webhooks. Redirect flags are not proof of payment. Real webhook/browser acceptance remains pending. Schema alignment commit a354a7e passed GitHub Actions 38608917072.
 
+## 2026-10-14 — Standard handoff documents
+
+Added the five user-required durable project documents under `docs/`, restored `AGENTS.md` and `BRAND.md` from main on this stacked branch and updated `WORKLOG.md`. The active PR #12 remains a draft. Do not deploy before parent PR #8 gates are verified. The new documents track SHA by Git/PR inspection rather than guessing the hash of their own commit.
+
 ## Next exact steps (in order)
 
 1. Verify the latest stacked PR #12 head SHA in GitHub Actions after any final code/doc commits; resolve any new CI failure before merging.
