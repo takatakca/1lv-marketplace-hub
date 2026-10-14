@@ -24,9 +24,11 @@ jobs:
         run: npm ci
       - name: Cart model regression tests
         run: node scripts/cart-model-tests.mjs
+      - name: Payment status regression tests
+        run: node scripts/payment-status-tests.mjs
       - name: Lint cart changes
         run: |
-          npx eslint --max-warnings=0 --rule "prettier/prettier: off" src/lib/cart-model.ts src/services/account-cart.ts src/hooks/use-cart.tsx src/routes/cart.tsx src/routes/checkout.tsx src/routes/order-confirmation.tsx
+          npx eslint --max-warnings=0 --rule "prettier/prettier: off" src/lib/cart-model.ts src/services/account-cart.ts src/hooks/use-cart.tsx src/routes/cart.tsx src/routes/checkout.tsx src/routes/order-confirmation.tsx src/lib/payment-status.ts
       - name: Guard application / database schema version alignment
         run: node scripts/check-schema-marker.mjs
       - name: Build app

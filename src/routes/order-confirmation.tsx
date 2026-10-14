@@ -8,6 +8,7 @@ import { createPaymentIntent, isStripeConfigured } from "@/services/payments";
 import { PaymentBadge, isUnpaid } from "@/components/PaymentBadge";
 import { StripePaymentForm } from "@/components/StripePaymentForm";
 import { formatCAD } from "@/lib/data";
+import { getPaymentPresentation } from "@/lib/payment-status";
 import {
   clearGuestPaymentContext,
   getGuestPaymentContext,
@@ -36,12 +37,19 @@ function Confirmation() {
   const [guestContext, setGuestContext] = useState<GuestPaymentContext | null>(null);
   const [loading, setLoading] = useState(Boolean(order && !demo));
   const [refreshing, setRefreshing] = useState(false);
-  const paymentVerified = !demo && details?.payment_status === "paid";
-  const orderLocated = Boolean(details);
+  const presentation = getPaymentPresentation({
+    demo: Boolean(demo),
+    loading,
+    orderFound: Boolean(details),
+    paymentStatus: details?.payment_status,
+  });
+  const paymentVerified = presentation.verifiedPaid;
 
   useEffect(() => {
     if (!order || demo) return;
     let cancel = false;
+    setDetails(null);
+    setLoading(true);
     const context = getGuestPaymentContext(order);
     setGuestContext(context);
     getOrderByNumber(order, context?.checkoutKey ?? null)
@@ -56,7 +64,7 @@ function Confirmation() {
   // Stripe may redirect before the signed webhook updates the order.
   // Query authoritative order state; never trust a redirect query flag.
   useEffect(() => {
-    if (!order || demo || details?.payment_status === "paid") return;
+    if (!order || demo || !presentation.shouldPoll) return;
     let active = true;
     let inFlight = false;
     let attempts = 0;
@@ -81,7 +89,7 @@ function Confirmation() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [order, demo, details?.payment_status]);
+  }, [order, demo, presentation.shouldPoll]);
 
   const refreshStatus = async () => {
     if (!order || demo || refreshing) return;
@@ -91,9 +99,12 @@ function Confirmation() {
       const current = await getOrderByNumber(order, context?.checkoutKey ?? null);
       if (current) {
         setDetails(current);
-        toast.message(current.payment_status === "paid"
-          ? "Payment confirmed"
-          : "Payment is not yet confirmed");
+        toast.message(getPaymentPresentation({
+          demo: false,
+          loading: false,
+          orderFound: true,
+          paymentStatus: current.payment_status,
+        }).heading);
       } else {
         toast.error("We could not verify this order yet.");
       }
@@ -130,20 +141,13 @@ function Confirmation() {
   return (
     <AppLayout>
       <div className="mx-auto max-w-2xl px-4 py-16 text-center">
-        <div className={`mx-auto grid h-16 w-16 place-items-center rounded-full ${paymentVerified ? "bg-success/10 text-success" : "bg-electric/10 text-electric"}`}>
+        <div className={`mx-auto grid h-16 w-16 place-items-center rounded-full ${paymentVerified ? "bg-success/10 text-success" : presentation.kind === "error" ? "bg-destructive/10 text-destructive" : "bg-electric/10 text-electric"}`}>
           {paymentVerified ? <CheckCircle2 size={32} /> : <AlertCircle size={32} />}
         </div>
         <h1 className="mt-5 font-display text-3xl font-extrabold text-navy">
-          {demo
-            ? "Demo checkout — no payment"
-            : loading
-              ? "Checking order status…"
-              : !orderLocated
-                ? "Order status unavailable"
-                : paymentVerified
-                  ? "Payment received — thank you!"
-                  : "Order received — payment pending"}
+          {presentation.heading}
         </h1>
+        <p role="status" className="mt-2 text-sm text-muted-foreground">{presentation.description}</p>
         <p className="mt-2 text-sm text-muted-foreground">
           Order <span className="font-semibold text-navy">{order}</span>
           {demo ? <> · <span className="rounded bg-electric/10 px-1.5 py-0.5 text-[11px] font-semibold text-electric">Demo</span></> : null}
@@ -180,14 +184,16 @@ function Confirmation() {
 
                 <div className="mt-4 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
                   <p className="font-semibold text-navy">Next steps</p>
-                  {details.payment_status === "paid" ? (
+                  {paymentVerified ? (
                     <p className="mt-1">Vendors are preparing your items. You'll receive tracking updates by email.</p>
-                  ) : (
+                  ) : presentation.canRetry ? (
                     <p className="mt-1">
                       {isStripeConfigured()
-                        ? "Complete payment to release your order to vendors."
-                        : "Stripe is not yet configured. Your order is saved in pending-payment mode."}
+                        ? "Payment is incomplete. You may retry below."
+                        : "Stripe is not configured. This order is not paid."}
                     </p>
+                  ) : (
+                    <p className="mt-1">{presentation.description}</p>
                   )}
                 </div>
 
@@ -257,6 +263,8 @@ function RetryPayment({
       } else {
         setClientSecret(intent.clientSecret);
       }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not prepare payment. Try again.");
     } finally {
       setBusy(false);
     }
