@@ -176,7 +176,7 @@ function Confirmation() {
                   >
                     {refreshing ? "Checking payment status…" : "Check payment status"}
                   </button>
-                )
+                )}
 
                 <div className="mt-4 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
                   <p className="font-semibold text-navy">Next steps</p>
