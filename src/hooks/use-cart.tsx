@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import type { Product } from "@/lib/data";
+import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import {
   applyCartChange,
@@ -228,7 +229,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [authLoading, userId, retryToken, show, flushPending]);
 
   const mutate = useCallback((change: CartChange) => {
-    if (authLoading) return;
+    if (authLoading) {
+      toast.info("Your cart is loading. Please try again in a moment.");
+      return;
+    }
     const next = applyCartChange(itemsRef.current, change);
     show(next);
 
