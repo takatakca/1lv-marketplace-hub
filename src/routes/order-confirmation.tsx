@@ -10,7 +10,7 @@ import { StripePaymentForm } from "@/components/StripePaymentForm";
 import { formatCAD } from "@/lib/data";
 import { getPaymentPresentation } from "@/lib/payment-status";
 import {
-  clearGuestPaymentContext,
+  clearGuestPaymentToken,
   getGuestPaymentContext,
   type GuestPaymentContext,
 } from "@/services/guest-payment";
@@ -116,8 +116,8 @@ function Confirmation() {
   };
 
   useEffect(() => {
-    if (order && details?.payment_status === "paid") {
-      clearGuestPaymentContext(order);
+    if (order && ["paid", "partially_refunded", "refunded"].includes(details?.payment_status ?? "")) {
+      clearGuestPaymentToken(order);
     }
   }, [order, details?.payment_status]);
 

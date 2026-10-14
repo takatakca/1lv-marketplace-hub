@@ -2,7 +2,7 @@ export type GuestPaymentContext = {
   orderId: string;
   orderNumber: string;
   checkoutKey: string;
-  token: string;
+  token: string | null;
   createdAt: string;
 };
 
@@ -34,9 +34,10 @@ export function getGuestPaymentContext(
     const parsed = JSON.parse(raw) as Partial<GuestPaymentContext>;
     if (
       typeof parsed.orderId !== "string" ||
-      typeof parsed.orderNumber !== "string" ||
+      parsed.orderNumber !== orderNumber ||
       typeof parsed.checkoutKey !== "string" ||
-      typeof parsed.token !== "string"
+      !parsed.checkoutKey ||
+      (parsed.token !== null && typeof parsed.token !== "string")
     ) {
       return null;
     }
@@ -64,4 +65,15 @@ export function clearGuestPaymentContext(orderNumber: string) {
   } catch {
     // no-op
   }
+}
+
+/**
+ * Keep the guest's unguessable checkout key in sessionStorage for order lookup,
+ * but discard the short-lived payment capability when the order is settled.
+ * A paid guest otherwise loses access to their receipt immediately on refresh.
+ */
+export function clearGuestPaymentToken(orderNumber: string) {
+  const context = getGuestPaymentContext(orderNumber);
+  if (!context || context.token === null) return;
+  saveGuestPaymentContext({ ...context, token: null });
 }

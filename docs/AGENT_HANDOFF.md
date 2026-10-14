@@ -1,5 +1,9 @@
 # 1LV.CA — AGENT HANDOFF
 
+## 2026-10-14 — Guest order integrity continuation
+
+New code batch after `29da1e9` repairs guest receipt lookup by preserving checkout key while removing the payment token after settlement, enables guest `/orders/$id` lookup/retry via the original session, removes fictitious shipped/tracking information from inaccessible orders, and distinguishes partial refunds. Added `scripts/guest-payment-tests.mjs` and expanded CI/payment-status cases. Exact new code SHA and CI conclusion must be retrieved from PR #12; DO NOT MERGE and no remote schema changes.
+
 ## 2026-10-14 — Latest code pushed and validation
 
 - Documentation baseline: `89610f0e328c3c3e5a2e602e4af76bfbfccf71d0`, **GitHub Actions 38613657563 SUCCESS**: https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38613657563

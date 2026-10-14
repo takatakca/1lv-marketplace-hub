@@ -5,6 +5,7 @@ const MAP: Record<string, { label: string; cls: string }> = {
   paid: { label: "Paid", cls: "bg-success/10 text-success" },
   failed: { label: "Payment failed", cls: "bg-destructive/10 text-destructive" },
   refunded: { label: "Refunded", cls: "bg-muted text-muted-foreground" },
+  partially_refunded: { label: "Partially refunded", cls: "bg-muted text-muted-foreground" },
 };
 
 export function PaymentBadge({ status }: { status: Status }) {

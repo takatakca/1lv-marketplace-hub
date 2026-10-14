@@ -17,6 +17,7 @@ const cases = [
   ["pending",false,false,true,"pending",false,true,true,/pending/],
   ["failed",false,false,true,"failed",false,true,true,/failed/],
   ["refunded",false,false,true,"refunded",false,false,false,/refunded/],
+  ["partially-refunded",false,false,true,"partially_refunded",false,false,false,/partially refunded/],
   ["expired",false,false,true,"expired",false,false,false,/no longer payable/],
   ["cancelled",false,false,true,"cancelled",false,false,false,/no longer payable/],
   ["unknown",false,false,true,"processing",false,false,true,/requires verification/],
@@ -29,4 +30,4 @@ for (const [name,demo,loading,orderFound,paymentStatus,paid,retry,poll,heading] 
   assert.equal(v.shouldPoll,poll,name);
   assert.match(v.heading,heading,name);
 }
-console.log("PASS: 11 payment status presentation cases");
+console.log(`PASS: ${cases.length} payment status presentation cases`);

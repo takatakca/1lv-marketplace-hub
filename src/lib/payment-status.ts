@@ -49,6 +49,11 @@ export function getPaymentPresentation({
       description: "No successful payment is recorded. You may retry if the order remains eligible.",
       kind: "error", verifiedPaid: false, canRetry: true, shouldPoll: true,
     };
+    case "partially_refunded": return {
+      heading: "Order partially refunded",
+      description: "Part of your order has been refunded. Check your order for retained items and amounts.",
+      kind: "neutral", verifiedPaid: false, canRetry: false, shouldPoll: false,
+    };
     case "refunded": return {
       heading: "Payment refunded",
       description: "This order was refunded. Do not attempt to pay it again.",
