@@ -197,7 +197,7 @@ function CartPage() {
                 >
                   Proceed to checkout
                 </Link>
-              )
+              )}
 
               <div className="grid grid-cols-3 gap-2 pt-2 text-[10px] text-muted-foreground">
                 <div className="flex flex-col items-center gap-0.5 text-center">
