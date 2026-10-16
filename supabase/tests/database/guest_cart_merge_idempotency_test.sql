@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(9);
+select plan(10);
 select ok(to_regclass('public.customer_cart_merge_attempts') is not null,
   'durable idempotency journal exists');
 select ok(
@@ -10,6 +10,11 @@ select ok(not has_table_privilege('authenticated','public.customer_cart_merge_at
   'customer cannot inspect idempotency journal directly');
 select ok(not has_table_privilege('anon','public.customer_cart_merge_attempts','SELECT'),
   'anonymous browser cannot inspect journal');
+select ok(
+  exists(select 1 from pg_policies where schemaname='public'
+    and tablename='customer_cart_merge_attempts'
+    and policyname='Authorized owner merge journal'),
+  'journal policy checks authorized owner for all actions');
 select ok(
   to_regprocedure('public.merge_guest_cart(jsonb,uuid)') is not null,
   'new idempotent cart merge function exists');

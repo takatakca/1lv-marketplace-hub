@@ -49,3 +49,23 @@ jobs:
         run: |
           echo "No production migration or deployment is executed from this job."
           test -f supabase/migrations/20261016191000_idempotent_guest_cart_merge.sql
+
+  migration:
+    name: Isolated Supabase schema and pgTAP
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup local Supabase CLI
+        uses: supabase/setup-cli@v3.0.1
+        with:
+          version: "2.118.0"
+      - name: Replay migrations and database security tests on local Docker
+        env:
+          SUPABASE_TELEMETRY_DISABLED: "1"
+        run: |
+          set -euo pipefail
+          trap 'supabase stop --no-backup >/dev/null 2>&1 || true' EXIT
+          supabase db start
+          supabase db reset --local --no-seed
+          supabase test db --local

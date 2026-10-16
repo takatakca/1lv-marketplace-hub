@@ -13,6 +13,20 @@ CREATE TABLE public.customer_cart_merge_attempts (
 
 ALTER TABLE public.customer_cart_merge_attempts ENABLE ROW LEVEL SECURITY;
 
+-- Defence in depth: role ownership is checked even if a future grant exposes
+-- the journal. No raw browser access is currently granted.
+CREATE POLICY "Authorized owner merge journal"
+ON public.customer_cart_merge_attempts
+FOR ALL TO authenticated
+USING (
+  customer_id = (SELECT auth.uid())
+  AND (SELECT public.is_takatak_authorized_session())
+)
+WITH CHECK (
+  customer_id = (SELECT auth.uid())
+  AND (SELECT public.is_takatak_authorized_session())
+);
+
 REVOKE ALL ON TABLE public.customer_cart_merge_attempts
 FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE
