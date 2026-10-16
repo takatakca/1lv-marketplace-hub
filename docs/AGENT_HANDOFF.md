@@ -1,5 +1,18 @@
 # 1LV.CA — AGENT HANDOFF
 
+## 2026-10-16 — Code + isolated database suite VERIFIED
+
+- **Last fully validated source commit:** `39816dda18be1624dd8e1b05a2cc8f0201e71b47`.
+- **Exact-head CI:** [GitHub Actions 38953845179 SUCCESS](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38953845179). The **cart** job passed `npm ci`, cart/payment/guest-storage/merge regressions, ESLint, schema marker, Vite build and TypeScript. The **database** job started local Supabase Docker, replayed all migrations and ran 11 pgTAP test files (including transactional signed-session-like fixture, duplicate merge key, changed-payload rejection and cross-customer isolation). This local test does **not** prove production authorization or live Stripe operation.
+- **Latest task completed:** new `20261016191000_idempotent_guest_cart_merge.sql` records transactionally idempotent results per (customer, merge key), checks TAKATAK session, applies restrictive RLS, denies browser access to the legacy non-idempotent function; client keeps a durable merge attempt for lost acknowledgments. Repaired invalid composite `SELECT INTO` in `20261003064500_account_persistent_cart.sql`. Updated global database integrity test schema version, health/deployment schema guards, and CI.
+- **Files changed since last handoff:** `src/lib/cart-merge-intent.ts`, `src/services/account-cart.ts`, `src/hooks/use-cart.tsx`, `scripts/guest-cart-merge-tests.mjs`, both SQL migrations above, `supabase/tests/database/guest_cart_merge_idempotency_test.sql`, `supabase/tests/database/production_integrity_test.sql`, `src/routes/api/public/health.ts`, `.github/workflows/deploy.yml`, `.github/workflows/migrate-production-db.yml`, `.github/workflows/ci-cart-integration.yml`, documentation/WORKLOG.
+- **Current task:** add/verify high-severity production dependency audit to PR CI; investigate #6/PR #10 without breaking lockfile. Confirm the CI of any newer SHA, especially a documentation-only commit.
+- **Open risks:** concurrent tabs could begin distinct merge keys before seeing a shared journal; assess browser cross-tab tests and guest intent recovery. App and database CI are not live acceptance tests.
+- **Deployment:** NO PRODUCTION MIGRATION OR MERGE; PR #12 remains DRAFT based on #8. Expected 1LV Supabase project `odoybkshqszucvoxzjyz` is unavailable in the current connector. MochaHost/TanStack production health, real signed Stripe webhooks, JWT/RLS with real identities, runtime audit and rollback gates still require verification.
+- **Access needed:** permission to the dedicated 1LV project and its backup, authorized MochaHost logs and release pipeline settings, Stripe test credentials (never commit secret values); no new billable Supabase project.
+- **Exact next action:** read latest GitHub PR #12 SHA and CI, fix audit failures if any; verify Supabase project availability and migration deployment gates before any production release. Keep `main` untouched until safe.
+
+
 ## 2026-10-16 — Current development handoff
 
 - **GitHub baseline:** `b30420958bb1c1a978b0b70e7597836a1ad7a42b`, verified CI [38616013334](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38616013334).

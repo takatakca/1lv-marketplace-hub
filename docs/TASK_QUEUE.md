@@ -1,5 +1,7 @@
 # 1LV.CA — TASK QUEUE
 
+**Verified code checkpoint 2026-10-16:** 39816dda18be1624dd8e1b05a2cc8f0201e71b47 (CI 38953845179 SUCCESS: 2 jobs, local migration replay and pgTAP). Production remains blocked; next tasks are runtime dependency audit, multi-tab merge concurrency QA, real 1LV database/Stripe acceptance and MochaHost release verification.
+
 **2026-10-16 checkpoint:** PR #12 includes in-progress idempotent account-guest cart merge implementation; code CI and database replay must be verified at its exact new SHA. Production Supabase still unavailable; do not apply live migration.
 
 
@@ -23,7 +25,7 @@ Reviewed 2026-10-14. Ordered by release risk; update status only with verifiable
 | P1 | OPEN — #6/#10 | Remediate high-risk runtime npm vulnerabilities without forced breaking upgrades; validate shipped dependency tree. |
 | P1 | OPEN — PR #11 | Integrate npm dependency lockfile fix safely with stacked work after release gates. |
 | P1 | OPEN — PR #9 | Remove authenticated demo fallback and verify truthful empty states. |
-| P1 | TO DO | Make guest-to-account cart merge server-idempotent under lost responses; test duplicate/retry and customer isolation. |
+| P1 | CODE CI COMPLETE / BROWSER QA PENDING | Server-idempotent guest merge under lost responses; local pgTAP + model tests pass. Still validate concurrent-tab races, live 1LV auth and production migration. |
 | P1 | TO DO | Save shipping addresses linked to authorized identity only; protected DB schema/API, account/checkout UI and RLS tests. |
 | P1 | TO DO | On verified paid checkout, reconcile only the purchased cart lines, preserving later additions from other tabs. |
 | P1 | BLOCKED — QA | Real test-mode checkout, refunds, webhook replay, auth/session changes and vendor visibility acceptance matrix. |

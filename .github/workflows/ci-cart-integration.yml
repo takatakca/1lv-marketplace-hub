@@ -22,6 +22,8 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
+      - name: Audit production dependency vulnerabilities
+        run: npm audit --omit=dev --audit-level=high
       - name: Cart model regression tests
         run: node scripts/cart-model-tests.mjs
       - name: Payment status regression tests

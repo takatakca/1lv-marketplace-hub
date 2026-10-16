@@ -1,5 +1,8 @@
 # 1LV.CA — Agent continuation / durable handoff
 
+Verified 2026-10-16 checkpoint: source SHA `39816dda18be1624dd8e1b05a2cc8f0201e71b47`, [CI 38953845179 SUCCESS](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38953845179) including isolated Supabase migrations/pgTAP and full cart/app CI. New schema version `20261016191000`, idempotent guest merge and repaired old SQL migration. No 1LV production DB access or deployment. Canonical next-step report is at `docs/AGENT_HANDOFF.md`.
+
+
 Code checkpoint 2026-10-14: `6a12e57a3edca4bde0b1eef6e84da42b420e936f` passed GitHub Actions `38615696004`; order history, wishlist and admin dashboards now have genuine failure states and retry, with account-scoped async reads. Full handoff: `docs/AGENT_HANDOFF.md`. No production deploy or 1LV Supabase access.
 
 

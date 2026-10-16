@@ -26,3 +26,7 @@ Secrets live in host/Actions secret stores; Supabase migration requires proof of
 ### ADR-008: Guest receipts survive payment capability cleanup
 
 Upon verified `paid` or refunded terminal state, remove only the short-lived guest payment capability while retaining the unguessable guest order lookup checkout key in **sessionStorage** for that same browser session. The backend still verifies this key before exposing any order. Full deletion is a separate explicit operation. A guest order must never display fabricated shipping/tracking data if inaccessible.
+
+### ADR-009: Guest-cart merge idempotency and fail-closed recovery (2026-10-16)
+
+Use a per-account, per-merge UUID with a durable browser journal before issuing the 1LV authenticated RPC. Database `customer_cart_merge_attempts` records request payload and outcome in the same transaction as the cart addition and checks the immutable TAKATAK-authorized session. Legacy unaudited one-argument merge is no longer browser-callable; authenticated users can only call the new two-argument variant. Guest state is subtracted only after the RPC result is acknowledged, preserving later additions. Fail closed when the browser journal cannot be recovered or belongs to another account. Cross-tab initialization races and live environment acceptance remain open.

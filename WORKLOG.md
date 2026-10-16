@@ -2,6 +2,9 @@
 
 Newest first. Format: `YYYY-MM-DD | agent | branch → PR | status | what | next step`
 
+- 2026-10-16 | ChatGPT | upgrade/account-cart-ui-20261014 → PR #12 | PR #12 | Guest merge idempotency, historical SQL repair, TAKATAK grants, local DB replay and pgTAP VERIFIED SHA 39816dd CI 38953845179 | Add runtime audit, review browser races; DO NOT DEPLOY
+
+
 - 2026-10-16 | ChatGPT | upgrade/account-cart-ui-20261014 → PR #12 | PR #12 | Add account-scoped durable merge key, SQL replay journal, safer guest delta and regression/DB checks | Verify exact-head Actions and local DB replay; do not apply remote migration
 
 

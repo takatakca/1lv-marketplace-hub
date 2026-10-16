@@ -32,3 +32,7 @@ Prior live Supabase listing did not expose the 1LV project; no production migrat
 ## Latest code-only validation — 2026-10-14
 
 PR #12 commit `0edcc3a1c48982d8a55425feca42b5a1102ea83f` passed CI [38614892717](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38614892717), including client guest order context and payment status regression tests. This does **not** validate a real hosted Stripe transaction or backend guest capability/RLS configuration. Deployment gates remain unchanged.
+
+## 2026-10-16 isolated database evidence
+
+PR #12 exact commit `39816dda18be1624dd8e1b05a2cc8f0201e71b47` passed both [Actions jobs in run 38953845179](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38953845179). Local Docker `supabase db start`, `supabase db reset --local --no-seed` and `supabase test db --local` successfully replayed new schema `20261016191000`; this does not replace a required production project backup, RLS JWT validation or signed Stripe payment test. The old direct browser `merge_guest_cart(jsonb)` invocation will be revoked by the new migration; only deploy the updated browser bundle after confirmed database migration.

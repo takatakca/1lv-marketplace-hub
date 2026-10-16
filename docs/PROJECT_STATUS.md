@@ -1,5 +1,7 @@
 # 1LV.CA — PROJECT STATUS
 
+**2026-10-16 last full CI:** [38953845179 SUCCESS](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38953845179), code SHA `39816dda18be1624dd8e1b05a2cc8f0201e71b47`, including an isolated replay of all migrations and pgTAP. The guest cart merge journal is implemented only in PR #12; live database, Stripe and release not certified.
+
 **New verified checkpoint:** commit `6a12e57a3edca4bde0b1eef6e84da42b420e936f`, [CI 38615696004 SUCCESS](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38615696004). Order history, wishlist and admin data loading now fail visibly rather than impersonating empty datasets; still only in draft PR #12.
 
 
