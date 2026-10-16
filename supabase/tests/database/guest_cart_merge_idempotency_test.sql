@@ -69,13 +69,13 @@ select ok(public.is_takatak_authorized_session(),
   'test-only TAKATAK JWT is properly authorized');
 
 select lives_ok(
-  $ select public.merge_guest_cart(
-    '[]'::jsonb,'77777777-7777-4777-8777-777777777777'::uuid) $,
+  $merge_sql$ select public.merge_guest_cart(
+    '[]'::jsonb,'77777777-7777-4777-8777-777777777777'::uuid) $merge_sql$,
   'first empty guest merge is durably recorded');
 
 select lives_ok(
-  $ select public.merge_guest_cart(
-    '[]'::jsonb,'77777777-7777-4777-8777-777777777777'::uuid) $,
+  $merge_sql$ select public.merge_guest_cart(
+    '[]'::jsonb,'77777777-7777-4777-8777-777777777777'::uuid) $merge_sql$,
   'same account and key can be safely retried');
 
 select is(
@@ -85,8 +85,8 @@ select is(
   'a repeated merge created exactly one journal entry');
 
 select throws_ok(
-  $ select public.merge_guest_cart(
-    '[{}]'::jsonb,'77777777-7777-4777-8777-777777777777'::uuid) $,
+  $merge_sql$ select public.merge_guest_cart(
+    '[{}]'::jsonb,'77777777-7777-4777-8777-777777777777'::uuid) $merge_sql$,
   '22023',
   'Guest cart merge key reused with different items',
   'same key cannot be replayed with a changed payload');
@@ -103,8 +103,8 @@ select set_config('request.jwt.claims',jsonb_build_object(
 )::text,true);
 
 select lives_ok(
-  $ select public.merge_guest_cart(
-    '[]'::jsonb,'77777777-7777-4777-8777-777777777777'::uuid) $,
+  $merge_sql$ select public.merge_guest_cart(
+    '[]'::jsonb,'77777777-7777-4777-8777-777777777777'::uuid) $merge_sql$,
   'another account has independent idempotency scope even for same key');
 
 select is(
