@@ -1,5 +1,14 @@
 # 1LV.CA — AGENT HANDOFF
 
+## 2026-10-16 — Critical runtime vulnerability remediation in progress
+
+After successful isolated database/code CI 38953845179, the new runtime audit found **5 critical and 1 high** vulnerabilities at commit `7ce2712`: TanStack Start server-function reflected XSS (GHSA-qx66-fv34-fjm8), and `source-map-js` DoS (GHSA-68fv-2mgg-jv7q). The one-time lock repair run 38954584501 failed with `ERESOLVE`: unconstrained audit fix selects `@tanstack/react-start@1.169.2` requiring Vite >=8, whereas 1LV uses Vite 7.
+
+**Corrective approach in this new commit:** pin `@tanstack/react-start@1.168.60` (the patched Vite 7-compatible version), override transitive `source-map-js` to >=1.2.2, and regenerate `package-lock.json` only through the branch-restricted GitHub Actions workflow. The workflow must prove `npm ci`, production audit (zero high/critical), Vite build and TS before pushing the lockfile. A failed candidate does not publish changes. Inspect the workflow and final branch SHA before claiming security completion.
+
+Do not deploy/fuse until audit is green and exact Supabase 1LV production access/payment health are verified.
+
+
 ## 2026-10-16 — Code + isolated database suite VERIFIED
 
 - **Last fully validated source commit:** `39816dda18be1624dd8e1b05a2cc8f0201e71b47`.

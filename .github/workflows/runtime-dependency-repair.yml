@@ -30,11 +30,9 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-      - name: Install exact original lockfile
-        run: npm ci
-      - name: Re-resolve affected production dependencies without forcing majors
-        run: npm audit fix --package-lock-only --omit=dev
-      - name: Reinstall the updated lockfile
+      - name: Resolve pinned patched TanStack and source-map versions
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Reinstall the resolved lockfile
         run: npm ci
       - name: Reject any high or critical production dependency vulnerability
         run: npm audit --omit=dev --audit-level=high
