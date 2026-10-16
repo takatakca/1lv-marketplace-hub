@@ -52,6 +52,9 @@ jobs:
           TARGET_BRANCH: upgrade/account-cart-ui-20261014
         run: |
           set -euo pipefail
+          # Vite/TanStack regenerate the tracked route tree while building.
+          # Do not include generated router files in a dependency security fix.
+          git restore -- src/routeTree.gen.ts
           changed="$(git diff --name-only)"
           if [ -z "$changed" ]; then
             echo "No lockfile changes needed."
