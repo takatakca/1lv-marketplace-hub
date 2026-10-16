@@ -15,6 +15,12 @@ ALTER TABLE public.customer_cart_merge_attempts ENABLE ROW LEVEL SECURITY;
 
 -- Defence in depth: role ownership is checked even if a future grant exposes
 -- the journal. No raw browser access is currently granted.
+CREATE POLICY "TAKATAK authenticated sessions only"
+ON public.customer_cart_merge_attempts
+AS RESTRICTIVE FOR ALL TO authenticated
+USING ((SELECT public.is_takatak_authorized_session()))
+WITH CHECK ((SELECT public.is_takatak_authorized_session()));
+
 CREATE POLICY "Authorized owner merge journal"
 ON public.customer_cart_merge_attempts
 FOR ALL TO authenticated
