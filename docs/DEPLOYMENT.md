@@ -1,5 +1,8 @@
 # 1LV.CA — DEPLOYMENT PLAYBOOK
 
+**2026-10-16 new release requirement:** schema must include migration `20261016191000_idempotent_guest_cart_merge.sql` before the new account-cart client can ship. Review and test its journal permissions, revoked legacy RPC, account-scoped replay and requests with an altered payload on isolated database. Do not run against any other TAKATAK Supabase project.
+
+
 **Current state: not deployed from stacked PR #8/#12.** Do not equate a green PR workflow with live release.
 
 ## Identified environment

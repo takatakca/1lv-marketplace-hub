@@ -5,6 +5,13 @@ import {
   normalizeCartVariant,
   type CartItem,
 } from "@/lib/cart-model";
+import {
+  GUEST_MERGE_STORAGE_KEY,
+  makeGuestMergeAttempt,
+  mergePayload,
+  parseGuestMergeAttempt,
+  type GuestMergeAttempt,
+} from "@/lib/cart-merge-intent";
 
 type AccountCartRow = {
   product_id: string;
@@ -52,21 +59,67 @@ export async function listAccountCartItems(): Promise<CartItem[]> {
     });
 }
 
-/** Only live UUID products are eligible for the database merge. */
-export async function mergeGuestCartIntoAccount(items: CartItem[]): Promise<void> {
-  const guestLines = items
-    .filter((i) => isLiveProductId(i.productId) && (!i.variantId || isLiveProductId(i.variantId)))
-    .slice(0, 100)
-    .map((i) => ({
-      product_id: i.productId,
-      variant_id: i.variantId ?? null,
-      quantity: i.qty,
-    }));
-  if (!guestLines.length) return;
+/**
+ * Never create a new merge key when the previous RPC response was lost.
+ * A different account cannot claim another user's in-flight guest intention.
+ * Local persistence failures abort before the database is modified.
+ */
+function storedGuestMergeAttempt(): GuestMergeAttempt | null {
+  if (typeof window === "undefined") throw new Error("Guest merge requires a browser session.");
+  let raw: string | null;
+  try {
+    raw = window.localStorage.getItem(GUEST_MERGE_STORAGE_KEY);
+  } catch {
+    throw new Error("Browser storage unavailable; cart merge was not attempted.");
+  }
+  if (!raw) return null;
+  try {
+    const attempt = parseGuestMergeAttempt(JSON.parse(raw) as unknown);
+    if (attempt) return attempt;
+  } catch {
+    // A damaged journal is not safe to reprocess under a fresh key.
+  }
+  throw new Error("Saved guest merge cannot be recovered safely. Contact support before retrying.");
+}
+
+export async function mergeGuestCartIntoAccount(
+  items: CartItem[], accountId: string,
+): Promise<GuestMergeAttempt | null> {
+  let attempt = storedGuestMergeAttempt();
+  if (attempt && attempt.accountId !== accountId) {
+    throw new Error("An unfinished guest merge belongs to another signed-in account. Sign into that account to resolve it.");
+  }
+  if (!attempt) {
+    attempt = makeGuestMergeAttempt(accountId, items, crypto.randomUUID());
+    if (!attempt.lines.length) return null;
+    try {
+      window.localStorage.setItem(GUEST_MERGE_STORAGE_KEY, JSON.stringify(attempt));
+    } catch {
+      throw new Error("Cannot safely persist the guest merge attempt; cart was not sent.");
+    }
+  }
   const { error } = await supabase.rpc("merge_guest_cart" as never, {
-    _items: guestLines,
+    _items: mergePayload(attempt),
+    _merge_key: attempt.mergeId,
   } as never);
   if (error) throw error;
+  // Do NOT discard the journal here: the caller first must persist
+  // guest-cart subtraction, or a crash could lose exactly-once recovery.
+  return attempt;
+}
+
+/** Called synchronously only after guest-cart consumption is durably saved. */
+export function completeGuestCartMerge(attempt: GuestMergeAttempt): void {
+  const current = storedGuestMergeAttempt();
+  if (!current || current.mergeId !== attempt.mergeId ||
+      current.accountId !== attempt.accountId) {
+    throw new Error("Guest merge journal changed during completion.");
+  }
+  try {
+    window.localStorage.removeItem(GUEST_MERGE_STORAGE_KEY);
+  } catch {
+    throw new Error("Could not complete the guest merge journal cleanup.");
+  }
 }
 
 export async function setAccountCartItem(

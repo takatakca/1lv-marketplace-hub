@@ -28,9 +28,11 @@ jobs:
         run: node scripts/payment-status-tests.mjs
       - name: Guest payment context regression tests
         run: node scripts/guest-payment-tests.mjs
+      - name: Guest cart merge journal regression tests
+        run: node scripts/guest-cart-merge-tests.mjs
       - name: Lint cart changes
         run: |
-          npx eslint --max-warnings=0 --rule "prettier/prettier: off" src/lib/cart-model.ts src/services/account-cart.ts src/hooks/use-cart.tsx src/routes/cart.tsx src/routes/checkout.tsx src/routes/order-confirmation.tsx src/routes/orders.\$id.tsx src/lib/payment-status.ts src/services/guest-payment.ts src/components/PaymentBadge.tsx src/routes/orders.tsx src/routes/wishlist.tsx src/routes/admin.index.tsx
+          npx eslint --max-warnings=0 --rule "prettier/prettier: off" src/lib/cart-model.ts src/services/account-cart.ts src/hooks/use-cart.tsx src/routes/cart.tsx src/routes/checkout.tsx src/routes/order-confirmation.tsx src/routes/orders.\$id.tsx src/lib/payment-status.ts src/services/guest-payment.ts src/components/PaymentBadge.tsx src/lib/cart-merge-intent.ts src/routes/orders.tsx src/routes/wishlist.tsx src/routes/admin.index.tsx
       - name: Guard application / database schema version alignment
         run: node scripts/check-schema-marker.mjs
       - name: Build app
@@ -46,4 +48,4 @@ jobs:
       - name: Confirm this does not apply the database migration
         run: |
           echo "No production migration or deployment is executed from this job."
-          test -f supabase/migrations/20261003064500_account_persistent_cart.sql
+          test -f supabase/migrations/20261016191000_idempotent_guest_cart_merge.sql

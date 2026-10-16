@@ -1,5 +1,17 @@
 # 1LV.CA — AGENT HANDOFF
 
+## 2026-10-16 — Current development handoff
+
+- **GitHub baseline:** `b30420958bb1c1a978b0b70e7597836a1ad7a42b`, verified CI [38616013334](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38616013334).
+- **Working branch:** `upgrade/account-cart-ui-20261014`, draft PR #12 stacked on PR #8; `main` is not authorized for an unverified financial rollout.
+- **Last task developed:** idempotent guest cart merge with a durable browser journal and new account-bound PostgreSQL RPC; old non-idempotent RPC revoked for browser roles. Code files: `src/lib/cart-merge-intent.ts`, `src/services/account-cart.ts`, `src/hooks/use-cart.tsx`, `scripts/guest-cart-merge-tests.mjs`, new SQL migration and pgTAP test, version guards in health + workflows and updated CI.
+- **Verification:** new code must complete exact-head CI including `npm ci`, cart/payment/merge regressions, lint, build, TypeScript, version guard; **SQL local replay/pgTAP required before production certification**. This handoff text is written before its own resulting Git SHA exists: obtain actual head SHA/CI from GitHub.
+- **Known edge:** concurrent tabs can create separate merge attempts if they race to initialize storage; test this scenario before public release. Do not claim full distributed exactly-once guarantees until browser/Supabase integration is tested.
+- **Deployment:** NO MERGE, NO LIVE MIGRATION, NO VERIFIED DEPLOYMENT. Expected production Supabase project `odoybkshqszucvoxzjyz` is not accessible with the connected credentials. Preserve full rollback; do not create billable Supabase projects.
+- **Access required:** permitted connection to the exact 1LV Supabase project; secure GitHub/host configuration and Stripe test-mode access, no secret values in repo.
+- **Next action:** read PR #12 exact head and Actions; fix failures; run full isolated Supabase migration replay/pgTAP. Then review legacy merge callers and concurrent-tab behavior, address remaining #6/PR #11 vulnerabilities and, only after financial/auth acceptance, follow `docs/DEPLOYMENT.md`.
+
+
 ## Latest verified code and next task — 2026-10-14
 
 **Latest verified code commit:** `6a12e57a3edca4bde0b1eef6e84da42b420e936f`.

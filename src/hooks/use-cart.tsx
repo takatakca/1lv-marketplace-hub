@@ -21,8 +21,10 @@ import {
   type CartChange,
   type CartItem,
 } from "@/lib/cart-model";
+import { remainingGuestLines } from "@/lib/cart-merge-intent";
 import {
   clearAccountCart,
+  completeGuestCartMerge,
   listAccountCartItems,
   mergeGuestCartIntoAccount,
   setAccountCartItem,
@@ -65,13 +67,16 @@ function readGuestCart(): CartItem[] {
   }
 }
 
-function writeGuestCart(items: CartItem[]): void {
-  if (typeof window === "undefined") return;
+function writeGuestCart(items: CartItem[]): boolean {
+  if (typeof window === "undefined") return false;
   try {
     if (items.length === 0) window.localStorage.removeItem(CART_STORAGE_KEY);
     else window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
+    return true;
   } catch {
-    // Private browsing may deny localStorage. Shopping remains available in memory.
+    // Guest-only shopping remains in memory, but an acknowledged account merge
+    // must retain its durable attempt until guest-cart storage is saved.
+    return false;
   }
 }
 
@@ -196,18 +201,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
           isLiveProductId(item.productId) &&
           (!item.variantId || isLiveProductId(item.variantId)),
         );
-        if (eligible.length > 0) {
-          await mergeGuestCartIntoAccount(eligible);
-          // Do this immediately after successful RPC even if the auth epoch
-          // changes; otherwise a refresh/logout can merge the same lines again.
-          // Subtract only the quantities actually sent, preserving any later
-          // browser-side additions rather than erasing them wholesale.
-          const merged = new Map(eligible.map((item) => [item.lineId, item.qty]));
-          const remaining = readGuestCart().flatMap((item) => {
-            const delta = item.qty - (merged.get(item.lineId) ?? 0);
-            return delta > 0 ? [{ ...item, qty: delta }] : [];
-          });
-          writeGuestCart(remaining);
+        // A previously committed-but-unacknowledged merge is recovered with
+        // its original key/payload, even when eligible is now empty.
+        const attempted = await mergeGuestCartIntoAccount(eligible, userId);
+        if (attempted) {
+          const remaining = remainingGuestLines(readGuestCart(), attempted);
+          if (!writeGuestCart(remaining)) {
+            throw new Error("Could not save guest-cart reconciliation. Retry safely with the same merge key.");
+          }
+          completeGuestCartMerge(attempted);
           if (generation !== generationRef.current) return;
         }
 

@@ -2,6 +2,9 @@
 
 Newest first. Format: `YYYY-MM-DD | agent | branch → PR | status | what | next step`
 
+- 2026-10-16 | ChatGPT | upgrade/account-cart-ui-20261014 → PR #12 | PR #12 | Add account-scoped durable merge key, SQL replay journal, safer guest delta and regression/DB checks | Verify exact-head Actions and local DB replay; do not apply remote migration
+
+
 - 2026-10-14 | ChatGPT | upgrade/account-cart-ui-20261014 → PR #12 | PR #12 | Orders/wishlist/admin read failure UX and account isolation 6a12e57 PASSED CI 38615696004; handoff refreshed | Blocked from production by Supabase project access, migrations, Stripe and security/rollback
 
 

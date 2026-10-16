@@ -1,5 +1,8 @@
 # 1LV.CA — TASK QUEUE
 
+**2026-10-16 checkpoint:** PR #12 includes in-progress idempotent account-guest cart merge implementation; code CI and database replay must be verified at its exact new SHA. Production Supabase still unavailable; do not apply live migration.
+
+
 **UI reliability code complete and CI green (not deployed):** commit `6a12e57` addresses truthful read failures across orders/wishlist/admin; [run 38615696004](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38615696004). Next executable tasks prioritize server-idempotent guest cart merge and authorized addresses once isolated 1LV DB testing is available. Continue resolving runtime security findings and the production full-stack gate.
 
 
