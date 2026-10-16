@@ -18,8 +18,7 @@ export type GuestMergeAttempt = {
 };
 export const GUEST_MERGE_STORAGE_KEY = "1lvca:guest-merge:v1";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const validUuid = (id: string) => UUID_RE.test(id);
+const validUuid = (id: string) => isLiveProductId(id);
 
 export function makeGuestMergeAttempt(
   accountId: string,
