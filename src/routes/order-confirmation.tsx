@@ -8,8 +8,9 @@ import { createPaymentIntent, isStripeConfigured } from "@/services/payments";
 import { PaymentBadge, isUnpaid } from "@/components/PaymentBadge";
 import { StripePaymentForm } from "@/components/StripePaymentForm";
 import { formatCAD } from "@/lib/data";
+import { getPaymentPresentation } from "@/lib/payment-status";
 import {
-  clearGuestPaymentContext,
+  clearGuestPaymentToken,
   getGuestPaymentContext,
   type GuestPaymentContext,
 } from "@/services/guest-payment";
@@ -24,7 +25,7 @@ export const Route = createFileRoute("/order-confirmation")({
   }),
   head: () => ({
     meta: [
-      { title: "Order confirmed — 1LV.CA" },
+      { title: "Order status — 1LV.CA" },
       { name: "referrer", content: "no-referrer" },
     ],
   }),
@@ -35,10 +36,20 @@ function Confirmation() {
   const [details, setDetails] = useState<Awaited<ReturnType<typeof getOrderByNumber>> | null>(null);
   const [guestContext, setGuestContext] = useState<GuestPaymentContext | null>(null);
   const [loading, setLoading] = useState(Boolean(order && !demo));
+  const [refreshing, setRefreshing] = useState(false);
+  const presentation = getPaymentPresentation({
+    demo: Boolean(demo),
+    loading,
+    orderFound: Boolean(details),
+    paymentStatus: details?.payment_status,
+  });
+  const paymentVerified = presentation.verifiedPaid;
 
   useEffect(() => {
     if (!order || demo) return;
     let cancel = false;
+    setDetails(null);
+    setLoading(true);
     const context = getGuestPaymentContext(order);
     setGuestContext(context);
     getOrderByNumber(order, context?.checkoutKey ?? null)
@@ -50,9 +61,63 @@ function Confirmation() {
     };
   }, [order, demo]);
 
+  // Stripe may redirect before the signed webhook updates the order.
+  // Query authoritative order state; never trust a redirect query flag.
   useEffect(() => {
-    if (order && details?.payment_status === "paid") {
-      clearGuestPaymentContext(order);
+    if (!order || demo || !presentation.shouldPoll) return;
+    let active = true;
+    let inFlight = false;
+    let attempts = 0;
+    const timer = window.setInterval(() => {
+      if (!active || inFlight || attempts >= 12 || document.visibilityState === "hidden") return;
+      attempts += 1;
+      inFlight = true;
+      const context = getGuestPaymentContext(order);
+      void getOrderByNumber(order, context?.checkoutKey ?? null)
+        .then((latest) => {
+          if (active && latest) setDetails(latest);
+        })
+        .catch(() => {
+          // Preserve last known state; manual refresh remains available.
+        })
+        .finally(() => {
+          inFlight = false;
+          if (attempts >= 12) window.clearInterval(timer);
+        });
+    }, 5000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [order, demo, presentation.shouldPoll]);
+
+  const refreshStatus = async () => {
+    if (!order || demo || refreshing) return;
+    setRefreshing(true);
+    try {
+      const context = getGuestPaymentContext(order);
+      const current = await getOrderByNumber(order, context?.checkoutKey ?? null);
+      if (current) {
+        setDetails(current);
+        toast.message(getPaymentPresentation({
+          demo: false,
+          loading: false,
+          orderFound: true,
+          paymentStatus: current.payment_status,
+        }).heading);
+      } else {
+        toast.error("We could not verify this order yet.");
+      }
+    } catch {
+      toast.error("Unable to refresh order status. Please try again.");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (order && ["paid", "partially_refunded", "refunded"].includes(details?.payment_status ?? "")) {
+      clearGuestPaymentToken(order);
     }
   }, [order, details?.payment_status]);
 
@@ -76,10 +141,13 @@ function Confirmation() {
   return (
     <AppLayout>
       <div className="mx-auto max-w-2xl px-4 py-16 text-center">
-        <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-success/10 text-success">
-          <CheckCircle2 size={32} />
+        <div className={`mx-auto grid h-16 w-16 place-items-center rounded-full ${paymentVerified ? "bg-success/10 text-success" : presentation.kind === "error" ? "bg-destructive/10 text-destructive" : "bg-electric/10 text-electric"}`}>
+          {paymentVerified ? <CheckCircle2 size={32} /> : <AlertCircle size={32} />}
         </div>
-        <h1 className="mt-5 font-display text-3xl font-extrabold text-navy">Thank you for your order!</h1>
+        <h1 className="mt-5 font-display text-3xl font-extrabold text-navy">
+          {presentation.heading}
+        </h1>
+        <p role="status" className="mt-2 text-sm text-muted-foreground">{presentation.description}</p>
         <p className="mt-2 text-sm text-muted-foreground">
           Order <span className="font-semibold text-navy">{order}</span>
           {demo ? <> · <span className="rounded bg-electric/10 px-1.5 py-0.5 text-[11px] font-semibold text-electric">Demo</span></> : null}
@@ -103,17 +171,29 @@ function Confirmation() {
                   <span className="text-muted-foreground">Fulfillment</span>
                   <span className="font-semibold text-navy capitalize">{details.status}</span>
                 </div>
+                {details.payment_status !== "paid" && (
+                  <button
+                    type="button"
+                    onClick={() => void refreshStatus()}
+                    disabled={refreshing}
+                    className="mt-3 text-xs font-semibold text-electric underline-offset-2 hover:underline disabled:opacity-60"
+                  >
+                    {refreshing ? "Checking payment status…" : "Check payment status"}
+                  </button>
+                )}
 
                 <div className="mt-4 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
                   <p className="font-semibold text-navy">Next steps</p>
-                  {details.payment_status === "paid" ? (
+                  {paymentVerified ? (
                     <p className="mt-1">Vendors are preparing your items. You'll receive tracking updates by email.</p>
-                  ) : (
+                  ) : presentation.canRetry ? (
                     <p className="mt-1">
                       {isStripeConfigured()
-                        ? "Complete payment to release your order to vendors."
-                        : "Stripe is not yet configured. Your order is saved in pending-payment mode."}
+                        ? "Payment is incomplete. You may retry below."
+                        : "Stripe is not configured. This order is not paid."}
                     </p>
+                  ) : (
+                    <p className="mt-1">{presentation.description}</p>
                   )}
                 </div>
 
@@ -126,7 +206,19 @@ function Confirmation() {
                 )}
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">Order created. Details will appear in your account once available.</p>
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  We could not verify this order or its payment status. Check My Orders or contact support if the problem continues.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void refreshStatus()}
+                  disabled={refreshing}
+                  className="text-xs font-semibold text-electric underline-offset-2 hover:underline disabled:opacity-60"
+                >
+                  {refreshing ? "Checking…" : "Try checking the order again"}
+                </button>
+              </div>
             )}
 
             <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
@@ -171,6 +263,8 @@ function RetryPayment({
       } else {
         setClientSecret(intent.clientSecret);
       }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not prepare payment. Try again.");
     } finally {
       setBusy(false);
     }

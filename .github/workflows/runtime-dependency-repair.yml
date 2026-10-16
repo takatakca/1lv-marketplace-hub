@@ -1,0 +1,76 @@
+name: 1LV one-time runtime lockfile security repair
+
+# Runs once when this workflow is first added to the code-only PR branch.
+# Subsequent package-lock commits do not match paths and cannot re-trigger it.
+on:
+  push:
+    branches:
+      - upgrade/account-cart-ui-20261014
+    paths:
+      - .github/workflows/runtime-dependency-repair.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: 1lv-runtime-lock-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    name: Rebuild and certify non-breaking runtime patches
+    if: github.repository == 'takatakca/1lv-marketplace-hub'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Resolve pinned patched TanStack and source-map versions
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Reinstall the resolved lockfile
+        run: npm ci
+      - name: Reject any high or critical production dependency vulnerability
+        run: npm audit --omit=dev --audit-level=high
+      - name: Validate production candidate
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VITE_SUPABASE_URL"
+          test -n "$VITE_SUPABASE_PUBLISHABLE_KEY"
+          npm run build
+          npx tsc --noEmit
+          node scripts/check-schema-marker.mjs
+      - name: Publish only the verified package manifests on this review branch
+        env:
+          TARGET_BRANCH: upgrade/account-cart-ui-20261014
+        run: |
+          set -euo pipefail
+          # Vite/TanStack regenerate the tracked route tree while building.
+          # Do not include generated router files in a dependency security fix.
+          git restore -- src/routeTree.gen.ts
+          changed="$(git diff --name-only)"
+          if [ -z "$changed" ]; then
+            echo "No lockfile changes needed."
+            exit 0
+          fi
+          if printf '%s\n' "$changed" | grep -Ev '^(package.json|package-lock.json)$'; then
+            echo "::error::Unexpected file changed by dependency repair."
+            exit 1
+          fi
+          git fetch origin "$TARGET_BRANCH"
+          if [ "$(git rev-parse FETCH_HEAD)" != "$(git rev-parse HEAD)" ]; then
+            echo "::error::Review branch changed during dependency repair; refusing to overwrite."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "fix(deps): update audited TanStack and runtime lockfile patches"
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
