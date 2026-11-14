@@ -105,11 +105,17 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
-  SELECT p.*, v.*
-  INTO v_product, v_vendor
+  -- PostgreSQL cannot SELECT two composite row values into two record
+  -- variables using a single multi-column INTO list. Resolve each safely.
+  SELECT p.*
+  INTO v_product
   FROM public.products AS p
-  JOIN public.vendors AS v ON v.id = p.vendor_id
   WHERE p.id = _product_id;
+
+  SELECT v.*
+  INTO v_vendor
+  FROM public.vendors AS v
+  WHERE v.id = v_product.vendor_id;
 
   IF NOT FOUND
      OR v_product.status <> 'active'::public.product_status

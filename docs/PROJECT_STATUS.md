@@ -1,0 +1,34 @@
+# 1LV.CA — PROJECT STATUS
+
+**2026-10-16 last full CI:** [38953845179 SUCCESS](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38953845179), code SHA `39816dda18be1624dd8e1b05a2cc8f0201e71b47`, including an isolated replay of all migrations and pgTAP. The guest cart merge journal is implemented only in PR #12; live database, Stripe and release not certified.
+
+**New verified checkpoint:** commit `6a12e57a3edca4bde0b1eef6e84da42b420e936f`, [CI 38615696004 SUCCESS](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38615696004). Order history, wishlist and admin data loading now fail visibly rather than impersonating empty datasets; still only in draft PR #12.
+
+
+**Latest verified 2026-10-14:** `0edcc3a1c48982d8a55425feca42b5a1102ea83f`, CI [38614892717 SUCCESS](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38614892717). Guest order receipt/retry continuity, honest no-tracking empty state, and partial-refund status added. This code is still only on draft PR #12; no production migration/deploy proven.
+
+
+**2026-10-14 new commits:** `89610f0` creates the agent-standard documentation (**CI success 38613657563**); `ba17025` implements defensive payment status rendering/tests (CI 38613941139 pending at last check). They are on PR #12 only; not live.
+
+
+Reviewed 2026-10-14. **Advanced code, NOT certified or deployed as a complete production system.**
+
+- Repository: https://github.com/takatakca/1lv-marketplace-hub
+- Publication branch: `main`, observed SHA `b73b37343b339138617e92654265f76375161427`.
+- Active stacked branch: `upgrade/account-cart-ui-20261014` / [PR #12](https://github.com/takatakca/1lv-marketplace-hub/pull/12), based on `upgrade/persistent-commerce-settings` / PR #8.
+- Last CI-certified commit before this documentation: `0880c42d57e200d620fceb301cfdeba87aabf3b2`, [successful action](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38609556895).
+- Current exact branch SHA must be taken from `git rev-parse HEAD` or PR #12 after each new commit. Do not treat the SHA above as the latest after subsequent changes.
+
+## Features already in the stacked code
+
+TanStack Start/React storefront, Canadian checkout calculations, server-authoritative price/stock/discount order creation, Stripe authorization/refunds, multivendor products/SKUs/search/reviews, parcel shipments and returns, seller analytics, promotions, saved lists, TAKATAK-authorized account carts and guest-cart merge. Most advanced functions rely on migrations not yet applied to the 1LV production database.
+
+## Non-negotiable release blockers
+
+1. Supabase expected project `odoybkshqszucvoxzjyz` was not accessible to the connected Supabase credential during prior verification. **No migration or live RLS test completed.**
+2. PR #8 says **DO NOT MERGE**; PR #12 depends on it. `main` currently uses a static-only Node entrypoint, not the full hardened TanStack backend.
+3. Resolve dependency vulnerability issue #6/PR #10 and `npm ci` lock drift PR #11; examine shipped runtime tree.
+4. Configure necessary server-only Stripe, Supabase and TAKATAK secrets in secure deployment settings; verify payment/webhook/account permissions against authorized targets.
+5. Verify the actual version on MochaHost via production `/api/public/health`, expected revision SHA and database version; have a reversible deployment/rollback.
+
+See `docs/TASK_QUEUE.md`, `docs/DEPLOYMENT.md`, `docs/AGENT_HANDOFF.md`.

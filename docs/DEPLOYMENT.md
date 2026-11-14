@@ -1,0 +1,38 @@
+# 1LV.CA — DEPLOYMENT PLAYBOOK
+
+**2026-10-16 new release requirement:** schema must include migration `20261016191000_idempotent_guest_cart_merge.sql` before the new account-cart client can ship. Review and test its journal permissions, revoked legacy RPC, account-scoped replay and requests with an altered payload on isolated database. Do not run against any other TAKATAK Supabase project.
+
+
+**Current state: not deployed from stacked PR #8/#12.** Do not equate a green PR workflow with live release.
+
+## Identified environment
+
+- Target website: https://1lv.ca
+- Host target documented in the repository: MochaHost/cPanel, Node.js 22, full TanStack Start runtime required.
+- Production workflow: `.github/workflows/deploy.yml` on `main`, with packaging-only option, optional `AUTO_DEPLOY_ENABLED` activation, archive, server health check and release revision.
+- Production DB workflow: `.github/workflows/migrate-production-db.yml`. **Never substitute the TAKATAK main or staging Supabase database for the dedicated 1LV project.**
+- Compile on GitHub Actions, not on the limited-capacity MochaHost terminal.
+
+## Before activation
+
+1. Confirm exact Supabase reference `odoybkshqszucvoxzjyz`, backup/restore, pending migration list, full local replay, Security Advisor, correct TAKATAK authorized JWT/RLS, service grants and no cross-vendor visibility.
+2. Run `npm ci`, `npm audit --omit=dev --audit-level=high`, lint, `npm run build`, `npx tsc --noEmit`, database tests, compiled Node smoke/API tests; resolve runtime vulnerabilities.
+3. Ensure backend uses full TanStack Start bundle rather than static `main` server. Check schema marker `20261003064500` or newer with `node scripts/check-schema-marker.mjs`.
+4. Configure protected server environment through deployment secret store: `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `CHECKOUT_GUEST_TOKEN_SECRET`, `TAKATAK_1LV_API_KEY`, scheduler secrets and required runtime values. Frontend uses only publishable keys. Never commit any secret or token.
+5. Test Stripe in test mode: verified paid result, failed/cancelled payment, signed/invalid webhook, duplicate events, inventory expiry, refund and payout ledger behavior. Keep rollback artifacts ready.
+
+## Post-deploy proof
+
+Read the GitHub Actions run and its `GITHUB_SHA`, then verify HTTPS `https://1lv.ca/api/public/health` returns 200, `ok: true`, `runtime: "tanstack-start"`, `database: "ready"`, `revision` equal to that **exact** deployed commit. Do not enable `HEALTH_SKIP_DATABASE_CHECK` in production. Verify authorized storefront, cart, backend and order flows. If verification fails, rollback to a compatible release and investigate database compatibility separately.
+
+## Known blocker
+
+Prior live Supabase listing did not expose the 1LV project; no production migration, authenticated live payment test, or MochaHost deployment was performed in this handoff.
+
+## Latest code-only validation — 2026-10-14
+
+PR #12 commit `0edcc3a1c48982d8a55425feca42b5a1102ea83f` passed CI [38614892717](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38614892717), including client guest order context and payment status regression tests. This does **not** validate a real hosted Stripe transaction or backend guest capability/RLS configuration. Deployment gates remain unchanged.
+
+## 2026-10-16 isolated database evidence
+
+PR #12 exact commit `39816dda18be1624dd8e1b05a2cc8f0201e71b47` passed both [Actions jobs in run 38953845179](https://github.com/takatakca/1lv-marketplace-hub/actions/runs/38953845179). Local Docker `supabase db start`, `supabase db reset --local --no-seed` and `supabase test db --local` successfully replayed new schema `20261016191000`; this does not replace a required production project backup, RLS JWT validation or signed Stripe payment test. The old direct browser `merge_guest_cart(jsonb)` invocation will be revoked by the new migration; only deploy the updated browser bundle after confirmed database migration.

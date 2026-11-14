@@ -29,13 +29,54 @@ const demoRecent = products.slice(0, 6).map((p, i) => ({
 function Page() {
   const { user } = useAuth();
   const demo = isDemoMode(user);
-  const [stats, setStats] = useState<AdminOverview | null>(null);
+  const accountId = user?.id ?? null;
+  const [retryToken, setRetryToken] = useState(0);
+  const [view, setView] = useState<{
+    owner: string | null;
+    stats: AdminOverview | null;
+    status: "loading" | "ready" | "error";
+  }>({ owner: null, stats: null, status: "loading" });
 
   useEffect(() => {
     if (demo) return;
-    getAdminOverview().then(setStats).catch(() => setStats(null));
-  }, [demo]);
+    let active = true;
+    setView({ owner: accountId, stats: null, status: "loading" });
+    void getAdminOverview()
+      .then((result) => {
+        if (active) setView({ owner: accountId, stats: result, status: "ready" });
+      })
+      .catch(() => {
+        if (active) setView({ owner: accountId, stats: null, status: "error" });
+      });
+    return () => { active = false; };
+  }, [demo, accountId, retryToken]);
 
+  const current = view.owner === accountId
+    ? view
+    : { owner: accountId, stats: null, status: "loading" as const };
+
+  if (!demo && current.status !== "ready") {
+    return (
+      <div className="rounded-xl border border-border bg-card p-6">
+        {current.status === "error" ? (
+          <div role="alert">
+            <h1 className="text-xl font-bold text-navy">Marketplace data unavailable</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Dashboard totals and order activity could not be verified. No zero totals are assumed.
+            </p>
+            <button type="button" onClick={() => setRetryToken((value) => value + 1)}
+              className="mt-4 rounded-md bg-navy px-4 py-2 text-sm font-semibold text-white">
+              Retry dashboard
+            </button>
+          </div>
+        ) : (
+          <p role="status" className="text-sm text-muted-foreground">Loading verified marketplace data…</p>
+        )}
+      </div>
+    );
+  }
+
+  const stats = current.stats;
   const useDemo = demo;
   const s: AdminOverview = demo
     ? {

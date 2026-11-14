@@ -8,6 +8,7 @@ import { PaymentBadge, isUnpaid } from "@/components/PaymentBadge";
 import { StripePaymentForm } from "@/components/StripePaymentForm";
 import { ReportProblem } from "@/components/ReportProblem";
 import { formatCAD } from "@/lib/data";
+import { getGuestPaymentContext } from "@/services/guest-payment";
 
 export const Route = createFileRoute("/orders/$id")({ component: OrderDetail });
 
@@ -20,7 +21,10 @@ function OrderDetail() {
 
   useEffect(() => {
     let cancel = false;
-    getOrderByNumber(id)
+    setOrder(null);
+    setLoading(true);
+    const context = getGuestPaymentContext(id);
+    getOrderByNumber(id, context?.checkoutKey ?? null)
       .then((d) => !cancel && setOrder(d))
       .catch(() => undefined)
       .finally(() => !cancel && setLoading(false));
@@ -44,7 +48,7 @@ function OrderDetail() {
                 <div className="flex items-center justify-between"><span className="text-muted-foreground">Payment</span><PaymentBadge status={order.payment_status} /></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-bold text-navy">{formatCAD(Number(order.total))}</span></div>
               </div>
-              {isUnpaid(order.payment_status) && order.id && <RetryButton orderId={order.id} orderNumber={order.order_number} />}
+              {isUnpaid(order.payment_status) && order.id && <RetryButton orderId={order.id} orderNumber={order.order_number} guestToken={getGuestPaymentContext(id)?.token ?? null} />}
             </div>
             <div className="rounded-xl border border-border bg-card p-6">
               <h2 className="mb-3 font-bold text-navy">Items</h2>
@@ -72,11 +76,11 @@ function OrderDetail() {
               We couldn't load this order. It may not exist yet, or you may not have access.
               If you just placed a demo order, details are not persisted.
             </p>
-            <div className="mt-4 space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Status</span><span className="font-semibold text-electric">Shipped</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Tracking</span><span className="font-semibold text-navy">CP1234567CA</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Carrier</span><span>Canada Post</span></div>
-            </div>
+            <p className="mt-3 text-sm text-muted-foreground">
+              No order status or tracking information can be verified for this reference.
+              Guest orders require the original checkout session; authenticated customers
+              can also check My Orders or contact support.
+            </p>
           </div>
         )}
       </div>
@@ -84,13 +88,13 @@ function OrderDetail() {
   );
 }
 
-function RetryButton({ orderId, orderNumber }: { orderId: string; orderNumber: string }) {
+function RetryButton({ orderId, orderNumber, guestToken }: { orderId: string; orderNumber: string; guestToken: string | null }) {
   const [busy, setBusy] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const onRetry = async () => {
     setBusy(true);
     try {
-      const intent = await createPaymentIntent(orderId, null);
+      const intent = await createPaymentIntent(orderId, guestToken);
       if (intent.pending || !intent.clientSecret) {
         toast.message("Payment not ready", { description: intent.reason ?? "Stripe setup required." });
       } else if (!isStripeConfigured()) {
@@ -98,6 +102,8 @@ function RetryButton({ orderId, orderNumber }: { orderId: string; orderNumber: s
       } else {
         setClientSecret(intent.clientSecret);
       }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Payment retry could not be prepared.");
     } finally {
       setBusy(false);
     }

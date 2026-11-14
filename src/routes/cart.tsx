@@ -14,7 +14,10 @@ export const Route = createFileRoute("/cart")({
 });
 
 function CartPage() {
-  const { items, remove, setQty, subtotal, count } = useCart();
+  const { items, remove, setQty, subtotal, count, syncStatus, retrySync } = useCart();
+  const checkoutBlocked = syncStatus !== "ready" || items.some(
+    (item) => item.available === false || (item.maxQty !== undefined && item.qty > item.maxQty),
+  );
   const { settings: marketplaceSettings } = usePublicMarketplaceSettings();
   const shipping = marketplaceSettings
     ? calculateShipping(subtotal, {
@@ -36,6 +39,18 @@ function CartPage() {
         <p className="mt-1 text-sm text-muted-foreground">
           {count} {count === 1 ? "item" : "items"}
         </p>
+
+        {syncStatus === "syncing" && (
+          <p role="status" className="mt-4 rounded-lg border border-border bg-muted p-3 text-sm text-muted-foreground">
+            Syncing your saved cart…
+          </p>
+        )}
+        {syncStatus === "error" && (
+          <div role="alert" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
+            <span>Your saved cart could not be synchronized. Your changes remain here; retry before checkout.</span>
+            <button type="button" onClick={retrySync} className="rounded-md bg-navy px-3 py-2 font-semibold text-white">Retry cart sync</button>
+          </div>
+        )}
 
         {items.length === 0 ? (
           <div className="mt-8">
@@ -91,6 +106,12 @@ function CartPage() {
                             {item.title}
                           </Link>
 
+                          {item.available === false && (
+                            <p role="status" className="mt-1 text-xs font-semibold text-destructive">Currently unavailable — remove this item to continue.</p>
+                          )}
+                          {item.maxQty !== undefined && item.qty > item.maxQty && (
+                            <p className="mt-1 text-xs font-semibold text-destructive">Only {item.maxQty} left in stock. Adjust quantity.</p>
+                          )}
                           {item.variant && (
                             <p className="mt-0.5 text-xs text-muted-foreground">
                               {Object.entries(item.variant)
@@ -165,12 +186,18 @@ function CartPage() {
                 <span className="text-xl font-extrabold text-navy">{formatCAD(beforeTaxTotal)}</span>
               </div>
 
-              <Link
-                to="/checkout"
-                className="block w-full rounded-md bg-electric px-4 py-3 text-center text-sm font-bold text-electric-foreground shadow-glow transition hover:opacity-90"
-              >
-                Proceed to checkout
-              </Link>
+              {checkoutBlocked ? (
+                <button type="button" disabled className="block w-full cursor-not-allowed rounded-md bg-muted px-4 py-3 text-sm font-bold text-muted-foreground" aria-label="Checkout unavailable until cart is synchronized and in-stock">
+                  {syncStatus !== "ready" ? "Sync cart before checkout" : "Update unavailable items"}
+                </button>
+              ) : (
+                <Link
+                  to="/checkout"
+                  className="block w-full rounded-md bg-electric px-4 py-3 text-center text-sm font-bold text-electric-foreground shadow-glow transition hover:opacity-90"
+                >
+                  Proceed to checkout
+                </Link>
+              )}
 
               <div className="grid grid-cols-3 gap-2 pt-2 text-[10px] text-muted-foreground">
                 <div className="flex flex-col items-center gap-0.5 text-center">

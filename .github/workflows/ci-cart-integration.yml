@@ -1,0 +1,73 @@
+name: 1LV Account Cart Integration
+
+on:
+  pull_request:
+    branches:
+      - upgrade/persistent-commerce-settings
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cart:
+    name: Cart unit, lint, build, typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Audit production dependency vulnerabilities
+        run: npm audit --omit=dev --audit-level=high
+      - name: Cart model regression tests
+        run: node scripts/cart-model-tests.mjs
+      - name: Payment status regression tests
+        run: node scripts/payment-status-tests.mjs
+      - name: Guest payment context regression tests
+        run: node scripts/guest-payment-tests.mjs
+      - name: Guest cart merge journal regression tests
+        run: node scripts/guest-cart-merge-tests.mjs
+      - name: Lint cart changes
+        run: |
+          npx eslint --max-warnings=0 --rule "prettier/prettier: off" src/lib/cart-model.ts src/services/account-cart.ts src/hooks/use-cart.tsx src/routes/cart.tsx src/routes/checkout.tsx src/routes/order-confirmation.tsx src/routes/orders.\$id.tsx src/lib/payment-status.ts src/services/guest-payment.ts src/components/PaymentBadge.tsx src/lib/cart-merge-intent.ts src/routes/orders.tsx src/routes/wishlist.tsx src/routes/admin.index.tsx
+      - name: Guard application / database schema version alignment
+        run: node scripts/check-schema-marker.mjs
+      - name: Build app
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          test -n "$VITE_SUPABASE_URL"
+          test -n "$VITE_SUPABASE_PUBLISHABLE_KEY"
+          npm run build
+      - name: TypeScript
+        run: npx tsc --noEmit
+      - name: Confirm this does not apply the database migration
+        run: |
+          echo "No production migration or deployment is executed from this job."
+          test -f supabase/migrations/20261016191000_idempotent_guest_cart_merge.sql
+
+  migration:
+    name: Isolated Supabase schema and pgTAP
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup local Supabase CLI
+        uses: supabase/setup-cli@v3.0.1
+        with:
+          version: "2.118.0"
+      - name: Replay migrations and database security tests on local Docker
+        env:
+          SUPABASE_TELEMETRY_DISABLED: "1"
+        run: |
+          set -euo pipefail
+          trap 'supabase stop --no-backup >/dev/null 2>&1 || true' EXIT
+          supabase db start
+          supabase db reset --local --no-seed
+          supabase test db --local
