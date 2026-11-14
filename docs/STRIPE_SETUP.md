@@ -13,6 +13,7 @@ Live payments, vendor subscriptions, and Connect payout preparation.
 - `STRIPE_PRICE_VENDOR_STARTER_MONTHLY` — Stripe Price ID (`price_...`)
 - `STRIPE_PRICE_VENDOR_GROWTH_MONTHLY` — Stripe Price ID
 - `STRIPE_PRICE_VENDOR_SCALE_MONTHLY` — Stripe Price ID
+- `CHECKOUT_GUEST_TOKEN_SECRET` — dedicated random secret (32+ chars) used only to sign short-lived guest payment capabilities
 
 Add server-side keys through the secrets tool (Lovable Cloud → Secrets). They are injected into server functions and the webhook route at runtime; they are never bundled into the frontend.
 
@@ -50,12 +51,14 @@ The endpoint verifies the `Stripe-Signature` header (HMAC-SHA256) and is idempot
 
 ## 4. Customer checkout flow
 
-1. Frontend calls `createOrder` (Supabase insert, `payment_status = pending`).
-2. Frontend calls the `createPaymentIntent` server fn with `{ orderId }`.
-3. Server loads the order from the DB and uses `orders.total` (server truth — never client-supplied amount).
-4. Server creates a Stripe PaymentIntent in CAD cents with metadata `{ order_id, order_number, customer_email }` and returns the `client_secret`.
-5. Frontend confirms with Stripe.js Elements (using `VITE_STRIPE_PUBLISHABLE_KEY`).
-6. Webhook flips `orders.payment_status` to `paid` / `failed` / `refunded`.
+1. Frontend sends only product IDs, quantities, contact/address data and a UUID checkout key to the TanStack server function.
+2. The server resolves the authenticated customer when present, then calls the service-role-only `create_marketplace_order` database RPC.
+3. PostgreSQL validates active products/vendors, locks product rows, checks and reserves inventory, loads DB prices, calculates Canada/province totals, creates the parent order/items/vendor splits atomically, and applies the checkout idempotency key.
+4. Guest checkout receives a 24-hour signed payment capability; authenticated orders rely on the current Supabase user identity.
+5. Frontend calls `createPaymentIntent` with the order ID plus the guest capability only when needed. The server authorizes ownership/capability and always reads `orders.total`.
+6. Stripe PaymentIntent creation is order-idempotent. The PaymentIntent ID is persisted before confirmation.
+7. Frontend confirms with Stripe.js Elements using only `VITE_STRIPE_PUBLISHABLE_KEY`.
+8. On `payment_intent.succeeded`, the webhook commits the inventory reservation before moving the order to processing. Stale signatures older than five minutes are rejected.
 
 ## 5. Vendor subscription flow
 
@@ -112,7 +115,10 @@ Any future expiry, any CVC.
 
 - Secret keys live only in server env; the frontend imports `VITE_STRIPE_PUBLISHABLE_KEY` only.
 - PaymentIntent amount is derived from `orders.total` server-side, not from any client payload.
-- Webhook verifies `Stripe-Signature` with timing-safe comparison and rejects unsigned or replayed events.
+- Browser roles cannot insert financial order, order-item or vendor-order rows after the server-authoritative checkout migration is applied.
+- Guest payment authorization uses a dedicated short-lived HMAC capability; never reuse the Stripe or Supabase service-role secret for `CHECKOUT_GUEST_TOKEN_SECRET`.
+- Inventory is reserved during checkout and committed only after Stripe payment success; expired unpaid reservations are recoverable through the service-role-only cleanup RPC.
+- Webhook verifies `Stripe-Signature` with timing-safe comparison, rejects signatures older than five minutes, and uses `stripe_event_log` for event idempotency.
 - Vendor subscription checkout requires an authenticated session and enforces `vendor.user_id = auth.uid()` via RLS before creating the session.
 - `stripe_event_log` prevents double-processing of retried webhook deliveries.
 

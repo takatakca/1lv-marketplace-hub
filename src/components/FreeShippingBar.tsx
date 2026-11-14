@@ -1,8 +1,15 @@
 import { Truck } from "lucide-react";
 import { formatCAD } from "@/lib/data";
+import { FREE_SHIPPING_THRESHOLD_CAD } from "@/lib/canada-commerce";
 
-export function FreeShippingBar({ subtotal, threshold = 49 }: { subtotal: number; threshold?: number }) {
-  const pct = Math.min(100, Math.round((subtotal / threshold) * 100));
+export function FreeShippingBar({
+  subtotal,
+  threshold = FREE_SHIPPING_THRESHOLD_CAD,
+}: {
+  subtotal: number;
+  threshold?: number;
+}) {
+  const pct = threshold > 0 ? Math.min(100, Math.round((subtotal / threshold) * 100)) : 100;
   const remaining = Math.max(0, threshold - subtotal);
   const unlocked = remaining === 0;
 
@@ -14,7 +21,8 @@ export function FreeShippingBar({ subtotal, threshold = 49 }: { subtotal: number
           <span className="font-semibold text-success">🎉 You unlocked free Canadian shipping!</span>
         ) : (
           <span className="text-navy">
-            Add <span className="font-bold text-deal">{formatCAD(remaining)}</span> more for <span className="font-semibold">free CA shipping</span>
+            Add <span className="font-bold text-deal">{formatCAD(remaining)}</span> more for{" "}
+            <span className="font-semibold">free CA shipping</span>
           </span>
         )}
       </div>

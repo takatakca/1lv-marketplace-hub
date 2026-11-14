@@ -1,7 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
-  ChevronRight, Heart, Minus, Plus, ShieldCheck, Truck, RefreshCw, Store, Ticket, Star, Lock, PackageCheck,
+  ChevronRight, Heart, Minus, Plus, ShieldCheck, Truck, RefreshCw, Store, BadgePercent, Star, Lock, PackageCheck,
 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
@@ -185,9 +185,17 @@ function ProductPage() {
                 )}
               </div>
 
-              <Link to="/coupons" className="flex items-center gap-2 rounded-md border border-dashed border-deal/40 bg-deal/5 px-3 py-2 text-xs text-navy hover:border-deal">
-                <Ticket size={14} className="text-deal" />
-                Extra 10% off with code <span className="font-mono font-bold text-deal">WELCOME10</span>
+              <Link
+                to="/coupons"
+                className="flex items-center gap-2 rounded-md border border-electric/20 bg-electric/5 px-3 py-2 text-xs text-navy hover:border-electric"
+              >
+                <BadgePercent size={14} className="text-electric" />
+                <span>
+                  See current verified promotions
+                  <span className="block text-[11px] text-muted-foreground">
+                    Eligibility and savings are confirmed securely at checkout.
+                  </span>
+                </span>
               </Link>
 
               <div className="space-y-1.5 rounded-md bg-muted/50 px-3 py-2.5 text-xs">

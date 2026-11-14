@@ -90,7 +90,7 @@ function RetryButton({ orderId, orderNumber }: { orderId: string; orderNumber: s
   const onRetry = async () => {
     setBusy(true);
     try {
-      const intent = await createPaymentIntent(orderId, 0);
+      const intent = await createPaymentIntent(orderId, null);
       if (intent.pending || !intent.clientSecret) {
         toast.message("Payment not ready", { description: intent.reason ?? "Stripe setup required." });
       } else if (!isStripeConfigured()) {

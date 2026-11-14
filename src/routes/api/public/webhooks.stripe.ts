@@ -14,6 +14,12 @@ async function verifyStripeSignature(payload: string, header: string | null, sec
   const timestamp = parts.t;
   const sig = parts.v1;
   if (!timestamp || !sig) return false;
+
+  const timestampSeconds = Number(timestamp);
+  if (!Number.isSafeInteger(timestampSeconds)) return false;
+  const ageSeconds = Math.abs(Math.floor(Date.now() / 1000) - timestampSeconds);
+  if (ageSeconds > 300) return false;
+
   const signedPayload = `${timestamp}.${payload}`;
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
@@ -66,16 +72,60 @@ async function handleEvent(evt: StripeEvent) {
   switch (evt.type) {
     case "payment_intent.succeeded": {
       const orderId = meta.order_id;
-      if (orderId) {
-        await supabaseAdmin.from("orders").update({ payment_status: "paid", status: "processing" }).eq("id", orderId);
-        await takatakOrder(orderId, "order.paid");
+      const paymentIntentId = typeof obj.id === "string" ? obj.id : null;
+      if (orderId && paymentIntentId) {
+        const { data: inventoryCommitted, error: inventoryError } =
+          await supabaseAdmin.rpc(
+            "commit_order_inventory" as never,
+            { _order_id: orderId } as never,
+          );
+
+        if (inventoryError) throw inventoryError;
+
+        const committed = inventoryCommitted === true;
+        const { data: updated } = await supabaseAdmin
+          .from("orders")
+          .update({
+            payment_status: "paid",
+            status: committed ? "processing" : "pending",
+          })
+          .eq("id", orderId)
+          .eq("stripe_payment_intent_id", paymentIntentId)
+          .select("id, order_number")
+          .maybeSingle();
+
+        if (updated && !committed) {
+          const { data: adminRoles } = await supabaseAdmin
+            .from("user_roles")
+            .select("user_id")
+            .eq("role", "admin");
+
+          const notifications = (adminRoles ?? []).map((row) => ({
+            user_id: row.user_id,
+            kind: "inventory_payment_conflict",
+            title: `Inventory conflict on paid order ${updated.order_number}`,
+            body: "Stripe reported payment success after the inventory reservation was released. Review the order before fulfillment.",
+            link: `/admin/orders`,
+          }));
+
+          if (notifications.length > 0) {
+            await supabaseAdmin.from("notifications").insert(notifications);
+          }
+        }
+
+        if (updated) await takatakOrder(orderId, "order.paid");
       }
       break;
     }
     case "payment_intent.payment_failed": {
       const orderId = meta.order_id;
-      if (orderId) {
-        await supabaseAdmin.from("orders").update({ payment_status: "failed" }).eq("id", orderId);
+      const paymentIntentId = typeof obj.id === "string" ? obj.id : null;
+      if (orderId && paymentIntentId) {
+        await supabaseAdmin
+          .from("orders")
+          .update({ payment_status: "failed" })
+          .eq("id", orderId)
+          .eq("stripe_payment_intent_id", paymentIntentId);
       }
       break;
     }
@@ -84,8 +134,18 @@ async function handleEvent(evt: StripeEvent) {
       const amountRefunded = Number((obj as { amount_refunded?: number }).amount_refunded ?? 0);
       const amount = Number((obj as { amount?: number }).amount ?? 0);
       if (orderId) {
-        const status = amountRefunded >= amount ? "refunded" : "partially_refunded";
+        const fullyRefunded = amount > 0 && amountRefunded >= amount;
+        const status = fullyRefunded ? "refunded" : "partially_refunded";
         await supabaseAdmin.from("orders").update({ payment_status: status }).eq("id", orderId);
+
+        if (fullyRefunded) {
+          const { error: promotionRefundError } = await supabaseAdmin.rpc(
+            "mark_order_promotion_refunded" as never,
+            { _order_id: orderId } as never,
+          );
+          if (promotionRefundError) throw promotionRefundError;
+        }
+
         await takatakOrder(orderId, "order.refunded");
       }
       break;
