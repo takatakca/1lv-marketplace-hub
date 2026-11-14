@@ -1,10 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Zap, Ticket, Flame, ArrowRight } from "lucide-react";
+import { Zap, Flame, ArrowRight } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ProductGrid } from "@/components/ProductGrid";
 import { SectionHead } from "@/components/ProductRail";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { products } from "@/lib/data";
+import { CouponStrip } from "@/components/CouponStrip";
 
 export const Route = createFileRoute("/deals")({
   component: DealsPage,
@@ -20,11 +21,6 @@ export const Route = createFileRoute("/deals")({
   }),
 });
 
-const coupons = [
-  { code: "WELCOME10", label: "10% off first order", note: "New shoppers · no minimum" },
-  { code: "SHIP49", label: "Free shipping", note: "Orders over $49 CAD" },
-  { code: "SAVE20", label: "$20 off $150", note: "Sitewide · ends Sunday" },
-];
 
 function DealsPage() {
   const discounted = products
@@ -52,27 +48,9 @@ function DealsPage() {
         </div>
       </section>
 
-      {/* Coupon rail */}
-      <section className="surface-3 border-b border-border">
-        <div className="scrollbar-hide mx-auto flex max-w-7xl gap-3 overflow-x-auto px-4 py-4">
-          {coupons.map((c) => (
-            <Link
-              key={c.code}
-              to="/coupons"
-              className="merch-card flex min-w-[240px] items-center gap-3 p-3"
-            >
-              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-deal/10 text-deal"><Ticket size={18} /></div>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-navy">{c.label}</p>
-                <p className="text-[11px] text-muted-foreground">{c.note}</p>
-              </div>
-              <span className="ml-auto shrink-0 rounded-md border border-dashed border-deal/50 px-2 py-1 font-mono text-[11px] font-bold text-deal">
-                {c.code}
-              </span>
-            </Link>
-          ))}
-        </div>
-      </section>
+      <div className="surface-3 border-b border-border">
+        <CouponStrip />
+      </div>
 
       <section className="mx-auto max-w-7xl px-4 py-7">
         <SectionHead eyebrow="Steepest markdowns" title="🔥 40% off and over" />
