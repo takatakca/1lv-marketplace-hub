@@ -48,17 +48,35 @@ function Page() {
     })();
   }, [demo, user]);
 
-  const useDemo = demo || (items && items.length === 0);
-  const baseRows = useDemo
-    ? demoProducts.slice(0, 12).map((p, i) => ({
-        id: p.id, title: p.title,
-        status: (["active", "draft", "pending_review", "active", "rejected", "active"] as ProductStatus[])[i % 6],
-        price: Number(p.price), stock: 5 + (i * 7) % 80, category: p.category,
-      }))
-    : (items ?? []).map((p) => ({
-        id: p.id, title: p.title, status: p.status as ProductStatus,
-        price: Number(p.price), stock: p.inventory_quantity, category: p.category_slug ?? "—",
-      }));
+  const useDemo = demo;
+  const baseRows = useMemo(
+    () =>
+      useDemo
+        ? demoProducts.slice(0, 12).map((p, i) => ({
+            id: p.id,
+            title: p.title,
+            status: ([
+              "active",
+              "draft",
+              "pending_review",
+              "active",
+              "rejected",
+              "active",
+            ] as ProductStatus[])[i % 6],
+            price: Number(p.price),
+            stock: 5 + ((i * 7) % 80),
+            category: p.category,
+          }))
+        : (items ?? []).map((p) => ({
+            id: p.id,
+            title: p.title,
+            status: p.status as ProductStatus,
+            price: Number(p.price),
+            stock: p.inventory_quantity,
+            category: p.category_slug ?? "—",
+          })),
+    [items, useDemo],
+  );
 
   const categories = useMemo(() => Array.from(new Set(baseRows.map((r) => r.category))).sort(), [baseRows]);
 
@@ -70,7 +88,10 @@ function Page() {
   });
 
   const toggle = (id: string) => {
-    const next = new Set(selected); next.has(id) ? next.delete(id) : next.add(id); setSelected(next);
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelected(next);
   };
 
   const subActive = vendor?.subscription_status === "active" || vendor?.subscription_status === "trialing";
@@ -105,7 +126,7 @@ function Page() {
     <div>
       <div className="mb-6 flex items-center justify-between flex-wrap gap-3">
         <div>
-          {useDemo ? <DemoBanner label={demo ? "Preview mode" : "No products yet"} /> : null}
+          {demo ? <DemoBanner label="Preview mode" /> : null}
           <h1 className="text-2xl font-bold text-navy md:text-3xl">Products</h1>
         </div>
         <Link to="/vendor/products/new" className="rounded-md bg-electric px-4 py-2 text-sm font-semibold text-electric-foreground">New product</Link>
@@ -155,6 +176,7 @@ function Page() {
             ) },
           ]}
           rows={rows}
+          empty="No products yet. Create your first live product to start building the catalog."
         />
       )}
     </div>

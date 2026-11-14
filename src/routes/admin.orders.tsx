@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DataTable } from "@/components/DataTable";
 import { products, formatCAD } from "@/lib/data";
@@ -33,12 +33,18 @@ function Page() {
   const [ful, setFul] = useState<(typeof FUL)[number]>("all");
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (demo) return;
-    try { setRows(await listAllOrdersWithSplits()); }
-    finally { setLoading(false); }
-  };
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [demo]);
+    try {
+      setRows(await listAllOrdersWithSplits());
+    } finally {
+      setLoading(false);
+    }
+  }, [demo]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const onBackfill = async () => {
     if (!confirm("Backfill vendor_orders for any orders missing them?")) return;
@@ -51,7 +57,7 @@ function Page() {
     finally { setBusy(false); }
   };
 
-  const useDemo = demo || !rows || rows.length === 0;
+  const useDemo = demo;
   const filtered = useMemo(() => {
     if (useDemo) return [];
     return (rows ?? []).filter((o) => {
@@ -134,7 +140,7 @@ function Page() {
         <select value={ful} onChange={(e) => setFul(e.target.value as (typeof FUL)[number])} className="rounded-md border border-border bg-background px-3 py-2 text-sm">
           {FUL.map((s) => <option key={s} value={s}>Fulfillment: {s}</option>)}
         </select>
-        {!useDemo && <span className="ml-auto text-xs text-muted-foreground">{filtered.length} of {rows?.length ?? 0}</span>}
+        {!demo && <span className="ml-auto text-xs text-muted-foreground">{filtered.length} of {rows?.length ?? 0}</span>}
       </div>
 
       {loading ? <div className="text-sm text-muted-foreground">Loading…</div> : (
@@ -151,6 +157,7 @@ function Page() {
             { key: "date", label: "Date" },
           ]}
           rows={tableRows as unknown as Record<string, unknown>[]}
+          empty={demo ? "No demo orders." : "No marketplace orders yet."}
         />
       )}
     </>
