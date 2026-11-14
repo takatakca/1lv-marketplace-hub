@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { Activity } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { CircleCheckBig, Clock3, LoaderCircle, Network, ShoppingBag, Store, TriangleAlert, Users } from "lucide-react";
 import { DataTable } from "@/components/DataTable";
 import { StatCard } from "@/components/StatCard";
 import {
@@ -138,20 +138,20 @@ function Page() {
           <section className="mb-6">
             <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Queue</h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard label="Pending" value={String(data.pending)} icon={Clock3} />
-              <StatCard label="Processing" value={String(data.processing)} icon={LoaderCircle} />
-              <StatCard label="Delivered" value={String(data.delivered)} icon={CircleCheckBig} accent="success" />
-              <StatCard label="Failed" value={String(data.failed)} icon={TriangleAlert} accent="deal" />
+              <StatCard icon={Activity} label="Pending" value={String(data.pending)} />
+              <StatCard icon={Activity} label="Processing" value={String(data.processing)} />
+              <StatCard icon={Activity} label="Delivered" value={String(data.delivered)} />
+              <StatCard icon={Activity} label="Failed" value={String(data.failed)} />
             </div>
           </section>
 
           <section className="mb-6">
             <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Sync totals</h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard label="Customers synced" value={String(data.synced_customers)} icon={Users} />
-              <StatCard label="Merchants synced" value={String(data.synced_merchants)} icon={Store} />
-              <StatCard label="Orders synced" value={String(data.synced_orders)} icon={ShoppingBag} />
-              <StatCard label="Relationships synced" value={String(data.synced_relationships)} icon={Network} />
+              <StatCard icon={Activity} label="Customers synced" value={String(data.synced_customers)} />
+              <StatCard icon={Activity} label="Merchants synced" value={String(data.synced_merchants)} />
+              <StatCard icon={Activity} label="Orders synced" value={String(data.synced_orders)} />
+              <StatCard icon={Activity} label="Relationships synced" value={String(data.synced_relationships)} />
             </div>
           </section>
 
