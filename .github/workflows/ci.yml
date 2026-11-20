@@ -35,8 +35,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: TypeScript
-        run: npx tsc --noEmit
+      - name: Dependency graph diagnostics
+        run: |
+          npm ls nitro env-runner miniflare sharp undici --all || true
+
+      - name: Runtime dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Full dependency audit report
+        continue-on-error: true
+        run: npm audit --audit-level=high
 
       - name: Lint changed source files
         if: github.event_name == 'pull_request'
@@ -64,6 +72,9 @@ jobs:
           test -n "$VITE_SUPABASE_URL" || (echo "Missing VITE_SUPABASE_URL" && exit 1)
           test -n "$VITE_SUPABASE_PUBLISHABLE_KEY" || (echo "Missing VITE_SUPABASE_PUBLISHABLE_KEY" && exit 1)
           npm run build
+
+      - name: TypeScript
+        run: npx tsc --noEmit
 
       - name: Validate Node entrypoint
         run: node --check server.cjs
